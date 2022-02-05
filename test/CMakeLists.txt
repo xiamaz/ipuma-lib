@@ -1,0 +1,41 @@
+# MHM2 testing
+
+#
+# The intent here is to include unit tests, like endian correctness for plain
+# old C/C++ and not depend on upcxx / upcxx-run to execute them, so make test
+# can work on all platforms including multi node without calling upcxx::init()
+# and upcxx::finalize()
+#
+
+if(ENABLE_POPLAR)
+  add_definitions(-DENABLE_IPUS)
+  message(STATUS "Building tests for IPUs with poplar")
+endif()
+
+set(BINARY ipuma-test)
+
+file(
+  GLOB TEST_SOURCES
+  LIST_DIRECTORIES false
+  *.hpp *.cpp)
+
+set(SOURCES ${TEST_SOURCES})
+
+include_directories("${CMAKE_SOURCE_DIR}/src")
+include_directories("ssw")
+
+add_subdirectory(ssw)
+
+add_executable(${BINARY} ${TEST_SOURCES})
+
+add_test(NAME ${BINARY} COMMAND ${BINARY})
+
+target_link_libraries(
+  ${BINARY} PUBLIC gtest SSW_LIBRARY swatlib IPUMA_LIBRARY)
+install(TARGETS ${BINARY} DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+
+# enable "make check"
+add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} -V)
+add_dependencies(check ${BINARY})
+
+add_subdirectory(perf)
