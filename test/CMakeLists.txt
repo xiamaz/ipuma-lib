@@ -14,12 +14,9 @@ endif()
 
 set(BINARY ipuma-test)
 
-file(
-  GLOB TEST_SOURCES
-  LIST_DIRECTORIES false
-  *.hpp *.cpp)
+set(TEST_SOURCES main.cpp simple-test.cpp parity-test.cpp partition-test.cpp dev-test.cpp)
 
-set(SOURCES ${TEST_SOURCES})
+# set(SOURCES ${TEST_SOURCES})
 
 include_directories("${CMAKE_SOURCE_DIR}/src")
 include_directories("ssw")
@@ -31,7 +28,7 @@ add_executable(${BINARY} ${TEST_SOURCES})
 add_test(NAME ${BINARY} COMMAND ${BINARY})
 
 target_link_libraries(
-  ${BINARY} PUBLIC gtest SSW_LIBRARY swatlib IPUMA_LIBRARY)
+  ${BINARY} PUBLIC gtest SSW_LIBRARY IPUMA_LIBRARY)
 install(TARGETS ${BINARY} DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
 
 # enable "make check"
