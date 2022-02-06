@@ -16,6 +16,9 @@
 namespace ipu {
 namespace batchaffine {
 
+static const std::string STREAM_CONCAT_ALL = "concat-read-all";
+static const std::string HOST_STREAM_CONCAT = "host-stream-concat";
+
 static const std::string CYCLE_COUNT_OUTER = "cycle-count-outer";
 static const std::string CYCLE_COUNT_INNER = "cycle-count-inner";
 

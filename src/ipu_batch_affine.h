@@ -10,20 +10,6 @@ using namespace poplar;
 namespace ipu {
 namespace batchaffine {
 
-const std::string STREAM_A = "a-write";
-const std::string STREAM_A_LEN = "a-len-write";
-const std::string STREAM_B = "b-write";
-const std::string STREAM_B_LEN = "b-len-write";
-const std::string STREAM_SCORES = "scores-read";
-const std::string STREAM_MISMATCHES = "mismatches-read";
-const std::string STREAM_A_RANGE = "a-range-read";
-const std::string STREAM_B_RANGE = "b-range-read";
-const std::string STREAM_CONCAT_ALL = "concat-read-all";
-const std::string HOST_STREAM_CONCAT = "host-stream-concat";
-
-const std::string IPU_AFFINE_CPP = "SWAffine";
-const std::string IPU_AFFINE_ASM = "SWAffineAsm";
-
 enum class VertexType { cpp, assembly, multi, multiasm, stripedasm, multistriped, multistripedasm };
 
 static const std::string typeString[] = {"SWAffine", "SWAffineAsm", "MultiSWAffine", "MultiSWAffineAsm", "StripedSWAffineAsm", "MultiSWStriped", "MultiSWStripedAsm"};
