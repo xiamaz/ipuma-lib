@@ -1,9 +1,6 @@
 set(BINARY ipuma-perf)
 
-file(
-  GLOB TEST_SOURCES
-  LIST_DIRECTORIES false
-  *.hpp *.cpp)
+set(TEST_SOURCES main.cpp ipuma-perf.cpp)
 
 set(SOURCES ${TEST_SOURCES})
 
@@ -14,8 +11,6 @@ add_executable(${BINARY} ${TEST_SOURCES} ${MHM2_TARGET_OBJECTS})
 
 # add_test(NAME ${BINARY} COMMAND ${BINARY})
 
-message("MHM2_LINK_LIBRARIES: ${MHM2_LINK_LIBRARIES}")
-
 set_target_properties( ${BINARY}
     PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
@@ -24,6 +19,5 @@ set_target_properties( ${BINARY}
 )
 
 target_link_libraries(
-  ${BINARY} PUBLIC ${MHM2_LINK_LIBRARIES} ${UPCXX_UTILS_LIBRARIES}
-                   ${UPCXX_LIBRARIES} gtest)
+  ${BINARY} PUBLIC gtest IPUMA_LIBRARY)
 install(TARGETS ${BINARY} DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)

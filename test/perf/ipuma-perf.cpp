@@ -10,10 +10,8 @@
 #include "ssw.hpp"
 #include "gtest/gtest.h"
 
-#ifdef ENABLE_IPUS
-#include "klign/ipuma-sw/ipu_batch_affine.h"
-#include "klign/ipuma-sw/vector.hpp"
-#endif
+#include "ipu_batch_affine.h"
+#include "swatlib/vector.hpp"
 
 using std::max;
 using std::min;
@@ -48,8 +46,6 @@ std::vector<std::string> loadSequences(const std::string& path) {
   return sequences;
 }
 
-#ifdef ENABLE_IPUS
-
 class PerformanceBase : public ::testing::Test {
 protected:
   vector<string> refs, queries;
@@ -71,7 +67,7 @@ TEST_P(AlgoPerformance, StressTest) {
 
   // generate input strings
   int invalidRuns = 0;
-  int numBatches = 1000;
+  int numBatches = 10;
   auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, numCmps * strlen, algotype});
   for (int n = 0; n < numBatches; ++n) {
     refs = {};
@@ -171,7 +167,7 @@ INSTANTIATE_TEST_SUITE_P(
   testing::Values(ipu::batchaffine::VertexType::cpp, ipu::batchaffine::VertexType::assembly, ipu::batchaffine::VertexType::multi, ipu::batchaffine::VertexType::multiasm)
   );
 
-class PartitionPerformance : public PerformanceBase, public ::testing::WithParamInterface<ipu::batchaffine::partition::Algorithm> {
+class PartitionPerformance : public PerformanceBase, public ::testing::WithParamInterface<ipu::partition::Algorithm> {
 };
 
 TEST_P(PartitionPerformance, RealBatches) {
@@ -183,7 +179,7 @@ TEST_P(PartitionPerformance, RealBatches) {
   for (auto& [path_a, path_b] : INPUT_BATCHS) {
     refs = loadSequences(path_a);
     queries = loadSequences(path_b);
-    std::cout << "Len A: " << refs.size() << " Len B: " << queries.size() << "\n";
+    // std::cout << "Len A: " << refs.size() << " Len B: " << queries.size() << "\n";
     driver.compare_local(refs, queries);
   }
 }
@@ -191,6 +187,5 @@ TEST_P(PartitionPerformance, RealBatches) {
 INSTANTIATE_TEST_SUITE_P(
   PartitionTests,
   PartitionPerformance,
-  testing::Values(ipu::batchaffine::partition::Algorithm::fillFirst, ipu::batchaffine::partition::Algorithm::roundRobin, ipu::batchaffine::partition::Algorithm::greedy)
+  testing::Values(ipu::partition::Algorithm::fillFirst, ipu::partition::Algorithm::roundRobin, ipu::partition::Algorithm::greedy)
   );
-#endif

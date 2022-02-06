@@ -35,8 +35,9 @@ struct IPUAlgoConfig {
    * 
    * @return int 
    */
-  int getTotalBufferSize8b() const;
-  int getTotalBufferSize32b() const;
+  int getSequenceBufferSize8b() const;
+  int getSequenceBufferSize32b() const;
+  int getMetaBufferSize32b() const;
   int getLenBufferSize32b() const;
   int getInputBufferSize32b() const;
 };
@@ -57,8 +58,7 @@ class SWAlgorithm : public IPUAlgorithm {
 
   static size_t getAOffset(const IPUAlgoConfig& config);
   static size_t getBOffset(const IPUAlgoConfig& config);
-  static size_t getAlenOffset(const IPUAlgoConfig& config);
-  static size_t getBlenOffset(const IPUAlgoConfig& config);
+  static size_t getMetaOffset(const IPUAlgoConfig& config);
 
  public:
   IPUAlgoConfig algoconfig;
@@ -75,7 +75,7 @@ class SWAlgorithm : public IPUAlgorithm {
   BlockAlignmentResults get_result();
 
   // Local Buffers
-  void compare_local(const std::vector<std::string>& A, const std::vector<std::string>& B, bool errcheck = true);
+  void compare_local(const std::vector<std::string>& A, const std::vector<std::string>& B, bool errcheck = false);
 
   void refetch();
 

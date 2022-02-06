@@ -29,10 +29,8 @@ public:
     poplar::Input<int> maxAB;
     poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> A;
     poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> B;
-    poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Alen;
-    poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Blen;
+    poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Meta;
     poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> score;
-    poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> mismatches;
     poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> ARange;
     poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> BRange;
 
@@ -52,11 +50,10 @@ public:
             uint16_t Aend = 0;
             uint16_t Bend = 0;
 
-            auto a_len = Alen[2 * n];
-            auto b_len = Blen[2 * n];
-
-            int i_offset = Blen[2 * n + 1];
-            int j_offset = Alen[2 * n + 1];
+            auto a_len = Meta[4 * n];
+            int j_offset = Meta[4 * n + 1];
+            auto b_len = Meta[4 * n + 2];
+            int i_offset = Meta[4 * n + 3];
 
             if (a_len == 0 || b_len == 0) break;
 

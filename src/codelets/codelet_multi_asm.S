@@ -22,19 +22,21 @@
 
 #define VOFF_A            	 8
 #define VOFF_B            	 9
-#define VOFF_Alen          	 10
-#define VOFF_Blen          	 11
+#define VOFF_META            10
 
-#define VOFF_SCORE        	 12
-#define VOFF_MISMATCHES    	 13
-#define VOFF_A_RANGE         14
-#define VOFF_B_RANGE         15
+#define VOFF_SCORE        	 11
+#define VOFF_A_RANGE         12
+#define VOFF_B_RANGE         13
 
 #define SOFF_C 1
 #define SOFF_BG 2
 #define SOFF_SSCORE 3
+#define SOFF_A 4
+#define SOFF_B 5
+#define SOFF_ALEN 6
+#define SOFF_BLEN 7
 
-#define STACK_SIZE (20)
+#define STACK_SIZE (40)
 
 // CAVEAT
 // ABI defines m11 - sp, m10 - lr, m9 - fp
@@ -58,14 +60,6 @@
 #define gige a3
 #define ge a2
 
-.macro dbgBreak NVAL REG
-	cmpeq \REG, $n, \NVAL
-	brz \REG, 3f
-	setzi \REG, 0xFFF
-	st32 $mzero, $mzero, $mzero, 0
-3:
-.endm
-
 .macro workerBreak NVAL REG
 	workerId \REG
 	cmpeq \REG, \REG, \NVAL
@@ -78,12 +72,6 @@
 .macro workerId reg
 	get \reg, $WSR
 	and \reg, \reg, CSR_W_WSR__CTXTID_M1__MASK
-.endm
-
-.macro offsetLoadN mDest vertexOff nOff
-	ld32 \mDest, $mzero, $mvertex_base, \vertexOff
-	add $m1, $n, \nOff
-	ld32 \mDest, \mDest, $mzero, $m1
 .endm
 
 .macro zeroCbG
@@ -113,6 +101,23 @@
 	.align 4
 .endm
 
+.macro pushNOffsets
+	shl $m1, $n, 4 // 4 * n
+	ld32 $m0, $mzero, $mvertex_base, VOFF_META
+	ld32step $m2, $m0, $m1+=, 1  // load a len
+	st32 $m2, $mzero, $sp, SOFF_ALEN
+	ld32step $m2, $m0, $m1+=, 1 // load a offset
+	ld32 $m3, $mzero, $mvertex_base, VOFF_A
+	add $m2, $m3, $m2
+	st32 $m2, $mzero, $sp, SOFF_A
+	ld32step $m2, $m0, $m1+=, 1 // load b len
+	st32 $m2, $mzero, $sp, SOFF_BLEN
+	ld32step $m2, $m0, $m1+=, 1 // laod b offset
+	ld32 $m3, $mzero, $mvertex_base, VOFF_B
+	add $m2, $m2, $m3
+	st32 $m2, $mzero, $sp, SOFF_B
+.endm
+
 .macro offsetBuffer VOFF SOFF
 	workerId $m0
 	ld32 $m1, $mzero, $mvertex_base, VOFF_MAX_AB
@@ -140,9 +145,10 @@ SWASM:
 	ld32 $ge, $m0, $mzero, 0  // ge
 
 	workerId $n
-	shl $n, $n, 1
 compN_start:
  	zeroCbG
+
+	pushNOffsets
 	
 	setzi $sscore, 0
 	setzi $i, 0
@@ -151,14 +157,12 @@ compN_start:
 
 	// check if next sequence is zero
 	// ld32 $m0, $mzero, $mvertex_base, VOFF_Blen
-	ld32 $m0, $mzero, $mvertex_base, VOFF_Blen
-	ld32 $m0, $mzero, $m0, $n
+	ld32 $m0, $mzero, $sp, SOFF_BLEN
 	brz $m0, compN_end // check if length of B is zero
 
 loopB:
-	offsetLoadN $m0, VOFF_Blen, 1
-	ld32 $m1, $mzero, $mvertex_base, VOFF_B
-	ldz8 $bi, $m1, $m0, $i
+	ld32 $m0, $mzero, $sp, SOFF_B
+	ldz8 $bi, $mzero, $m0, $i
 
 	{
 		ld32 $bg, $mzero, $sp, SOFF_BG
@@ -181,20 +185,12 @@ loopB:
 		f32add $gige, $agap, $ge
 	}
 
-	offsetLoadN $m0, VOFF_Alen, 1
-	ld32 $a, $mzero, $mvertex_base, VOFF_A
-	add $a, $a, $m0
-
-	// load Alen[n]
-	ld32 $m0, $mzero, $mvertex_base, VOFF_Alen
-	ld32 $m0, $mzero, $m0, $n
+	ld32 $a, $mzero, $sp, SOFF_A
 
 	st32 $sscore, $mzero, $sp, SOFF_SSCORE
 
-	{
-		rpt $m0, (loopA_end - loopA_start)/8 - 1;
-		fnop
-	}
+	ld32 $m0, $mzero, $sp, SOFF_ALEN
+	rpt $m0, (loopA_end - loopA_start)/8 - 1;
 loopA_start:
 	{
 		ld32 $a0, $mzero, $bg, 0
@@ -248,26 +244,24 @@ loopA_end:
 	movz $bpos, $m0, $i
 
 	add $i, $i, 1
-	ld32 $m0, $mzero, $mvertex_base, VOFF_Blen
-	ld32 $m0, $mzero, $m0, $n
+	ld32 $m0, $mzero, $sp, SOFF_BLEN
 	cmpult $m0, $i, $m0
 	brnz $m0, loopB // check if length of B is zero
 
 loopB_end:
-	shr $a, $n, 1
 	ld32 $m0, $mzero, $mvertex_base, VOFF_SCORE
 	f32toi32 $a0, $sscore
-	st32 $a0, $mzero, $m0, $a
+	st32 $a0, $mzero, $m0, $n
 
 	// store end position
 	sub $apos, $apos, 1
 	shl $m1, $apos, 16
 	ld32 $m0, $mzero, $mvertex_base, VOFF_A_RANGE
-	stm32 $m1, $m0, $a
+	stm32 $m1, $m0, $n
 
 	shl $m1, $bpos, 16
 	ld32 $m0, $mzero, $mvertex_base, VOFF_B_RANGE
-	stm32 $m1, $m0, $a
+	stm32 $m1, $m0, $n
 
 
 // now run in reverse and find startpos
@@ -285,9 +279,8 @@ loopB_end:
 	// ld32 $ge, $m0, $mzero, 0  // ge
 loopBrev:
 	// loading bi
-	offsetLoadN $m0, VOFF_Blen, 1
-	ld32 $m1, $mzero, $mvertex_base, VOFF_B
-	ldz8 $bi, $m1, $m0, $i
+	ld32 $m0, $mzero, $sp, SOFF_B
+	ldz8 $bi, $mzero, $m0, $i
 
 	// load simmatrix[b[i]]
 	ld32 $m0, $mzero, $mvertex_base, VOFF_SIM_MATRIX
@@ -309,16 +302,16 @@ loopBrev:
 	}
 
 	// loading start position of a
-	offsetLoadN $m0, VOFF_Alen, 1
-	ld32 $a, $mzero, $mvertex_base, VOFF_A
-	add $a, $a, $m0
-
+	ld32 $a, $mzero, $sp, SOFF_A
 
 	// repeats is endpos + 1
 	ld32 $j, $mzero, $sp, 0
 	add $m0, $j, 1
 	st32 $sscore, $mzero, $sp, SOFF_SSCORE
+{
 	rpt $m0, (loopArev_end - loopArev_start)/8 - 1
+	fnop
+}
 loopArev_start:
 	{
 		ld32 $a0, $mzero, $bg, $j
@@ -379,25 +372,21 @@ loopArev_end:
 	brz $m0, loopBrev // check if length of B is zero
 
 loopBrev_end:
-	shr $a, $n, 1
 	ld32 $m0, $mzero, $mvertex_base, VOFF_A_RANGE
-	ld32 $m1, $mzero, $m0, $a
+	ld32 $m1, $mzero, $m0, $n
 	or $m1, $m1, $apos
-	stm32 $m1, $m0, $a
+	stm32 $m1, $m0, $n
 
 	ld32 $m0, $mzero, $mvertex_base, VOFF_B_RANGE
-	ld32 $m1, $mzero, $m0, $a
+	ld32 $m1, $mzero, $m0, $n
 	or $m1, $m1, $bpos
-	stm32 $m1, $m0, $a
+	stm32 $m1, $m0, $n
 
 	// increment n and check if we run again
-	setzi $m0, CTXT_WORKERS
-	shl $m0, $m0, 1
-	add $n, $n, $m0
-	shr $m1, $n, 1
+	add $n, $n, CTXT_WORKERS
 	ld32 $m0, $mzero, $mvertex_base, VOFF_MAX_N_PER_TILE
 	ld32 $m0, $mzero, $m0, 0
-	cmpult $m0, $m1, $m0 // n < max_ab
+	cmpult $m0, $n, $m0 // n < max_ab
 	brnz $m0, compN_start
 compN_end:
 	exitz $m15

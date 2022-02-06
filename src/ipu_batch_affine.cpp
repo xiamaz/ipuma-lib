@@ -36,12 +36,13 @@ long long getCellCount(const std::vector<std::string>& A, const std::vector<std:
 
 int IPUAlgoConfig::getTotalNumberOfComparisons() const { return tilesUsed * maxBatches; }
 
+int IPUAlgoConfig::getMetaBufferSize32b() const {return getTotalNumberOfComparisons() * 4;};
 int IPUAlgoConfig::getLenBufferSize32b() const {return getTotalNumberOfComparisons() * 2;};
 
-int IPUAlgoConfig::getTotalBufferSize8b() const { return tilesUsed * bufsize; }
-int IPUAlgoConfig::getTotalBufferSize32b() const { return std::ceil(static_cast<double>(getTotalBufferSize8b()) / 4.0); }
+int IPUAlgoConfig::getSequenceBufferSize8b() const { return tilesUsed * bufsize; }
+int IPUAlgoConfig::getSequenceBufferSize32b() const { return std::ceil(static_cast<double>(getSequenceBufferSize8b()) / 4.0); }
 
-int IPUAlgoConfig::getInputBufferSize32b() const { return getTotalBufferSize32b() * 2 + getLenBufferSize32b() * 2; }
+int IPUAlgoConfig::getInputBufferSize32b() const { return getSequenceBufferSize32b() * 2 + getMetaBufferSize32b(); }
 
 std::string vertexTypeToString(VertexType v) { return typeString[static_cast<int>(v)]; }
 
@@ -59,8 +60,11 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
   Tensor As = graph.addVariable(INT, {activeTiles, static_cast<size_t>(std::ceil(static_cast<double>(bufSize) / 4.0))}, "A");
   Tensor Bs = graph.addVariable(INT, {activeTiles, static_cast<size_t>(std::ceil(static_cast<double>(bufSize) / 4.0))}, "B");
 
-  Tensor Alens = graph.addVariable(INT, {activeTiles, maxBatches * 2}, "Alen");
-  Tensor Blens = graph.addVariable(INT, {activeTiles, maxBatches * 2}, "Blen");
+  // Metadata structure
+  Tensor CompMeta = graph.addVariable(INT, {activeTiles, maxBatches * 4}, "CompMeta");
+
+  // Tensor Alens = graph.addVariable(INT, {activeTiles, maxBatches * 2}, "Alen");
+  // Tensor Blens = graph.addVariable(INT, {activeTiles, maxBatches * 2}, "Blen");
 
   auto [m, n] = similarityData.shape();
 
@@ -91,20 +95,19 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
   Tensor Scores = graph.addVariable(INT, {activeTiles, maxBatches}, "Scores");
   Tensor ARanges = graph.addVariable(INT, {activeTiles, maxBatches}, "ARanges");
   Tensor BRanges = graph.addVariable(INT, {activeTiles, maxBatches}, "BRanges");
-  Tensor Mismatches = graph.addVariable(INT, {activeTiles, maxBatches}, "Mismatches");
 
   graph.setTileMapping(similarity, 0);
   for (int i = 0; i < activeTiles; ++i) {
     int tileIndex = i % tileCount;
     graph.setTileMapping(As[i], tileIndex);
     graph.setTileMapping(Bs[i], tileIndex);
-    graph.setTileMapping(Alens[i], tileIndex);
-    graph.setTileMapping(Blens[i], tileIndex);
+    graph.setTileMapping(CompMeta[i], tileIndex);
+    // graph.setTileMapping(Alens[i], tileIndex);
+    // graph.setTileMapping(Blens[i], tileIndex);
 
     graph.setTileMapping(Scores[i], tileIndex);
     graph.setTileMapping(ARanges[i], tileIndex);
     graph.setTileMapping(BRanges[i], tileIndex);
-    graph.setTileMapping(Mismatches[i], tileIndex);
   }
 
   OptionFlags streamOptions({/*{"bufferingDepth", "2"}, {"splitLimit", "0"}*/});
@@ -121,12 +124,12 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
                                         {"gapExt", gapExt},
                                         {"maxNPerTile", maxBatches},
                                         {"A", As[i]},
-                                        {"Alen", Alens[i]},
-                                        {"Blen", Blens[i]},
                                         {"B", Bs[i]},
+                                        {"Meta", CompMeta[i]},
+                                        // {"Alen", Alens[i]},
+                                        // {"Blen", Blens[i]},
                                         {"simMatrix", similarity},
                                         {"score", Scores[i]},
-                                        {"mismatches", Mismatches[i]},
                                         {"ARange", ARanges[i]},
                                         {"BRange", BRanges[i]},
                                     });
@@ -144,7 +147,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     graph.setPerfEstimate(vtx, 1);
   }
 
-  auto inputs_tensor = concat({As.flatten(), Alens.flatten(), Bs.flatten(), Blens.flatten()});
+  auto inputs_tensor = concat({As.flatten(), Bs.flatten(), CompMeta.flatten()});
   auto outputs_tensor = concat({Scores.flatten(), ARanges.flatten(), BRanges.flatten()});
 
   auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT, INT, inputs_tensor.numElements());
@@ -155,7 +158,8 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
   auto print_tensors_prog = program::Sequence({
     // program::PrintTensor("Alens", Alens),
     // program::PrintTensor("Blens", Blens),
-    program::PrintTensor("Scores", Scores),
+    program::PrintTensor("CompMeta", CompMeta),
+    // program::PrintTensor("Scores", Scores),
   });
 #ifdef IPUMA_DEBUG
  program::Sequence  main_prog;
@@ -171,7 +175,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
 #ifdef IPUMA_DEBUG
   addCycleCount(graph, prog, CYCLE_COUNT_OUTER);
 #endif
-  return {prog, d2h_prog_concat};
+  return {prog, d2h_prog_concat, print_tensors_prog};
 }
 
 SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig, int thread_id) : IPUAlgorithm(config), algoconfig(algoconfig), thread_id(thread_id) {
@@ -245,16 +249,12 @@ size_t SWAlgorithm::getAOffset(const IPUAlgoConfig& config) {
   return 0;
 }
 
-size_t SWAlgorithm::getAlenOffset(const IPUAlgoConfig& config) {
-  return config.getTotalBufferSize32b();
-}
-
 size_t SWAlgorithm::getBOffset(const IPUAlgoConfig& config) {
-  return getAlenOffset(config) + config.getLenBufferSize32b();
+  return config.getSequenceBufferSize32b();
 }
 
-size_t SWAlgorithm::getBlenOffset(const IPUAlgoConfig& config) {
-  return getBOffset(config) + config.getTotalBufferSize32b();
+size_t SWAlgorithm::getMetaOffset(const IPUAlgoConfig& config) {
+  return config.getSequenceBufferSize32b() * 2;
 }
 
 void SWAlgorithm::refetch() {
@@ -278,19 +278,23 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   auto timeInner = static_cast<double>(cyclesInner) / getTarget().getTileClockFrequency();
   PLOGD << "Poplar cycle count: " << cyclesInner << "/" << cyclesOuter << " computed time (in s): " << timeInner << "/" << timeOuter;
 
-  size_t alen_offset = getAlenOffset(algoconfig);
-  size_t blen_offset = getBlenOffset(algoconfig);
+  // size_t alen_offset = getAlenOffset(algoconfig);
+  // size_t blen_offset = getBlenOffset(algoconfig);
 
-  int32_t* a_len = inputs_begin + alen_offset;
-  int32_t* b_len = inputs_begin + blen_offset;
+  int32_t* meta_input = inputs_begin + getMetaOffset(algoconfig);
+
+  // int32_t* a_len = inputs_begin + alen_offset;
+  // int32_t* b_len = inputs_begin + blen_offset;
 
   // GCUPS computation
   // auto cellCount = getCellCount(A, B);
   uint64_t cellCount = 0;
   uint64_t dataCount = 0;
   for (size_t i = 0; i < algoconfig.getTotalNumberOfComparisons(); i++) {
-    cellCount += a_len[2*i] * b_len[2*i];
-    dataCount += a_len[2*i] + b_len[2*i];
+    auto a_len = meta_input[4*i];
+    auto b_len = meta_input[4*i+2];
+    cellCount += a_len * b_len;
+    dataCount += a_len + b_len;
   }
   
   double GCUPSOuter = static_cast<double>(cellCount) / timeOuter / 1e9;
@@ -442,14 +446,16 @@ void SWAlgorithm::prepare_remote(IPUAlgoConfig& algoconfig, const std::vector<st
 
   seqMapping = std::vector<int>(A.size(), 0);
   size_t a_offset = getAOffset(algoconfig);
-  size_t alen_offset = getAlenOffset(algoconfig);
   size_t b_offset = getBOffset(algoconfig);
-  size_t blen_offset = getBlenOffset(algoconfig);
+  size_t meta_offset = getMetaOffset(algoconfig);
+  // size_t alen_offset = getAlenOffset(algoconfig);
+  // size_t blen_offset = getBlenOffset(algoconfig);
 
   int8_t* a = (int8_t*)inputs_begin;
-  int32_t* a_len = inputs_begin + alen_offset;
   int8_t* b = (int8_t*)(inputs_begin + b_offset);
-  int32_t* b_len = inputs_begin + blen_offset;
+  int32_t* meta = inputs_begin + meta_offset;
+  // int32_t* a_len = inputs_begin + alen_offset;
+  // int32_t* b_len = inputs_begin + blen_offset;
 
   for (const auto [bucket, i] : mapping) {
     auto& [bN, bA, bB] = buckets[bucket];
@@ -457,13 +463,14 @@ void SWAlgorithm::prepare_remote(IPUAlgoConfig& algoconfig, const std::vector<st
     auto bSize = vB[i].size();
 
     size_t offsetBuffer = bucket * algoconfig.bufsize;
-    size_t offsetLength = bucket * algoconfig.maxBatches;
+    size_t offsetMeta = bucket * algoconfig.maxBatches * 4;
+    auto* bucket_meta = meta + offsetMeta;
 
-    a_len[(offsetLength + bN)*2] = aSize;
-    b_len[(offsetLength + bN)*2] = bSize;
-    a_len[(offsetLength + bN)*2+1] = bA;
-    b_len[(offsetLength + bN)*2+1] = bB;
-    seqMapping[i] = offsetLength + bN;
+    bucket_meta[bN*4  ] = aSize;
+    bucket_meta[bN*4+1] = bA;
+    bucket_meta[bN*4+2] = bSize;
+    bucket_meta[bN*4+3] = bB;
+    seqMapping[i] = bucket * algoconfig.maxBatches + bN;
 
     memcpy(a + offsetBuffer + bA, vA[i].data(), aSize);
     memcpy(b + offsetBuffer + bB, vB[i].data(), bSize);
