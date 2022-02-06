@@ -58,16 +58,17 @@ protected:
   };
   }
 
+  int matchScore = ALN_MATCH_SCORE;
+  int mismatchScore = ALN_MISMATCH_COST;
+  int gapOpening = ALN_GAP_OPENING_COST;
+  int gapExtend = ALN_GAP_EXTENDING_COST;
+  int ambiguityCost = ALN_AMBIGUITY_COST;
+
   std::vector<std::string> queries, refs;
   
   void checkResults(const std::vector<StripedSmithWaterman::Alignment>& alns_ipu) {
 
-    StripedSmithWaterman::Aligner ssw_aligner(
-      ALN_MATCH_SCORE,
-      ALN_MISMATCH_COST,
-      ALN_GAP_OPENING_COST,
-      ALN_GAP_EXTENDING_COST,
-      ALN_AMBIGUITY_COST);
+    StripedSmithWaterman::Aligner ssw_aligner(matchScore, mismatchScore, gapOpening, gapExtend, ambiguityCost);
 
     StripedSmithWaterman::Filter ssw_filter;
     std::vector<StripedSmithWaterman::Alignment> alns(queries.size());
@@ -119,11 +120,11 @@ TEST_F(ParityTest, UseAssembly) {
   int strlen = 120;
   int bufsize = 1000;
   auto driver = ipu::batchaffine::SWAlgorithm({
-    .gapInit = -(ALN_GAP_OPENING_COST-ALN_GAP_EXTENDING_COST),
-    .gapExtend = -ALN_GAP_EXTENDING_COST,
-    .matchValue = ALN_MATCH_SCORE,
-    .mismatchValue = -ALN_MISMATCH_COST,
-    .ambiguityValue = -ALN_AMBIGUITY_COST,
+    .gapInit = -(gapOpening-gapExtend),
+    .gapExtend = -gapExtend,
+    .matchValue = matchScore,
+    .mismatchValue = -mismatchScore,
+    .ambiguityValue = -ambiguityCost,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
   }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::assembly, ipu::partition::Algorithm::greedy});
@@ -140,11 +141,33 @@ TEST_F(ParityTest, UseMultiAssembly) {
   int strlen = 120;
   int bufsize = 1000;
   auto driver = ipu::batchaffine::SWAlgorithm({
-    .gapInit = -(ALN_GAP_OPENING_COST-ALN_GAP_EXTENDING_COST),
-    .gapExtend = -ALN_GAP_EXTENDING_COST,
-    .matchValue = ALN_MATCH_SCORE,
-    .mismatchValue = -ALN_MISMATCH_COST,
-    .ambiguityValue = -ALN_AMBIGUITY_COST,
+    .gapInit = -(gapOpening-gapExtend),
+    .gapExtend = -gapExtend,
+    .matchValue = matchScore,
+    .mismatchValue = -mismatchScore,
+    .ambiguityValue = -ambiguityCost,
+    .similarity = swatlib::Similarity::nucleicAcid,
+    .datatype = swatlib::DataType::nucleicAcid,
+  }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::multiasm, ipu::partition::Algorithm::greedy});
+
+  std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
+  test_aligns_ipu(alns_ipu, refs, queries, driver);
+
+  checkResults(alns_ipu);
+}
+
+TEST_F(ParityTest, UseGapOpeningCostMultiAsm) {
+  gapOpening = 3;
+  int numWorkers = 10;
+  int numCmps = 10;
+  int strlen = 120;
+  int bufsize = 1000;
+  auto driver = ipu::batchaffine::SWAlgorithm({
+    .gapInit = -(gapOpening-gapExtend),
+    .gapExtend = -gapExtend,
+    .matchValue = matchScore,
+    .mismatchValue = -mismatchScore,
+    .ambiguityValue = -ambiguityCost,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
   }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::multiasm, ipu::partition::Algorithm::greedy});
