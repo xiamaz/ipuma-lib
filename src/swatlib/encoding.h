@@ -69,7 +69,8 @@ const std::map<char, uint8_t> AA_CODE = {
 
 class Encoding {
 	std::map<char, uint8_t> code;
-	std::map<uint8_t, char> inverse;
+	std::vector<uint8_t> codeTable;
+	std::vector<char> decodeTable;
 public:
 	Encoding(std::map<char, uint8_t>);
 	uint8_t encode(char);

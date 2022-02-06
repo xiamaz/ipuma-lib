@@ -29,16 +29,22 @@ namespace swatlib {
 		throw std::runtime_error("Invalid DataType");
 	}
 
-               Encoding::Encoding(std::map<char, uint8_t> mapping) : code(mapping) {
+  Encoding::Encoding(std::map<char, uint8_t> mapping) : code(mapping) {
+		codeTable = std::vector<uint8_t>(127, mapping['\0']);
+		decodeTable = std::vector<char>(127, '\0');
 		for (auto& [key, val] : code) {
-			inverse[val] = key;
+			uint8_t lkey = tolower(key);
+			codeTable[key] = val;
+			codeTable[lkey] = val;
+			decodeTable[val] = key;
 		}
 	}
 	uint8_t Encoding::encode(char c) {
-		return code[c];
+		return codeTable[c];
 	}
+
 	char Encoding::decode(uint8_t i) {
-		return inverse[i];
+		return decodeTable[i];
 	}
 
 	std::vector<uint8_t> Encoding::encode(const std::string& s) {

@@ -23,6 +23,6 @@ TEST(PartitioningTest, FillFull) {
   }
 
   int errval = 0;
-  auto buckets = driver.fillBuckets(a, b, errval);
+  auto buckets = driver.fillBuckets(driver.algoconfig, a, b, errval);
   EXPECT_EQ(errval, 0);
 }

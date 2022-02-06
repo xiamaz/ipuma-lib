@@ -13,6 +13,12 @@ TEST(MN_Test, CompareAll) {
 		"AAAAAA",
 		"TTTTTT",
 	};
+  std::vector<int> comparisons = {
+    0, 0,
+    0, 1,
+    1, 0,
+    1, 1,
+  };
   int numWorkers = 1;
   int numCmps = 30;
   int strlen = 20;
@@ -22,4 +28,6 @@ TEST(MN_Test, CompareAll) {
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
   }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::assembly});
+  driver.compare_mn_local(A, B, comparisons);
+  auto result = driver.get_result();
 }

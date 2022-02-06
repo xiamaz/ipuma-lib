@@ -23,6 +23,7 @@ struct SequenceTestData {
 };
 
 const vector<SequenceTestData> simpleData = {
+  {"acgt", "acgt", 0, 3, 0, 3, 4},
   {"ACGT", "ACGT", 0, 3, 0, 3, 4},
   {"AACGT", "ACGT", 0, 3, 1, 4, 4},
   {"ACGTT", "ACGT", 0, 3, 0, 3, 4},

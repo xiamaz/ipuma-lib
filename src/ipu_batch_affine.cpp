@@ -217,10 +217,6 @@ void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std:
   }
 }
 
-std::vector<std::tuple<int, int>> SWAlgorithm::fillBuckets(const std::vector<std::string>& A, const std::vector<std::string>& B, int& err) {
-  return fillBuckets(algoconfig, A, B, err);
-}
-
 std::vector<std::tuple<int, int>> SWAlgorithm::fillBuckets(const IPUAlgoConfig& algoconfig,const std::vector<std::string>& A, const std::vector<std::string>& B, int& err) {
   std::vector<std::tuple<int, int>> bucket_pairs;
   switch (algoconfig.fillAlgo) {
@@ -292,6 +288,16 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   auto transferBandwidth = totalTransferSize / transferTime / 1e6;
   PLOGD << "Transfer time: " << transferTime << "s transfer ratio: " << transferInfoRatio << "% estimated bandwidth: " << transferBandwidth << "mb/s, per vertex: " << transferBandwidth / algoconfig.tilesUsed << "mb/s";
 #endif
+}
+
+
+void SWAlgorithm::compare_mn_local(const std::vector<std::string>& A, const std::vector<std::string>& B, const std::vector<int>& comparisons, bool errcheck) {
+  size_t inputs_size = algoconfig.getInputBufferSize32b();
+  std::vector<int32_t> inputs(inputs_size);
+  size_t results_size = scores.size() + a_range_result.size() + b_range_result.size();
+  std::vector<int32_t> results(results_size);
+
+  prepared_remote_compare(&*inputs.begin(), &*inputs.end(), &*results.begin(), &*results.end());
 }
 
 void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::vector<std::string>& B, bool errcheck) {
@@ -407,26 +413,45 @@ std::string SWAlgorithm::printTensors() {
   return graphstream.str();
 }
 
-void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, std::vector<int>& seqMapping) {
-  swatlib::TickTock preprocessTimer;
-  preprocessTimer.tick();
-  checkSequenceSizes(algoconfig, A, B);
-
-  auto encoder = swatlib::getEncoder(swconfig.datatype);
-  auto vA = encoder.encode(A);
-  auto vB = encoder.encode(B);
-
+void SWAlgorithm::fill_input_buffer(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, const std::vector<ComparisonMapping>& comparisonMapping, int32_t* inputs_begin, int32_t* inputs_end) {
   size_t input_elems = inputs_end - inputs_begin;
   memset(inputs_begin, 0, input_elems * sizeof(int32_t));
 
-  #ifdef IPUMA_DEBUG
-  for (int32_t* it = inputs_begin; it != inputs_end; ++it) {
-    if (*it != 0) {
-      PLOGW << "Results are not zero";
-    }
-  }
-  #endif
+  size_t seqs_offset = getSeqsOffset(algoconfig);
+  size_t meta_offset = getMetaOffset(algoconfig);
 
+  int8_t* seqs = (int8_t*)inputs_begin + seqs_offset;
+  int32_t* meta = inputs_begin + meta_offset;
+
+  auto encoder = swatlib::getEncoder(swconfig.datatype);
+}
+
+void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, std::vector<int>& seqMapping) {
+  swatlib::TickTock preprocessTimer;
+  std::vector<swatlib::TickTock> stageTimers(5);
+  preprocessTimer.tick();
+  stageTimers[0].tick();
+  checkSequenceSizes(algoconfig, A, B);
+  stageTimers[0].tock();
+
+  stageTimers[1].tick();
+  auto encoder = swatlib::getEncoder(swconfig.datatype);
+  stageTimers[1].tock();
+
+  stageTimers[2].tick();
+  size_t input_elems = inputs_end - inputs_begin;
+  memset(inputs_begin, 0, input_elems * sizeof(int32_t));
+  stageTimers[2].tock();
+
+  // #ifdef IPUMA_DEBUG
+  // for (int32_t* it = inputs_begin; it != inputs_end; ++it) {
+  //   if (*it != 0) {
+  //     PLOGW << "Results are not zero";
+  //   }
+  // }
+  // #endif
+
+  stageTimers[3].tick();
   int errval = 0;
   auto mapping = fillBuckets(algoconfig, A, B, errval);
 
@@ -434,7 +459,9 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
     PLOGW << "Bucket filling failed.";
     exit(1);
   }
+  stageTimers[3].tock();
 
+  stageTimers[4].tick();
   std::vector<std::tuple<int, int>> buckets(algoconfig.tilesUsed, {0, 0});
 
   seqMapping = std::vector<int>(A.size(), 0);
@@ -446,8 +473,10 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
 
   for (const auto [bucket, i] : mapping) {
     auto& [bN, bO] = buckets[bucket];
-    auto aSize = vA[i].size();
-    auto bSize = vB[i].size();
+    auto ai = A[i];
+    auto bi = B[i];
+    auto aSize = ai.size();
+    auto bSize = bi.size();
 
     size_t offsetBuffer = bucket * algoconfig.getBufsize32b() * 4;
     size_t offsetMeta = bucket * algoconfig.maxBatches * 4;
@@ -455,20 +484,32 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
 
     bucket_meta[bN*4  ] = aSize;
     bucket_meta[bN*4+1] = bO;
-    memcpy(seqs + offsetBuffer + bO, vA[i].data(), aSize);
+    auto* s = seqs + offsetBuffer + bO;
+    for (int j = 0; j < aSize; ++j) {
+      s[j] = encoder.encode(ai[j]);
+    }
     bO += aSize;
 
     bucket_meta[bN*4+2] = bSize;
     bucket_meta[bN*4+3] = bO;
-    memcpy(seqs + offsetBuffer + bO, vB[i].data(), bSize);
+    s = seqs + offsetBuffer + bO;
+    for (int j = 0; j < bSize; ++j) {
+      s[j] = encoder.encode(bi[j]);
+    }
     bO += bSize;
     seqMapping[i] = bucket * algoconfig.maxBatches + bN;
 
     bN++;
   }
+  stageTimers[4].tock();
 
   preprocessTimer.tock();
   PLOGD << "Total preprocessing time (in s): "  << static_cast<double>(preprocessTimer.duration<std::chrono::milliseconds>()) / 1000.0;
+
+  PLOGD << "Stage timers:";
+  for (int i = 0; i < stageTimers.size(); ++i)  {
+    PLOGD << i << ": " << stageTimers[i].duration<std::chrono::milliseconds>();
+  }
 
 #ifdef IPUMA_DEBUG
   int emptyBuckets = 0;
