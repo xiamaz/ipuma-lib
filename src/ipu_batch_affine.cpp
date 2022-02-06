@@ -199,7 +199,7 @@ SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig) : SWAlg
 
 BlockAlignmentResults SWAlgorithm::get_result() { return {scores, a_range_result, b_range_result}; }
 
-void SWAlgorithm::checkSequenceSizes(IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B) {
+void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B) {
   if (A.size() != B.size()) {
     PLOGW << "Mismatched size A " << A.size() << " != B " << B.size();
     exit(1);
@@ -229,7 +229,7 @@ std::vector<std::tuple<int, int>> SWAlgorithm::fillBuckets(const std::vector<std
   return fillBuckets(algoconfig, A, B, err);
 }
 
-std::vector<std::tuple<int, int>> SWAlgorithm::fillBuckets(IPUAlgoConfig& algoconfig,const std::vector<std::string>& A, const std::vector<std::string>& B, int& err) {
+std::vector<std::tuple<int, int>> SWAlgorithm::fillBuckets(const IPUAlgoConfig& algoconfig,const std::vector<std::string>& A, const std::vector<std::string>& B, int& err) {
   std::vector<std::tuple<int, int>> bucket_pairs;
   switch (algoconfig.fillAlgo) {
   case partition::Algorithm::fillFirst:
@@ -324,7 +324,7 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
   inputs[1] = 0xDEADBEEF;
   inputs[inputs_size + (1) + 1] = 0xFEEBDAED;
   inputs[inputs_size + (1) + 2] = 0xFEEBDAED;
-  prepare_remote(algoconfig, A, B, &*inputs.begin() + 2, &*inputs.end() - 2, mapping);
+  prepare_remote(config, algoconfig, A, B, &*inputs.begin() + 2, &*inputs.end() - 2, mapping);
 
   if (inputs[0] != 0xDEADBEEF || inputs[1] != 0xDEADBEEF) {
     std::vector<int32_t> subset(inputs.begin(), inputs.begin() + 10);
@@ -414,12 +414,12 @@ std::string SWAlgorithm::printTensors() {
   return graphstream.str();
 }
 
-void SWAlgorithm::prepare_remote(IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, std::vector<int>& seqMapping) {
+void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, std::vector<int>& seqMapping) {
   swatlib::TickTock preprocessTimer;
   preprocessTimer.tick();
   checkSequenceSizes(algoconfig, A, B);
 
-  auto encoder = swatlib::getEncoder(swatlib::DataType::nucleicAcid);
+  auto encoder = swatlib::getEncoder(swconfig.datatype);
   auto vA = encoder.encode(A);
   auto vB = encoder.encode(B);
 

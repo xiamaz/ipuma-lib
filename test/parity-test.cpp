@@ -1,3 +1,4 @@
+#include <cmath>
 #include "gtest/gtest.h"
 
 #include "ssw.hpp"
@@ -171,6 +172,106 @@ TEST_F(ParityTest, UseGapOpeningCostMultiAsm) {
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
   }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::multiasm, ipu::partition::Algorithm::greedy});
+
+  std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
+  test_aligns_ipu(alns_ipu, refs, queries, driver);
+
+  checkResults(alns_ipu);
+}
+
+class AAParityTest : public ParityTest {
+protected:
+  void SetUp() override {
+    queries = {
+      "AAAAAA",
+      "MMMMMM",
+      "MATGGRRGAAAAP",
+      "MATGGRRGAAAAPLLVAVAALLLGAAGHLYPGEVCPGMDIRNNLTRLHELENCSVIEGHL",
+    };
+    refs = {
+      "AAAAAA",
+      "MMMMMM",
+      "MATGGRRGAAAAP",
+      "MATGGRRGAAAAPLLYPGEVCPGMDIRNNLVAVAALLLGAAGHLTRLHELENCSVIEGHL",
+    };
+    gapOpening = 3;
+    gapExtend = 1;
+  }
+
+  void checkResults(const std::vector<StripedSmithWaterman::Alignment>& alns_ipu) {
+	  const std::vector<int8_t> mat50 = {
+    //  A   R   N   D   C   Q   E   G   H   I   L   K   M   F   P   S   T   W   Y   V   B   Z   X   *
+      	5, -2, -1, -2, -1, -1, -1,  0, -2, -1, -2, -1, -1, -3, -1,  1,  0, -3, -2,  0, -2, -1, -1, -5,	// A
+       -2,  7, -1, -2, -4,  1,  0, -3,  0, -4, -3,  3, -2, -3, -3, -1, -1, -3, -1, -3, -1,  0, -1, -5,	// R
+       -1, -1,  7,  2, -2,  0,  0,  0,  1, -3, -4,  0, -2, -4, -2,  1,  0, -4, -2, -3,  5,  0, -1, -5,	// N
+       -2, -2,  2,  8, -4,  0,  2, -1, -1, -4, -4, -1, -4, -5, -1,  0, -1, -5, -3, -4,  6,  1, -1, -5,	// D
+       -1, -4, -2, -4, 13, -3, -3, -3, -3, -2, -2, -3, -2, -2, -4, -1, -1, -5, -3, -1, -3, -3, -1, -5,	// C
+       -1,  1,  0,  0, -3,  7,  2, -2,  1, -3, -2,  2,  0, -4, -1,  0, -1, -1, -1, -3,  0,  4, -1, -5,	// Q
+       -1,  0,  0,  2, -3,  2,  6, -3,  0, -4, -3,  1, -2, -3, -1, -1, -1, -3, -2, -3,  1,  5, -1, -5,	// E
+      	0, -3,  0, -1, -3, -2, -3,  8, -2, -4, -4, -2, -3, -4, -2,  0, -2, -3, -3, -4, -1, -2, -1, -5,	// G
+       -2,  0,  1, -1, -3,  1,  0, -2, 10, -4, -3,  0, -1, -1, -2, -1, -2, -3,  2, -4,  0,  0, -1, -5,	// H
+       -1, -4, -3, -4, -2, -3, -4, -4, -4,  5,  2, -3,  2,  0, -3, -3, -1, -3, -1,  4, -4, -3, -1, -5,	// I
+       -2, -3, -4, -4, -2, -2, -3, -4, -3,  2,  5, -3,  3,  1, -4, -3, -1, -2, -1,  1, -4, -3, -1, -5,	// L
+       -1,  3,  0, -1, -3,  2,  1, -2,  0, -3, -3,  6, -2, -4, -1,  0, -1, -3, -2, -3,  0,  1, -1, -5,	// K
+       -1, -2, -2, -4, -2,  0, -2, -3, -1,  2,  3, -2,  7,  0, -3, -2, -1, -1,  0,  1, -3, -1, -1, -5,	// M
+       -3, -3, -4, -5, -2, -4, -3, -4, -1,  0,  1, -4,  0,  8, -4, -3, -2,  1,  4, -1, -4, -4, -1, -5,	// F
+       -1, -3, -2, -1, -4, -1, -1, -2, -2, -3, -4, -1, -3, -4, 10, -1, -1, -4, -3, -3, -2, -1, -1, -5,	// P
+      	1, -1,  1,  0, -1,  0, -1,  0, -1, -3, -3,  0, -2, -3, -1,  5,  2, -4, -2, -2,  0,  0, -1, -5,	// S
+      	0, -1,  0, -1, -1, -1, -1, -2, -2, -1, -1, -1, -1, -2, -1,  2,  5, -3, -2,  0,  0, -1, -1, -5, 	// T
+       -3, -3, -4, -5, -5, -1, -3, -3, -3, -3, -2, -3, -1,  1, -4, -4, -3, 15,  2, -3, -5, -2, -1, -5, 	// W
+       -2, -1, -2, -3, -3, -1, -2, -3,  2, -1, -1, -2,  0,  4, -3, -2, -2,  2,  8, -1, -3, -2, -1, -5, 	// Y
+      	0, -3, -3, -4, -1, -3, -3, -4, -4,  4,  1, -3,  1, -1, -3, -2,  0, -3, -1,  5, -3, -3, -1, -5, 	// V
+       -2, -1,  5,  6, -3,  0,  1, -1,  0, -4, -4,  0, -3, -4, -2,  0,  0, -5, -3, -3,  6,  1, -1, -5, 	// B
+       -1,  0,  0,  1, -3,  4,  5, -2,  0, -3, -3,  1, -1, -4, -1,  0, -1, -2, -2, -3,  1,  5, -1, -5, 	// Z
+       -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -5, 	// X
+       -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5,  1 	// *
+	  };
+
+	  /* This table is used to transform amino acid letters into numbers. */
+	  const std::vector<int8_t> aa_table = {
+	  	23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+	  	23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+	  	23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+	  	23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+	  	23, 0,  20, 4,  3,  6,  13, 7,  8,  9,  23, 11, 10, 12, 2,  23,
+	  	14, 5,  1,  15, 16, 23, 19, 17, 22, 18, 21, 23, 23, 23, 23, 23,
+	  	23, 0,  20, 4,  3,  6,  13, 7,  8,  9,  23, 11, 10, 12, 2,  23,
+	  	14, 5,  1,  15, 16, 23, 19, 17, 22, 18, 21, 23, 23, 23, 23, 23
+	  };
+
+    int matSize = static_cast<int>(std::sqrt(mat50.size()));
+
+    StripedSmithWaterman::Aligner ssw_aligner(mat50.data(), matSize, aa_table.data(), aa_table.size());
+    StripedSmithWaterman::Filter ssw_filter;
+    std::vector<StripedSmithWaterman::Alignment> alns(queries.size());
+    for (int i = 0; i < queries.size(); ++i) {
+      auto reflen = refs[i].size();
+      auto qlen = queries[i].size();
+
+      ssw_aligner.Align(refs[i].data(), reflen, queries[i].data(), qlen, ssw_filter, &alns[i], std::max((int)(qlen / 2), 15));
+      EXPECT_EQ(alns_ipu[i].sw_score, alns[i].sw_score) << i << ": IPU score result does not match CPU SSW";
+      EXPECT_EQ(alns_ipu[i].query_begin, alns[i].query_begin) << i << ": IPU reference start result does not match CPU SSW";
+      EXPECT_EQ(alns_ipu[i].query_end, alns[i].query_end) << i << ": IPU reference end result does not match CPU SSW";
+      EXPECT_EQ(alns_ipu[i].ref_begin, alns[i].ref_begin) << i << ": IPU query start result does not match CPU SSW";
+      EXPECT_EQ(alns_ipu[i].ref_end, alns[i].ref_end) << i << ": IPU query end result does not match CPU SSW";
+    }
+  }
+};
+
+TEST_F(AAParityTest, UseCppVertex) {
+  int numWorkers = 1;
+  int numCmps = 10;
+  int strlen = 120;
+  int bufsize = 1000;
+  auto driver = ipu::batchaffine::SWAlgorithm({
+    .gapInit = -(gapOpening-gapExtend),
+    .gapExtend = -gapExtend,
+    .matchValue = matchScore,
+    .mismatchValue = -mismatchScore,
+    .ambiguityValue = -ambiguityCost,
+    .similarity = swatlib::Similarity::blosum50,
+    .datatype = swatlib::DataType::aminoAcid,
+  }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::cpp, ipu::partition::Algorithm::greedy});
 
   std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
   test_aligns_ipu(alns_ipu, refs, queries, driver);

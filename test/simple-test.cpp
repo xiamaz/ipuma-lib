@@ -151,6 +151,7 @@ TEST(PrepareTest, simple) {
   int maxBatches = 2;
   int maxAB = 10;
   int bufsize = maxBatches * maxAB;
+  ipu::SWConfig swconfig = {};
   ipu::batchaffine::IPUAlgoConfig config = {
     .tilesUsed = tilesUsed,
     .maxAB = maxAB,
@@ -171,7 +172,7 @@ TEST(PrepareTest, simple) {
 
   inputs[0] = 0xDEADBEEF;
   inputs[inputs.size() - 1] = 0xDEADBEEF;
-  ipu::batchaffine::SWAlgorithm::prepare_remote(config, A, B, &*inputs.begin() + 1, &*inputs.end() - 1, mapping);
+  ipu::batchaffine::SWAlgorithm::prepare_remote(swconfig, config, A, B, &*inputs.begin() + 1, &*inputs.end() - 1, mapping);
   std::vector<int32_t> slice_begin(inputs.begin(), inputs.begin() + 10);
   std::vector<int32_t> slice_end(inputs.end() - 10, inputs.end());
   EXPECT_EQ(*inputs.begin(), 0xDEADBEEF) << "Start overwritten: " << swatlib::printVector(slice_begin);
