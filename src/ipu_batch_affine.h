@@ -1,28 +1,14 @@
 #ifndef IPU_BATCH_AFFINE_HPP
 #define IPU_BATCH_AFFINE_HPP
 
-#include "ipu_base.h"
 #include<vector>
+#include "ipu_base.h"
+#include "partition.h"
 
 using namespace poplar;
 
 namespace ipu {
 namespace batchaffine {
-
-namespace partition {
-  enum class Algorithm {fillFirst, roundRobin, greedy};
-
-  struct BucketData {
-    int count;
-    int lenA;
-    int lenB;
-    int weight;
-  };
-
-  int fillFirst(std::vector<std::tuple<int, int>>& mapping, const std::vector<std::string>& A, const std::vector<std::string>& B, int bucketCount, int bucketCapacity, int bucketCountCapacity);
-  int roundRobin(std::vector<std::tuple<int, int>>& mapping, const std::vector<std::string>& A, const std::vector<std::string>& B, int bucketCount, int bucketCapacity, int bucketCountCapacity);
-  int greedy(std::vector<std::tuple<int, int>>& mapping, const std::vector<std::string>& A, const std::vector<std::string>& B, int bucketCount, int bucketCapacity, int bucketCountCapacity);
-}
 
 const std::string STREAM_A = "a-write";
 const std::string STREAM_A_LEN = "a-len-write";

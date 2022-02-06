@@ -18,6 +18,6 @@ add_gp_library(
 
 add_subdirectory(swatlib)
 
-add_library(IPUMA_LIBRARY "ipu_batch_affine.cpp" "ipu_base.cpp" "driver.cpp")
+add_library(IPUMA_LIBRARY "ipu_batch_affine.cpp" "ipu_base.cpp" "driver.cpp" "partition.cpp")
 target_link_libraries(IPUMA_LIBRARY poplar popops poputil swatlib)
 add_dependencies(IPUMA_LIBRARY  algoipu.gp_codelets)

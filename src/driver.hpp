@@ -40,7 +40,7 @@ static const ipu::batchaffine::IPUAlgoConfig ALGO_CONFIGURATION = {
             KLIGN_IPU_MAX_BATCHES,
             KLIGN_IPU_BUFSIZE,
             ipu::batchaffine::VertexType::cpp,
-            ipu::batchaffine::partition::Algorithm::fillFirst
+            ipu::partition::Algorithm::fillFirst
 };
 
 ipu::batchaffine::SWAlgorithm* getDriver();

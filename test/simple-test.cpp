@@ -108,7 +108,7 @@ TEST_F(SimpleCorrectnessTest, UseCppVertex) {
     .maxBatches = 20,
     .bufsize = 3000,
     .vtype = ipu::batchaffine::VertexType::cpp,
-    .fillAlgo = ipu::batchaffine::partition::Algorithm::roundRobin
+    .fillAlgo = ipu::partition::Algorithm::roundRobin
   });
 
   driver.compare_local(queries, refs);
@@ -123,7 +123,7 @@ TEST_F(SimpleCorrectnessTest, UseCppMultiVertex) {
     .maxBatches = 20,
     .bufsize = 3000,
     .vtype = ipu::batchaffine::VertexType::multi,
-    .fillAlgo = ipu::batchaffine::partition::Algorithm::roundRobin
+    .fillAlgo = ipu::partition::Algorithm::roundRobin
   });
 
   driver.compare_local(queries, refs);
@@ -138,7 +138,7 @@ TEST_F(SimpleCorrectnessTest, UseAsmMultiVertex) {
     .maxBatches = 20,
     .bufsize = 3000,
     .vtype = ipu::batchaffine::VertexType::multiasm,
-    .fillAlgo = ipu::batchaffine::partition::Algorithm::roundRobin
+    .fillAlgo = ipu::partition::Algorithm::roundRobin
   });
 
   driver.compare_local(queries, refs);
@@ -157,7 +157,7 @@ TEST(PrepareTest, simple) {
     .maxBatches = maxBatches,
     .bufsize = bufsize,
     .vtype = ipu::batchaffine::VertexType::cpp,
-    .fillAlgo = ipu::batchaffine::partition::Algorithm::fillFirst
+    .fillAlgo = ipu::partition::Algorithm::fillFirst
   };
 
   std::vector<std::string> A, B;

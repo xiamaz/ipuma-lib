@@ -13,7 +13,7 @@ TEST(PartitioningTest, FillFull) {
     .maxBatches = maxBatches,
     .bufsize = bufsize,
     .vtype = ipu::batchaffine::VertexType::cpp,
-    .fillAlgo = ipu::batchaffine::partition::Algorithm::fillFirst
+    .fillAlgo = ipu::partition::Algorithm::fillFirst
   });
 
   std::vector<std::string> a, b;

@@ -126,7 +126,7 @@ TEST_F(ParityTest, UseAssembly) {
     .ambiguityValue = -ALN_AMBIGUITY_COST,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::assembly, ipu::batchaffine::partition::Algorithm::greedy});
+  }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::assembly, ipu::partition::Algorithm::greedy});
 
   std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
   test_aligns_ipu(alns_ipu, refs, queries, driver);
@@ -147,7 +147,7 @@ TEST_F(ParityTest, UseMultiAssembly) {
     .ambiguityValue = -ALN_AMBIGUITY_COST,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::multiasm, ipu::batchaffine::partition::Algorithm::greedy});
+  }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::multiasm, ipu::partition::Algorithm::greedy});
 
   std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
   test_aligns_ipu(alns_ipu, refs, queries, driver);
