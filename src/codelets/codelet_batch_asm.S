@@ -31,6 +31,7 @@
 #define SOFF_B               2
 #define SOFF_ALEN            3
 #define SOFF_BLEN            4
+#define SOFF_SSCORE          5
 #define STACK_SIZE (40)
 
 // CAVEAT
@@ -49,9 +50,9 @@
 #define bi m2
 
 #define sscore a7
-#define lastnogap a6
-#define agap a5
-#define prevnogap a4
+#define prevnogap a6
+#define lastnogap a5
+#define agap a4
 #define gige a3
 #define ge a2
 
@@ -129,7 +130,7 @@ compN_start:
 	pushNOffsets
 
 	setzi $i, 0
-	setzi $apos, 0
+	setzi $apos, 1
 	setzi $bpos, 0
 	setzi $sscore, 0
 
@@ -141,12 +142,16 @@ compN_start:
 loopB:
 	ld32 $m0, $mzero, $sp, SOFF_B
 	ldz8 $bi, $mzero, $m0, $i
-	setzi $j, 0
 
 
+{
 	ld32 $bg, $mzero, $mvertex_base, VOFF_BG
 	setzi $lastnogap, 0
+}
+{
+	setzi $j, 0
 	setzi $prevnogap, 0
+}
 
 	// load simmatrix[b[i]]
 	ld32 $m0, $mzero, $mvertex_base, VOFF_SIM_MATRIX
@@ -160,28 +165,23 @@ loopB:
 	f32add $gige, $agap, $ge
 }
 
+	st32 $sscore, $mzero, $sp, SOFF_SSCORE
+
 	ld32 $a, $mzero, $sp, SOFF_A
 	ld32 $m0, $mzero, $sp, SOFF_ALEN
 
-{
 	rpt $m0, (loopA_end - loopA_start)/8 - 1
-	fnop
-}
 loopA_start:
 	{
-		ldz8step $m0, $mzero, $a+=, 1 // m0 = a[j]
-	 	f32add $agap, $agap, $ge
-	}
-	{
 		ld32 $a0, $mzero, $bg, 0
-		f32add $a1, $lastnogap, $gige
+		f32v2add $a4:5, $a4:5, $a2:3
 	}
 	{
 		ld32 $a1, $mzero, $c, 0
-		f32max $agap, $agap, $a1 // agap calculation
+		f32max $agap, $agap, $lastnogap // agap calculation
 	}
 	{
-		nop
+		ldz8step $m0, $mzero, $a+=, 1 // m0 = a[j]
 		f32v2add $a0:1, $a0:1, $a2:3 // calc bg + ge and c[j] + gi + ge
 	}
 	{
@@ -197,7 +197,7 @@ loopA_start:
 		f32max $lastnogap, $lastnogap, $agap
 	}
 	{
-		nop
+		add $j, $j, 1
 		f32add $a0, $a0, $prevnogap
 	}
 	{
@@ -216,15 +216,11 @@ loopA_start:
 		movz $apos, $m0, $j
 		fnop
 	}
-	{
-		movz $bpos, $m0, $i
-		fnop
-	}
-	{
-		add $j, $j, 1
-		fnop
-	}
 loopA_end:
+	ld32 $a0, $mzero, $sp, SOFF_SSCORE
+	f32cmpgt $a0, $sscore, $a0
+	mov $m0, $a0
+	movz $bpos, $m0, $i
 
 	add $i, $i, 1
 	ld32 $m0, $mzero, $sp, SOFF_BLEN
@@ -237,6 +233,7 @@ loopB_end:
 	st32 $a0, $mzero, $m0, $n
 
 	// store end position
+	sub $apos, $apos, 1
 	shl $m1, $apos, 16
 	ld32 $m0, $mzero, $mvertex_base, VOFF_A_RANGE
 	stm32 $m1, $m0, $n
@@ -290,23 +287,23 @@ loopBrev:
 	// repeats is endpos + 1
 	ld32 $j, $mzero, $sp, 0
 	add $m0, $j, 1
+	st32 $sscore, $mzero, $sp, SOFF_SSCORE
 
+{
 	rpt $m0, (loopArev_end - loopArev_start)/8 - 1
+	fnop
+}
 loopArev_start:
 	{
-		ldz8 $m0, $mzero, $a, $j // m0 = a[j]
-	 	f32add $agap, $agap, $ge
-	}
-	{
 		ld32 $a0, $mzero, $bg, $j
-		f32add $a1, $lastnogap, $gige
+		f32v2add $a4:5, $a4:5, $a2:3
 	}
 	{
 		ld32 $a1, $mzero, $c, $j
-		f32max $agap, $agap, $a1 // agap calculation
+		f32max $agap, $agap, $lastnogap
 	}
 	{
-		nop
+		ldz8 $m0, $mzero, $a, $j // m0 = a[j]
 		f32v2add $a0:1, $a0:1, $a2:3 // calc bg + ge and c[j] + gi + ge
 	}
 	{
@@ -322,11 +319,11 @@ loopArev_start:
 		f32max $lastnogap, $lastnogap, $agap
 	}
 	{
-		nop
+		ld32 $prevnogap, $mzero, $c, $j
 		f32add $a0, $a0, $prevnogap
 	}
 	{
-		ld32 $prevnogap, $mzero, $c, $j
+		nop
 		f32max $lastnogap, $lastnogap, $a0
 	}
 	{
@@ -342,14 +339,15 @@ loopArev_start:
 		fnop
 	}
 	{
-		movz $bpos, $m0, $i
-		fnop
-	}
-	{
 		sub $j, $j, 1
 		fnop
 	}
 loopArev_end:
+	ld32 $a0, $mzero, $sp, SOFF_SSCORE
+	f32cmpgt $a0, $sscore, $a0
+	mov $m0, $a0
+	movz $bpos, $m0, $i
+
 	sub $i, $i, 1
 	cmpslt $m0, $i, $mzero
 	brz $m0, loopBrev // check if length of B is zero

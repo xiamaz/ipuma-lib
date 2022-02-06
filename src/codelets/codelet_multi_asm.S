@@ -331,18 +331,18 @@ loopArev_start:
 	}
 	{
 		st32 $a0, $mzero, $bg, $j // save bgj
-		f32max $lastnogap, $a0, $azero
+		f32max $lastnogap, $a0, $agap
 	}
 	{
 		ld32 $a0, $bi, $mzero, $m0
-		f32max $lastnogap, $lastnogap, $agap
-	}
-	{
-		nop
-		f32add $a0, $a0, $prevnogap
+		f32max $lastnogap, $lastnogap, $azero
 	}
 	{
 		ld32 $prevnogap, $mzero, $c, $j
+		f32add $a0, $a0, $prevnogap
+	}
+	{
+		nop
 		f32max $lastnogap, $lastnogap, $a0
 	}
 	{
