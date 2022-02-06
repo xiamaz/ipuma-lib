@@ -258,6 +258,7 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   t.tick();
   engine->run(0);
   t.tock();
+  PLOGD << "Total engine run time (in s): "  << static_cast<double>(t.duration<std::chrono::milliseconds>()) / 1000.0;
 
 #ifdef IPUMA_DEBUG
   auto cyclesOuter = getTotalCycles(*engine, CYCLE_COUNT_OUTER);
@@ -294,6 +295,7 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
 }
 
 void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::vector<std::string>& B, bool errcheck) {
+  swatlib::TickTock tPrepare, tCompare;
   std::vector<int> mapping;
   size_t inputs_size = algoconfig.getInputBufferSize32b();
   std::vector<int32_t> inputs(inputs_size + 4);
@@ -305,7 +307,9 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
   inputs[1] = 0xDEADBEEF;
   inputs[inputs_size + (1) + 1] = 0xFEEBDAED;
   inputs[inputs_size + (1) + 2] = 0xFEEBDAED;
+  tPrepare.tick();
   prepare_remote(config, algoconfig, A, B, &*inputs.begin() + 2, &*inputs.end() - 2, mapping);
+  tPrepare.tock();
 
   if (inputs[0] != 0xDEADBEEF || inputs[1] != 0xDEADBEEF) {
     std::vector<int32_t> subset(inputs.begin(), inputs.begin() + 10);
@@ -325,7 +329,15 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
   results[results_size + (1) + 2] = 0xFEEBDAED;
   // prepared_remote_compare(a.data(), a_len.data(), b.data(), b_len.data(), unord_scores.data(), unord_mismatches.data(), unord_a_range.data(),
   //                         unord_b_range.data());
+  tCompare.tick();
   prepared_remote_compare(&*inputs.begin() + 2, &*inputs.end() - 2, &*results.begin() + 2, &*results.end() - 2);
+  tCompare.tock();
+
+  double prepare_time = static_cast<double>(tPrepare.duration<std::chrono::milliseconds>()) / 1e3;
+  double compare_time = static_cast<double>(tCompare.duration<std::chrono::milliseconds>()) / 1e3;
+  double total_time = prepare_time + compare_time;
+  double prepare_perc = prepare_time / total_time * 100;
+  PLOGD << "Total time: " << total_time << " prepare(" << prepare_time << ") compare(" << compare_time << ") preprocessing is " << prepare_perc << "% of total";
 
   // check canaries
   if (results[0] != 0xDEADBEEF || results[1] != 0xDEADBEEF) {
@@ -456,6 +468,7 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
   }
 
   preprocessTimer.tock();
+  PLOGD << "Total preprocessing time (in s): "  << static_cast<double>(preprocessTimer.duration<std::chrono::milliseconds>()) / 1000.0;
 
 #ifdef IPUMA_DEBUG
   int emptyBuckets = 0;
