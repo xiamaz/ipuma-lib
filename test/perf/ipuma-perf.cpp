@@ -63,12 +63,11 @@ TEST_P(AlgoPerformance, StressTest) {
     numWorkers = numWorkers / 6;
     numCmps = numCmps * 6;
   }
-  // auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, numCmps * strlen, algotype});
 
   // generate input strings
   int invalidRuns = 0;
   int numBatches = 10;
-  auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, numCmps * strlen, algotype});
+  auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, numCmps * strlen * 2, algotype});
   for (int n = 0; n < numBatches; ++n) {
     refs = {};
     queries = {};
@@ -104,7 +103,7 @@ TEST_P(AlgoPerformance, RunOptimalWithReverse) {
     numWorkers = numWorkers / 6;
     numCmps = numCmps * 6;
   }
-  auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, numCmps * strlen, algotype});
+  auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, numCmps * strlen * 2, algotype});
 
   // generate input strings
   int numBatches = 10;
@@ -137,7 +136,7 @@ TEST_P(AlgoPerformance, RunOptimal) {
     numWorkers = numWorkers / 6;
     numCmps = numCmps * 6;
   }
-  auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, numCmps * strlen, algotype});
+  auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, numCmps * strlen * 2, algotype});
 
   // generate input strings
   int numBatches = 10;
@@ -175,7 +174,7 @@ TEST_P(PartitionPerformance, RealBatches) {
   int numCmps = 100;
   int strlen = 200;
 
-  auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, 8000, ipu::batchaffine::VertexType::multiasm, GetParam()});
+  auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, 8000 * 2, ipu::batchaffine::VertexType::multiasm, GetParam()});
   for (auto& [path_a, path_b] : INPUT_BATCHS) {
     refs = loadSequences(path_a);
     queries = loadSequences(path_b);

@@ -20,13 +20,12 @@
 #define VOFF_BUF_SIZE     	 6
 #define VOFF_MAX_AB       	 7
 
-#define VOFF_A            	 8
-#define VOFF_B            	 9
-#define VOFF_META            10
+#define VOFF_SEQS          	 8
+#define VOFF_META            9
 
-#define VOFF_SCORE        	 11
-#define VOFF_A_RANGE         12
-#define VOFF_B_RANGE         13
+#define VOFF_SCORE        	 10
+#define VOFF_A_RANGE         11
+#define VOFF_B_RANGE         12
 
 #define SOFF_C 1
 #define SOFF_BG 2
@@ -107,13 +106,12 @@
 	ld32step $m2, $m0, $m1+=, 1  // load a len
 	st32 $m2, $mzero, $sp, SOFF_ALEN
 	ld32step $m2, $m0, $m1+=, 1 // load a offset
-	ld32 $m3, $mzero, $mvertex_base, VOFF_A
+	ld32 $m3, $mzero, $mvertex_base, VOFF_SEQS
 	add $m2, $m3, $m2
 	st32 $m2, $mzero, $sp, SOFF_A
 	ld32step $m2, $m0, $m1+=, 1 // load b len
 	st32 $m2, $mzero, $sp, SOFF_BLEN
 	ld32step $m2, $m0, $m1+=, 1 // laod b offset
-	ld32 $m3, $mzero, $mvertex_base, VOFF_B
 	add $m2, $m2, $m3
 	st32 $m2, $mzero, $sp, SOFF_B
 .endm
@@ -190,7 +188,11 @@ loopB:
 	st32 $sscore, $mzero, $sp, SOFF_SSCORE
 
 	ld32 $m0, $mzero, $sp, SOFF_ALEN
+
+{
 	rpt $m0, (loopA_end - loopA_start)/8 - 1;
+	fnop
+}
 loopA_start:
 	{
 		ld32 $a0, $mzero, $bg, 0

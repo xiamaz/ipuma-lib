@@ -17,8 +17,6 @@ inline int max(int a, int b) {
  */
 class MultiSWAffine : public poplar::MultiVertex {
 private:
-    // poplar::Vector<poplar::Vector<int, poplar::VectorLayout::ONE_PTR, 8>, poplar::VectorLayout::ONE_PTR> C;
-    // poplar::Vector<poplar::Vector<int, poplar::VectorLayout::ONE_PTR, 8>, poplar::VectorLayout::ONE_PTR> bG;
     poplar::Vector<int, poplar::VectorLayout::ONE_PTR, 8> C;
     poplar::Vector<int, poplar::VectorLayout::ONE_PTR, 8> bG;
 public:
@@ -29,8 +27,7 @@ public:
     poplar::Input<int> gapExt;
     poplar::Input<int> bufSize;
     poplar::Input<int> maxAB;
-    poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> A;
-    poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> B;
+    poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Seqs;
     poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Meta;
     poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> score;
     poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> ARange;
@@ -43,8 +40,7 @@ public:
         auto* wC = &(C[0]) + workerId * maxAB;
         auto* wbG = &(bG[0]) + workerId * maxAB;
 
-        uint8_t* cA = (uint8_t*) &(A[0]);
-        uint8_t* cB = (uint8_t*) &(B[0]);
+        uint8_t* cSeqs = (uint8_t*) &(Seqs[0]);
 
         for (int n = workerId; n < maxNPerTile; n += MultiVertex::numWorkers()) {
             int lastNoGap, prevNoGap;
@@ -58,6 +54,10 @@ public:
             auto j_offset = Meta[4*n+1];
             auto b_len = Meta[4*n+2];
             auto i_offset = Meta[4*n+3];
+
+            uint8_t* a = cSeqs + j_offset;
+            uint8_t* b = cSeqs + i_offset;
+
             if (a_len == 0 || b_len == 0) break;
 
             memset(&(wC[0]), 0, maxAB * sizeof(int));
@@ -72,7 +72,7 @@ public:
                     aGap = max(lastNoGap + gI + gE, aGap + gE);
                     wbG[j] = max(wC[j] + gI + gE, wbG[j] + gE);
 
-                    lastNoGap = max(prevNoGap + simMatrix[cA[j_offset + j]][cB[i_offset + i]], aGap);
+                    lastNoGap = max(prevNoGap + simMatrix[a[j]][b[i]], aGap);
                     lastNoGap = max(lastNoGap, wbG[j]);
                     lastNoGap = max(lastNoGap, 0);
                     prevNoGap = wC[j];
@@ -99,7 +99,7 @@ public:
                 for (int j = Aend; j >= 0; --j) {
                     aGap = max(lastNoGap + gI + gE, aGap + gE);
                     wbG[j] = max(wC[j] + gI + gE, wbG[j] + gE);
-                    lastNoGap = max(prevNoGap + simMatrix[cA[j_offset + j]][cB[i_offset + i]], aGap);
+                    lastNoGap = max(prevNoGap + simMatrix[a[j]][b[i]], aGap);
                     lastNoGap = max(lastNoGap, wbG[j]);
                     lastNoGap = max(lastNoGap, 0);
                     prevNoGap = wC[j];

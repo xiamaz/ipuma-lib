@@ -150,7 +150,7 @@ TEST(PrepareTest, simple) {
   int tilesUsed = 10;
   int maxBatches = 2;
   int maxAB = 10;
-  int bufsize = maxBatches * maxAB;
+  int bufsize = maxBatches * maxAB * 2;
   ipu::SWConfig swconfig = {};
   ipu::batchaffine::IPUAlgoConfig config = {
     .tilesUsed = tilesUsed,

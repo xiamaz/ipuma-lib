@@ -6,7 +6,7 @@ TEST(PartitioningTest, FillFull) {
   int tilesUsed = 10;
   int maxBatches = 2;
   int maxAB = 10;
-  int bufsize = maxBatches * maxAB;
+  int bufsize = maxBatches * maxAB * 2;
   auto driver = ipu::batchaffine::SWAlgorithm({}, {
     .tilesUsed = tilesUsed,
     .maxAB = maxAB,

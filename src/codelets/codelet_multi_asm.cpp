@@ -22,8 +22,7 @@ public:
     poplar::Input<float> gapExt;
     poplar::Input<int> bufSize;
     poplar::Input<int> maxAB;
-    poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> A;
-    poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> B;
+    poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Seqs;
     poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR, 8>> Meta;
     poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> score;
     poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> ARange;

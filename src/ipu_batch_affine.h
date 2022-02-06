@@ -35,6 +35,7 @@ struct IPUAlgoConfig {
    * 
    * @return int 
    */
+  int getBufsize32b() const;
   int getSequenceBufferSize8b() const;
   int getSequenceBufferSize32b() const;
   int getMetaBufferSize32b() const;
@@ -56,8 +57,7 @@ class SWAlgorithm : public IPUAlgorithm {
   std::vector<int32_t> b_range_result;
   int thread_id;
 
-  static size_t getAOffset(const IPUAlgoConfig& config);
-  static size_t getBOffset(const IPUAlgoConfig& config);
+  static size_t getSeqsOffset(const IPUAlgoConfig& config);
   static size_t getMetaOffset(const IPUAlgoConfig& config);
 
  public:

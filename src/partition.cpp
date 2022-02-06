@@ -6,7 +6,7 @@ namespace ipu {
 namespace partition {
   int fillFirst(std::vector<std::tuple<int, int>>& mapping, const std::vector<std::string>& A, const std::vector<std::string>& B, int bucketCount, int bucketCapacity, int bucketCountCapacity) {
     mapping = std::vector<std::tuple<int, int>>(A.size(), {0, 0});
-    std::vector<BucketData> buckets(bucketCount, {0, 0, 0, 0});
+    std::vector<BucketData> buckets(bucketCount, {0, 0, 0});
     int bucketIndex = 0;
     for (int i = 0; i < A.size(); ++i) {
       const auto& a = A[i];
@@ -14,12 +14,11 @@ namespace partition {
 
       // find next empty bucket
       while (bucketIndex < bucketCount) {
-        auto& [bN, bA, bB, _] = buckets[bucketIndex];
-        if (bN + 1 <= bucketCountCapacity && bA + a.size() <= bucketCapacity && bB + b.size() <= bucketCapacity) {
+        auto& [bN, bSeq, _] = buckets[bucketIndex];
+        if (bN + 1 <= bucketCountCapacity && bSeq + a.size() + b.size() <= bucketCapacity) {
           mapping[i] = {bucketIndex, i};
           bN++;
-          bA += a.size();
-          bB += b.size();
+          bSeq += a.size() + b.size();
           // PLOGD << "i: " << i << " bucket index: " << bucketIndex << " cap: " << bA << "/" << bucketCapacity << " n: " << bN << "/" << bucketCountCapacity << "\n";
           break;
         } else {
@@ -36,7 +35,7 @@ namespace partition {
 
   int roundRobin(std::vector<std::tuple<int, int>>& mapping, const std::vector<std::string>& A, const std::vector<std::string>& B, int bucketCount, int bucketCapacity, int bucketCountCapacity) {
     mapping = std::vector<std::tuple<int, int>>(A.size(), {0, 0});
-    std::vector<BucketData> buckets(bucketCount, {0, 0, 0, 0});
+    std::vector<BucketData> buckets(bucketCount, {0, 0, 0});
     int bucketIndex = 0;
     for (int i = 0; i < A.size(); ++i) {
       const auto& a = A[i];
@@ -46,14 +45,13 @@ namespace partition {
       int boff = 0;
       for (; boff < bucketCount; ++boff) {
         int bi = (bucketIndex + boff) % bucketCount;
-        auto& [bN, bA, bB, _] = buckets[bi];
-        if (bN + 1 > bucketCountCapacity || bA + a.size() > bucketCapacity || bB + b.size() > bucketCapacity) {
+        auto& [bN, bSeq, _] = buckets[bi];
+        if (bN + 1 > bucketCountCapacity || bSeq + a.size() + b.size() > bucketCapacity) {
           continue;
         } else {
           mapping[i] = {bucketIndex, i};
           bN++;
-          bA += a.size();
-          bB += b.size();
+          bSeq += a.size() + b.size();
           break;
         }
       }
@@ -68,7 +66,7 @@ namespace partition {
   // Greedy approach in which we always put current sequence into one with lowest weight
   int greedy(std::vector<std::tuple<int, int>>& mapping, const std::vector<std::string>& A, const std::vector<std::string>& B, int bucketCount, int bucketCapacity, int bucketCountCapacity) {
     mapping = std::vector<std::tuple<int, int>>(A.size(), {0, 0});
-    std::vector<BucketData> buckets(bucketCount, {0, 0, 0, 0});
+    std::vector<BucketData> buckets(bucketCount, {0, 0, 0});
     for (int i = 0; i < A.size(); ++i) {
       const auto& a = A[i];
       const auto& b = B[i];
@@ -77,8 +75,8 @@ namespace partition {
       int smallestBucket = -1;
       int smallestBucketWeight = 0;
       for (int bi = 0; bi < bucketCount; ++bi) {
-        auto [bN, bA, bB, bW] = buckets[bi];
-        if (!(bN + 1 > bucketCountCapacity || bA + a.size() > bucketCapacity || bB + b.size() > bucketCapacity)) {
+        auto [bN, bSeq, bW] = buckets[bi];
+        if (!(bN + 1 > bucketCountCapacity || bSeq + a.size() + b.size() > bucketCapacity)) {
           if (smallestBucket == -1 || smallestBucketWeight > bW) {
             smallestBucket = bi;
             smallestBucketWeight = bW;
@@ -90,10 +88,9 @@ namespace partition {
         return 1;
       }
 
-      auto& [bN, bA, bB, bW] = buckets[smallestBucket];
+      auto& [bN, bSeq, bW] = buckets[smallestBucket];
       bN++;
-      bA += a.size();
-      bB += b.size();
+      bSeq += a.size() + b.size();
       bW += weight;
       mapping[i] = {smallestBucket, i};
     }

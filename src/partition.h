@@ -8,8 +8,7 @@ namespace ipu { namespace partition {
 
   struct BucketData {
     int count;
-    int lenA;
-    int lenB;
+    int lenSeq;
     int weight;
   };
 
