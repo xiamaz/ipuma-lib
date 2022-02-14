@@ -14,7 +14,7 @@ endif()
 
 set(BINARY ipuma-test)
 
-set(TEST_SOURCES main.cpp simple-test.cpp parity-test.cpp partition-test.cpp dev-test.cpp)
+set(TEST_SOURCES main.cpp simple-test.cpp parity-test.cpp partition-test.cpp dev-test.cpp mn_cmp-test.cpp)
 
 # set(SOURCES ${TEST_SOURCES})
 

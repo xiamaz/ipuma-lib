@@ -22,6 +22,14 @@ static const std::string HOST_STREAM_CONCAT = "host-stream-concat";
 static const std::string CYCLE_COUNT_OUTER = "cycle-count-outer";
 static const std::string CYCLE_COUNT_INNER = "cycle-count-inner";
 
+void printBucketMapping(BucketMapping bm) {
+  std::cout << "Bucket:" << "\n";
+  for (auto& c : bm.comparisons) {
+    printf("%d: %d %d\n", c.cmpIndex, c.indexA, c.indexB);
+  }
+  std::cout << "=======================\n";
+}
+
 long long getCellCount(const std::vector<std::string>& A, const std::vector<std::string>& B) {
   long long cellCount = 0;
   if (A.size() != B.size()) {
@@ -290,16 +298,6 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
 #endif
 }
 
-
-void SWAlgorithm::compare_mn_local(const std::vector<std::string>& A, const std::vector<std::string>& B, const std::vector<int>& comparisons, bool errcheck) {
-  size_t inputs_size = algoconfig.getInputBufferSize32b();
-  std::vector<int32_t> inputs(inputs_size);
-  size_t results_size = scores.size() + a_range_result.size() + b_range_result.size();
-  std::vector<int32_t> results(results_size);
-
-  prepared_remote_compare(&*inputs.begin(), &*inputs.end(), &*results.begin(), &*results.end());
-}
-
 void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::vector<std::string>& B, bool errcheck) {
   swatlib::TickTock tPrepare, tCompare;
   std::vector<int> mapping;
@@ -389,21 +387,6 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
       goto retry;
     }
   }
-  // return;
-// retry:
-//   prepared_remote_compare(a.data(), a_len.data(), b.data(), b_len.data(), unord_scores.data(), unord_mismatches.data(), unord_a_range.data(),
-//                           unord_b_range.data());
-//   // reorder results based on mapping
-//   for (int i = 0; i < mapping.size(); ++i) {
-//     scores[i] = unord_scores[mapping[i]];
-//     if (scores[i] >= KLIGN_IPU_MAXAB_SIZE) {
-//       printf("Thread %d received wrong data AGAIN, FATAL data=%d, map_translate=%d\n", -1, scores[i], mapping[i]);
-//       exit(1);
-//     }
-//     mismatches[i] = unord_mismatches[mapping[i]];
-//     a_range_result[i] = unord_a_range[mapping[i]];
-//     b_range_result[i] = unord_b_range[mapping[i]];
-//   }
 }
 
 std::string SWAlgorithm::printTensors() {
@@ -413,17 +396,175 @@ std::string SWAlgorithm::printTensors() {
   return graphstream.str();
 }
 
-void SWAlgorithm::fill_input_buffer(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, const std::vector<ComparisonMapping>& comparisonMapping, int32_t* inputs_begin, int32_t* inputs_end) {
+struct BucketFillInfo {
+  size_t bucketContent;
+  size_t bucketCmps;
+  std::vector<int8_t> seqs;
+
+  void resizeSeqs(int numSeqs) {
+    seqs.resize(numSeqs, 0);
+  }
+};
+
+std::vector<BucketMapping> SWAlgorithm::fillMNBuckets(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& Seqs, const std::vector<int>& comparisons) {
+  if (comparisons.size() & 0b1) {
+    throw std::logic_error("Length of comparisons is not a multiple of 2, got " + std::to_string(comparisons.size()) + " instead");
+  }
+  int numComparisons = comparisons.size() >> 1;
+
+  std::vector<BucketMapping> buckets(algoconfig.tilesUsed);
+  std::vector<BucketFillInfo> bucketsInfo(algoconfig.tilesUsed);
+  for (auto& b : bucketsInfo) {
+    b.resizeSeqs(Seqs.size());
+  }
+
+  int bucketIndex = 0;
+  bool incrementBucket = false;
+  for (int n = 0; n < numComparisons; ++n) {
+    int ai = comparisons[2*n];
+    int bi = comparisons[2*n+1];
+
+    int eff_asize, eff_bsize;
+    bool mapped = false;
+    for (int i = 0; i < buckets.size(); ++i) {
+      int wrappedIndex = (bucketIndex + i) % buckets.size();
+      auto& bInfo = bucketsInfo[wrappedIndex];
+      auto& bBucket = buckets[wrappedIndex];
+
+      int nextCmps, nextContentSize;
+      nextCmps = bInfo.bucketCmps + 1;
+      if (nextCmps > algoconfig.maxBatches) {
+        continue;
+      }
+      // calculate needed space for sequences
+      eff_asize = Seqs[ai].size();
+      if (bInfo.seqs[ai] == 1) eff_asize = 0;
+      eff_bsize = Seqs[bi].size();
+      if (bInfo.seqs[bi] == 1) eff_bsize = 0;
+      
+      nextContentSize = bInfo.bucketContent + eff_asize + eff_bsize;
+      if (nextContentSize > algoconfig.bufsize) {
+        continue;
+      }
+
+      bInfo.bucketContent = nextContentSize;
+      bInfo.bucketCmps = nextCmps;
+      bInfo.seqs[ai] = 1;
+      bInfo.seqs[bi] = 1;
+      bBucket.comparisons.push_back({n, ai, bi});
+      mapped = true;
+      break;
+    }
+    if (!mapped) {
+      throw std::runtime_error("Could not map comparison into a bucket");
+    }
+    if (eff_asize == 0 || eff_bsize == 0) {
+      incrementBucket = false;
+    }
+    if (incrementBucket) {
+      bucketIndex++;
+      incrementBucket = false;
+    } else {
+      incrementBucket = true;
+    }
+  }
+  return buckets;
+}
+
+
+void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end) {
+  int maxComparisons = scores_end - scores_begin;
+  size_t a_range_offset = maxComparisons;
+  size_t b_range_offset = maxComparisons * 2;
+  auto* results_score = results_begin;
+  auto* results_arange = results_begin + a_range_offset;
+  auto* results_brange = results_begin + b_range_offset;
+
+  int numComparisons = mapping_end - mapping_begin;
+  for (int i = 0; i < numComparisons; ++i) {
+    auto mapped_i = mapping_begin[i];
+    scores_begin[i] = results_score[mapped_i];
+    arange_begin[i] = results_arange[mapped_i];
+    brange_begin[i] = results_brange[mapped_i];
+  }
+}
+
+void SWAlgorithm::compare_mn_local(const std::vector<std::string>& Seqs, const std::vector<int>& comparisons, bool errcheck) {
+  size_t inputs_size = algoconfig.getInputBufferSize32b();
+  std::vector<int32_t> inputs(inputs_size);
+  size_t results_size = scores.size() + a_range_result.size() + b_range_result.size();
+  std::vector<int32_t> results(results_size);
+
+  auto numComparisons = comparisons.size() >> 1;
+  auto cmpMapping = fillMNBuckets(algoconfig, Seqs, comparisons);
+  auto mapping = fill_input_buffer(config, algoconfig, Seqs, cmpMapping, numComparisons, &*inputs.begin(), &*inputs.end());
+  // std::cout << "Mapping: " << swatlib::printVector(mapping) << "\n";
+
+  prepared_remote_compare(&*inputs.begin(), &*inputs.end(), &*results.begin(), &*results.end());
+
+  transferResults(&*results.begin(), &*results.end(), &*mapping.begin(), &*mapping.end(), &*scores.begin(), &*scores.end(), &*a_range_result.begin(), &*a_range_result.end(), &*b_range_result.begin(), &*b_range_result.end());
+}
+
+struct BucketSequenceInfo {
+  int bucketIndex;
+  int bucketOffset;
+};
+
+BucketSequenceInfo& fillIfNotExists(std::unordered_map<int, BucketSequenceInfo>& bM, int sIndex, const std::string& data, int& bucketSeqN, int& bucketSeqOffset, int8_t* bSeq, swatlib::Encoding& encoder) {
+  auto bit = bM.find(sIndex);
+  // insert ai into bucket
+  if (bit == bM.end()) {
+    bM[sIndex] = {.bucketIndex = bucketSeqN, .bucketOffset = bucketSeqOffset};
+    for (int k = 0; k < data.size(); ++k) {
+      bSeq[bucketSeqOffset + k] = encoder.encode(data[k]);
+    }
+    bucketSeqN++;
+    bucketSeqOffset += data.size();
+  }
+  return bM[sIndex];
+}
+
+std::vector<int> SWAlgorithm::fill_input_buffer(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& Seqs, const std::vector<BucketMapping>& comparisonMapping, int numComparisons, int32_t* inputs_begin, int32_t* inputs_end) {
   size_t input_elems = inputs_end - inputs_begin;
   memset(inputs_begin, 0, input_elems * sizeof(int32_t));
 
-  size_t seqs_offset = getSeqsOffset(algoconfig);
-  size_t meta_offset = getMetaOffset(algoconfig);
-
-  int8_t* seqs = (int8_t*)inputs_begin + seqs_offset;
-  int32_t* meta = inputs_begin + meta_offset;
+  int8_t* seqsInput = (int8_t*)inputs_begin + getSeqsOffset(algoconfig);
+  int32_t* metaInput = inputs_begin + getMetaOffset(algoconfig);
 
   auto encoder = swatlib::getEncoder(swconfig.datatype);
+
+  std::vector<int> mapping(numComparisons);
+
+  for (int i = 0; i < comparisonMapping.size(); ++i) {
+    auto& [comparisons] = comparisonMapping[i];
+    std::unordered_map<int, BucketSequenceInfo> bucketSequences;
+    int8_t* bSeq = seqsInput + i * algoconfig.getBufsize32b() * 4;
+    int32_t* bMeta = metaInput + i * algoconfig.maxBatches * 4;
+
+    int bucketSeqN = 0;
+    int bucketSeqOffset = 0;
+
+    for (int n = 0; n < comparisons.size(); ++n) {
+      const auto [ci, ai, bi] = comparisons[n];
+      auto& aInfo = fillIfNotExists(bucketSequences, ai, Seqs[ai], bucketSeqN, bucketSeqOffset, bSeq, encoder);
+      auto& bInfo = fillIfNotExists(bucketSequences, bi, Seqs[bi], bucketSeqN, bucketSeqOffset, bSeq, encoder);
+      bMeta[n*4 ] = Seqs[ai].size();
+      bMeta[n*4+1] = aInfo.bucketOffset;
+      bMeta[n*4+2] = Seqs[bi].size();
+      bMeta[n*4+3] = bInfo.bucketOffset;
+
+      if (aInfo.bucketOffset + Seqs[ai].size() > algoconfig.bufsize) {
+        throw runtime_error("Offset larger than buffer size.");
+      }
+      if (bInfo.bucketOffset + Seqs[bi].size() > algoconfig.bufsize) {
+        throw runtime_error("Offset larger than buffer size.");
+      }
+
+      // map results
+      mapping[ci] = i * algoconfig.maxBatches + n;
+    }
+  }
+  return mapping;
 }
 
 void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, std::vector<int>& seqMapping) {
@@ -465,36 +606,44 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
   std::vector<std::tuple<int, int>> buckets(algoconfig.tilesUsed, {0, 0});
 
   seqMapping = std::vector<int>(A.size(), 0);
-  size_t seqs_offset = getSeqsOffset(algoconfig);
-  size_t meta_offset = getMetaOffset(algoconfig);
+  const size_t seqs_offset = getSeqsOffset(algoconfig);
+  const size_t meta_offset = getMetaOffset(algoconfig);
 
   int8_t* seqs = (int8_t*)inputs_begin + seqs_offset;
   int32_t* meta = inputs_begin + meta_offset;
 
   for (const auto [bucket, i] : mapping) {
     auto& [bN, bO] = buckets[bucket];
-    auto ai = A[i];
-    auto bi = B[i];
-    auto aSize = ai.size();
-    auto bSize = bi.size();
+    const auto& ai = A[i];
+    const auto& bi = B[i];
+    const auto aSize = ai.size();
+    const auto bSize = bi.size();
 
-    size_t offsetBuffer = bucket * algoconfig.getBufsize32b() * 4;
-    size_t offsetMeta = bucket * algoconfig.maxBatches * 4;
+    const size_t offsetBuffer = bucket * algoconfig.getBufsize32b() * 4;
+    const size_t offsetMeta = bucket * algoconfig.maxBatches * 4;
     auto* bucket_meta = meta + offsetMeta;
+    auto* bucket_seq = seqs + offsetBuffer;
 
-    bucket_meta[bN*4  ] = aSize;
+    if (bN*4+3 >= algoconfig.maxBatches * 4) {
+      std::runtime_error("Bucket meta out of bounds.");
+    }
+    bucket_meta[bN*4] = aSize;
     bucket_meta[bN*4+1] = bO;
-    auto* s = seqs + offsetBuffer + bO;
+    if (bO + aSize > algoconfig.bufsize) {
+      throw std::runtime_error("Sequence A too large for buffer.");
+    }
     for (int j = 0; j < aSize; ++j) {
-      s[j] = encoder.encode(ai[j]);
+      bucket_seq[bO + j] = encoder.encode(ai[j]);
     }
     bO += aSize;
 
     bucket_meta[bN*4+2] = bSize;
     bucket_meta[bN*4+3] = bO;
-    s = seqs + offsetBuffer + bO;
+    if (bO + bSize > algoconfig.bufsize) {
+      throw std::runtime_error("Sequence B too large for buffer.");
+    }
     for (int j = 0; j < bSize; ++j) {
-      s[j] = encoder.encode(bi[j]);
+      bucket_seq[bO + j] = encoder.encode(bi[j]);
     }
     bO += bSize;
     seqMapping[i] = bucket * algoconfig.maxBatches + bN;

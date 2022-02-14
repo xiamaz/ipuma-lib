@@ -26,6 +26,10 @@ vector<tuple<string, string>> INPUT_BATCHS = {
   {"/global/D1/projects/ipumer/inputs_ab/batch_2_A.txt", "/global/D1/projects/ipumer/inputs_ab/batch_2_B.txt"},
 };
 
+vector<tuple<string, string>> RR_ERROR_BATCHS = {
+  {"/global/D1/projects/ipumer/inputs_ab/rr_As.txt", "/global/D1/projects/ipumer/inputs_ab/rr_Bs.txt"},
+};
+
 string aln2string(Alignment &aln) {
   std::stringstream ss;
   ss << "score=" << aln.sw_score << " score2=" << aln.sw_score_next_best;
@@ -169,6 +173,21 @@ INSTANTIATE_TEST_SUITE_P(
 class PartitionPerformance : public PerformanceBase, public ::testing::WithParamInterface<ipu::partition::Algorithm> {
 };
 
+TEST_F(PerformanceBase, rrError) {
+  int numWorkers = 8832;
+  int numCmps = 300;
+  int strlen = 2000;
+
+  auto driver = ipu::batchaffine::SWAlgorithm({0, -1, 1, -1, -1, swatlib::Similarity::blosum62, swatlib::DataType::aminoAcid}, {numWorkers, strlen, numCmps, 43000, ipu::batchaffine::VertexType::cpp, ipu::partition::Algorithm::roundRobin});
+
+  for (auto& [path_a, path_b] : RR_ERROR_BATCHS) {
+    refs = loadSequences(path_a);
+    queries = loadSequences(path_b);
+    // std::cout << "Len A: " << refs.size() << " Len B: " << queries.size() << "\n";
+    driver.compare_local(refs, queries);
+  }
+}
+
 TEST_P(PartitionPerformance, RealBatches) {
   int numWorkers = 8832 / 6;
   int numCmps = 100;
@@ -187,4 +206,35 @@ INSTANTIATE_TEST_SUITE_P(
   PartitionTests,
   PartitionPerformance,
   testing::Values(ipu::partition::Algorithm::fillFirst, ipu::partition::Algorithm::roundRobin, ipu::partition::Algorithm::greedy)
-  );
+);
+
+TEST(MNPerformance, fullyMxN) {
+  int numWorkers = 8832 / 6;
+  int numCmps = 3200;
+  int strlen = 200;
+  int bufsize = 8000 * 2;
+  int strPerBucket = bufsize / strlen;
+
+  auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::multiasm});
+
+  std::vector<std::string> seqs;
+  std::vector<int> cmps;
+  for (int s = 0; s < bufsize * numWorkers; s += strlen) {
+    seqs.push_back(string(strlen, 'A'));
+  }
+  for (int b = 0; b < numWorkers; ++b) {
+    for (int i = 1; i < strPerBucket; ++i) {
+      for (int j = 0; j < i; ++j)  {
+        int seqBase = b * strPerBucket;
+        cmps.push_back(seqBase + i);
+        cmps.push_back(seqBase + j);
+      }
+    }
+  }
+
+  driver.compare_mn_local(seqs, cmps, false);
+  auto results = driver.get_result();
+  for (int i = 0; i < cmps.size() / 2; ++i) {
+    EXPECT_EQ(results.scores[i], strlen) << " mismatching score";
+  }
+}

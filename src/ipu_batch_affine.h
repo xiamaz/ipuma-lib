@@ -49,10 +49,14 @@ struct BlockAlignmentResults {
   std::vector<int32_t> b_range_result;
 };
 
-struct ComparisonMapping {
+struct Comparison {
+  int cmpIndex;
   int indexA;
   int indexB;
-  int bucketIndex;
+};
+
+struct BucketMapping {
+  std::vector<Comparison> comparisons;
 };
 
 class SWAlgorithm : public IPUAlgorithm {
@@ -75,20 +79,22 @@ class SWAlgorithm : public IPUAlgorithm {
   std::string printTensors();
 
   static std::vector<std::tuple<int, int>> fillBuckets(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int& err);
+  static std::vector<BucketMapping> fillMNBuckets(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& Seqs, const std::vector<int>& comparisons);
   static void checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B);
 
   BlockAlignmentResults get_result();
 
   // Local Buffers
   void compare_local(const std::vector<std::string>& A, const std::vector<std::string>& B, bool errcheck = false);
-  void compare_mn_local(const std::vector<std::string>& A, const std::vector<std::string>& B, const std::vector<int>& comparisons, bool errcheck = false);
+  void compare_mn_local(const std::vector<std::string>& Seqs, const std::vector<int>& comparisons, bool errcheck = false);
 
   void refetch();
 
   // Remote bufffer
   void prepared_remote_compare(int32_t* inputs_begin,  int32_t* inputs_end, int32_t* results_begin, int32_t* results_end);
   static void prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B,  int32_t* inputs_begin,  int32_t* inputs_end, std::vector<int>& deviceMapping);
-  static void fill_input_buffer(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, const std::vector<ComparisonMapping>& comparisonMapping, int32_t* inputs_begin, int32_t* inputs_end);
+  static std::vector<int> fill_input_buffer(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& Seqs, const std::vector<BucketMapping>& comparisonMapping, int numComparisons, int32_t* inputs_begin, int32_t* inputs_end);
+  static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end);
 };
 }  // namespace batchaffine
 }  // namespace ipu

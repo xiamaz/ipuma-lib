@@ -147,6 +147,30 @@ TEST_F(SimpleCorrectnessTest, UseAsmMultiVertex) {
   checkResults(aln_results);
 }
 
+TEST_F(SimpleCorrectnessTest, useMNComparisons) {
+  auto driver = ipu::batchaffine::SWAlgorithm({}, {
+    .tilesUsed = 4,
+    .maxAB = 300,
+    .maxBatches = 5,
+    .bufsize = 3000,
+    .vtype = ipu::batchaffine::VertexType::cpp,
+    .fillAlgo = ipu::partition::Algorithm::roundRobin
+  });
+
+  std::vector<std::string> seqs;
+  std::vector<int> comparisons;
+  for (int i = 0; i < queries.size(); ++i) {
+    seqs.push_back(queries[i]);
+    seqs.push_back(refs[i]);
+    comparisons.push_back(2 * i);
+    comparisons.push_back(2 * i + 1);
+  }
+
+  driver.compare_mn_local(seqs, comparisons);
+  auto aln_results = driver.get_result();
+  checkResults(aln_results);
+}
+
 TEST(PrepareTest, simple) {
   int tilesUsed = 10;
   int maxBatches = 2;
