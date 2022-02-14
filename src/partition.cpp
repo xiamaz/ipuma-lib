@@ -4,6 +4,11 @@
 
 namespace ipu {
 namespace partition {
+
+  BucketMap::BucketMap(int nB, int cC, int sC) : numBuckets(nB), cmpCapacity(cC), sequenceCapacity(sC) {
+    buckets.resize(nB);
+  }
+
   int fillFirst(std::vector<std::tuple<int, int>>& mapping, const std::vector<std::string>& A, const std::vector<std::string>& B, int bucketCount, int bucketCapacity, int bucketCountCapacity) {
     mapping = std::vector<std::tuple<int, int>>(A.size(), {0, 0});
     std::vector<BucketData> buckets(bucketCount, {0, 0, 0});
@@ -49,7 +54,7 @@ namespace partition {
         if (bN + 1 > bucketCountCapacity || bSeq + a.size() + b.size() > bucketCapacity) {
           continue;
         } else {
-          mapping[i] = {bucketIndex, i};
+          mapping[i] = {bi, i};
           bN++;
           bSeq += a.size() + b.size();
           break;
@@ -58,7 +63,7 @@ namespace partition {
       if (boff >= bucketCount) {
           return 1;
       }
-      bucketIndex = (bucketIndex + 1) % bucketCount;
+      bucketIndex = (bucketIndex + 1) % bucketCount; // increment bucket index
     }
     return 0;
   }
