@@ -60,7 +60,7 @@ std::string vertexTypeToString(VertexType v) { return typeString[static_cast<int
  */
 std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigned long activeTiles, unsigned long maxAB,
                                          unsigned long bufSize, unsigned long maxBatches,
-                                         const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt) {
+                                         const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt, bool use_remote_buffer) {
   program::Sequence prog;
 
   auto target = graph.getTarget();
@@ -150,10 +150,31 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
   auto inputs_tensor = concat({Seqs.flatten(), CompMeta.flatten()});
   auto outputs_tensor = concat({Scores.flatten(), ARanges.flatten(), BRanges.flatten()});
 
-  auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT, INT, inputs_tensor.numElements());
-  auto device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL, INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
-  auto h2d_prog_concat = program::Sequence({poplar::program::Copy(host_stream_concat, inputs_tensor)});
-  auto d2h_prog_concat = program::Sequence({poplar::program::Copy(outputs_tensor, device_stream_concat)});
+  program::Sequence h2d_prog_concat;
+  program::Sequence d2h_prog_concat;
+  if (use_remote_buffer) {
+    const char* units[] = {"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
+    int b_size = inputs_tensor.numElements() * 8;
+    PLOGI.printf("Use a RemoteBuffer of bytes %.2f", (double) b_size);
+    int i = 0;
+    for ( ;b_size > 1024; i++) {
+        b_size /= 1024;
+    }
+   PLOGI.printf("Use a RemoteBuffer of banksize %.2f %s", (double) b_size, units[i]);
+    
+    // 256 MB row limit.
+    // https://docs.graphcore.ai/projects/poplar-user-guide/en/latest/poplar_programs.html#remote-buffer-restrictions
+    auto remote_mem = graph.addRemoteBuffer("inputs_rb", inputs_tensor.elementType(), inputs_tensor.numElements(), 1, true, true);
+    auto device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL, INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
+    h2d_prog_concat.add(poplar::program::Copy(remote_mem, inputs_tensor, "Copy Inputs from Remote->IPU"));
+    d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat, "Copy Outputs from IPU->Host"));
+  } else {
+    auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT, INT, inputs_tensor.numElements());
+    auto device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL, INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
+    h2d_prog_concat.add(poplar::program::Copy(host_stream_concat, inputs_tensor));
+    d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat));
+  }
+
 
   auto print_tensors_prog = program::Sequence({
     // program::PrintTensor("Alens", Alens),
@@ -162,7 +183,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     // program::PrintTensor("Scores", Scores),
   });
 #ifdef IPUMA_DEBUG
- program::Sequence  main_prog;
+ program::Sequence main_prog;
   main_prog.add(program::Execute(frontCs));
   addCycleCount(graph, main_prog, CYCLE_COUNT_INNER);
 #else
@@ -178,7 +199,8 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
   return {prog, d2h_prog_concat, print_tensors_prog};
 }
 
-SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig, int thread_id) : IPUAlgorithm(config), algoconfig(algoconfig), thread_id(thread_id) {
+SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer) : IPUAlgorithm(config), algoconfig(algoconfig), thread_id(thread_id), use_remote_buffer(useRemoteBuffer) {
+  use_remote_buffer = true;
   const auto totalComparisonsCount = algoconfig.getTotalNumberOfComparisons();
 
   scores.resize(totalComparisonsCount);
@@ -190,12 +212,15 @@ SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig, int thr
   auto similarityMatrix = swatlib::selectMatrix(config.similarity, config.matchValue, config.mismatchValue, config.ambiguityValue);
   std::vector<program::Program> programs =
       buildGraph(graph, algoconfig.vtype, algoconfig.tilesUsed, algoconfig.maxAB, algoconfig.bufsize, algoconfig.maxBatches,
-                 similarityMatrix, config.gapInit, config.gapExtend);
+                 similarityMatrix, config.gapInit, config.gapExtend, use_remote_buffer);
 
   createEngine(graph, programs);
 }
 
-SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig) : SWAlgorithm::SWAlgorithm(config, algoconfig, 0) {}
+SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig) : SWAlgorithm::SWAlgorithm(config, algoconfig, 0) {
+  thread_id = 0;
+  use_remote_buffer = false;
+}
 
 BlockAlignmentResults SWAlgorithm::get_result() { return {scores, a_range_result, b_range_result}; }
 
@@ -255,12 +280,13 @@ void SWAlgorithm::refetch() {
 
 void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end) {
   // We have to reconnect the streams to new memory locations as the destination will be in a shared memroy region.
-  engine->connectStream(HOST_STREAM_CONCAT, inputs_begin);
+  // engine->connectStream(HOST_STREAM_CONCAT, inputs_begin);
   engine->connectStream(STREAM_CONCAT_ALL, results_begin);
 
   swatlib::TickTock t;
   t.tick();
-  engine->run(0);
+  engine->copyToRemoteBuffer(inputs_begin, "inputs_rb", 0);
+  engine->run(0, "Execute Main");
   t.tock();
   PLOGD << "Total engine run time (in s): "  << static_cast<double>(t.duration<std::chrono::milliseconds>()) / 1000.0;
 

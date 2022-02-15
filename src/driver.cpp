@@ -12,6 +12,6 @@ ipu::batchaffine::SWAlgorithm* getDriver() {
 void init_single_ipu(ipu::SWConfig config, ipu::batchaffine::IPUAlgoConfig algoconfig) {
   if (ipu_driver == NULL) {
     ipu_driver =
-        new ipu::batchaffine::SWAlgorithm(config, algoconfig);
+        new ipu::batchaffine::SWAlgorithm(config, algoconfig, true);
   }
 }

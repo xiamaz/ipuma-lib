@@ -66,6 +66,7 @@ class SWAlgorithm : public IPUAlgorithm {
   std::vector<int32_t> a_range_result;
   std::vector<int32_t> b_range_result;
   int thread_id;
+  bool use_remote_buffer;
 
   static size_t getSeqsOffset(const IPUAlgoConfig& config);
   static size_t getMetaOffset(const IPUAlgoConfig& config);
@@ -74,7 +75,7 @@ class SWAlgorithm : public IPUAlgorithm {
   IPUAlgoConfig algoconfig;
 
   SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig);
-  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id);
+  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer = false);
 
   std::string printTensors();
 
