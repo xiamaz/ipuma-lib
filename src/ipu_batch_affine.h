@@ -92,7 +92,7 @@ class SWAlgorithm : public IPUAlgorithm {
 
   // Remote bufffer
   void prepared_remote_compare(int32_t* inputs_begin,  int32_t* inputs_end, int32_t* results_begin, int32_t* results_end);
-  static void prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B,  int32_t* inputs_begin,  int32_t* inputs_end, std::vector<int>& deviceMapping);
+  static void prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B,  int32_t* inputs_begin, int32_t* inputs_end, int* deviceMapping);
   static std::vector<int> fill_input_buffer(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& Seqs, const std::vector<BucketMapping>& comparisonMapping, int numComparisons, int32_t* inputs_begin, int32_t* inputs_end);
   static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end);
 };

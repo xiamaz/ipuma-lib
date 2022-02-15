@@ -300,7 +300,7 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
 
 void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::vector<std::string>& B, bool errcheck) {
   swatlib::TickTock tPrepare, tCompare;
-  std::vector<int> mapping;
+  std::vector<int> mapping(A.size(), 0);
   size_t inputs_size = algoconfig.getInputBufferSize32b();
   std::vector<int32_t> inputs(inputs_size + 4);
 
@@ -312,7 +312,7 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
   inputs[inputs_size + (1) + 1] = 0xFEEBDAED;
   inputs[inputs_size + (1) + 2] = 0xFEEBDAED;
   tPrepare.tick();
-  prepare_remote(config, algoconfig, A, B, &*inputs.begin() + 2, &*inputs.end() - 2, mapping);
+  prepare_remote(config, algoconfig, A, B, &*inputs.begin() + 2, &*inputs.end() - 2, mapping.data());
   tPrepare.tock();
 
   if (inputs[0] != 0xDEADBEEF || inputs[1] != 0xDEADBEEF) {
@@ -567,7 +567,7 @@ std::vector<int> SWAlgorithm::fill_input_buffer(const SWConfig& swconfig, const 
   return mapping;
 }
 
-void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, std::vector<int>& seqMapping) {
+void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, int* seqMapping) {
   swatlib::TickTock preprocessTimer;
   std::vector<swatlib::TickTock> stageTimers(5);
   preprocessTimer.tick();
@@ -605,7 +605,6 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
   stageTimers[4].tick();
   std::vector<std::tuple<int, int>> buckets(algoconfig.tilesUsed, {0, 0});
 
-  seqMapping = std::vector<int>(A.size(), 0);
   const size_t seqs_offset = getSeqsOffset(algoconfig);
   const size_t meta_offset = getMetaOffset(algoconfig);
 

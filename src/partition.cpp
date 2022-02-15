@@ -5,9 +5,9 @@
 namespace ipu {
 namespace partition {
 
-  BucketMap::BucketMap(int nB, int cC, int sC) : numBuckets(nB), cmpCapacity(cC), sequenceCapacity(sC) {
-    buckets.resize(nB);
-  }
+  // BucketMap::BucketMap(int nB, int cC, int sC) : numBuckets(nB), cmpCapacity(cC), sequenceCapacity(sC) {
+  //   buckets.resize(nB);
+  // }
 
   int fillFirst(std::vector<std::tuple<int, int>>& mapping, const std::vector<std::string>& A, const std::vector<std::string>& B, int bucketCount, int bucketCapacity, int bucketCountCapacity) {
     mapping = std::vector<std::tuple<int, int>>(A.size(), {0, 0});

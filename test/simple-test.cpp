@@ -193,11 +193,11 @@ TEST(PrepareTest, simple) {
   }
 
   std::vector<int32_t> inputs(config.getInputBufferSize32b() + 2);
-  std::vector<int> mapping;
+  std::vector<int> mapping(A.size(), 0);
 
   inputs[0] = 0xDEADBEEF;
   inputs[inputs.size() - 1] = 0xDEADBEEF;
-  ipu::batchaffine::SWAlgorithm::prepare_remote(swconfig, config, A, B, &*inputs.begin() + 1, &*inputs.end() - 1, mapping);
+  ipu::batchaffine::SWAlgorithm::prepare_remote(swconfig, config, A, B, &*inputs.begin() + 1, &*inputs.end() - 1, mapping.data());
   std::vector<int32_t> slice_begin(inputs.begin(), inputs.begin() + 10);
   std::vector<int32_t> slice_end(inputs.end() - 10, inputs.end());
   EXPECT_EQ(*inputs.begin(), 0xDEADBEEF) << "Start overwritten: " << swatlib::printVector(slice_begin);
