@@ -292,8 +292,7 @@ void SWAlgorithm::refetch() {
   engine->run(1);
 }
 
-slotToken SWAlgorithm::upload(int32_t* inputs_begin, int32_t* inputs_end) {
-    slotToken slot = queue_slot();
+void SWAlgorithm::upload(int32_t* inputs_begin, int32_t* inputs_end, slotToken slot) {
     PLOGD.printf("Slot is %d", slot);
 
     swatlib::TickTock rbt;
@@ -305,7 +304,6 @@ slotToken SWAlgorithm::upload(int32_t* inputs_begin, int32_t* inputs_end) {
     size_t totalTransferSize = algoconfig.getInputBufferSize32b() * 4;
     auto transferBandwidth = (double) totalTransferSize / ((double) transferTime / 1000.0) / 1e6;
     PLOGI.printf("Transfer rate to remote buffer %.3f mb/s. %ld bytes in %.2fms", transferBandwidth, totalTransferSize, transferTime);
-    return slot;
 }
 
 void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token) {
