@@ -5,6 +5,7 @@
 #include "ipu_base.h"
 #include "partition.h"
 
+
 using namespace poplar;
 
 namespace ipu {
@@ -59,6 +60,7 @@ struct BucketMapping {
   std::vector<Comparison> comparisons;
 };
 
+using slotToken = int;
 class SWAlgorithm : public IPUAlgorithm {
  private:
   // std::vector<int32_t> results;
@@ -68,16 +70,47 @@ class SWAlgorithm : public IPUAlgorithm {
   int thread_id;
   bool use_remote_buffer;
 
+  int buf_size;
+  int buf_cap;
+  int last_slot;
+  std::vector<bool> slots;
+
   static size_t getSeqsOffset(const IPUAlgoConfig& config);
   static size_t getMetaOffset(const IPUAlgoConfig& config);
+
+  slotToken queue_slot() {
+    assert(buf_has_capacity);
+    int s = -1;
+    for (size_t i = 0; i < slots.size(); i++) {
+       if (!slots[i]) {
+        s = i;
+        break;
+      }
+    }
+    assert(s != -1);
+    slots[s] = true;
+    buf_cap--;
+    last_slot = s;
+    return s;
+  }
+
+  void release_slot(slotToken i) {
+    slots[i] = false;
+    buf_cap++;
+  }
 
  public:
   IPUAlgoConfig algoconfig;
 
   SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig);
-  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer = true);
+  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer = true, size_t bufSize = 1);
 
   std::string printTensors();
+
+  bool buf_has_capacity() {
+    return buf_cap > 0;
+  }
+
 
   static std::vector<std::tuple<int, int>> fillBuckets(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int& err);
   static std::vector<BucketMapping> fillMNBuckets(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& Seqs, const std::vector<int>& comparisons);
@@ -92,7 +125,9 @@ class SWAlgorithm : public IPUAlgorithm {
   void refetch();
 
   // Remote bufffer
-  void prepared_remote_compare(int32_t* inputs_begin,  int32_t* inputs_end, int32_t* results_begin, int32_t* results_end);
+  void prepared_remote_compare(int32_t* inputs_begin,  int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token = 0);
+  slotToken upload(int32_t* inputs_begin, int32_t* inputs_end);
+ 
   static void prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B,  int32_t* inputs_begin, int32_t* inputs_end, int* deviceMapping);
   static std::vector<int> fill_input_buffer(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& Seqs, const std::vector<BucketMapping>& comparisonMapping, int numComparisons, int32_t* inputs_begin, int32_t* inputs_end);
   static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end);

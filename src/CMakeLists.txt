@@ -6,6 +6,7 @@ add_gp_library(
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_striped_asm.S
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_multi_striped_asm.S
   CPP_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/codelets/helper_utils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_batch_affine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_batch_asm.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_multi_asm.cpp

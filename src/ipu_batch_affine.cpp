@@ -61,7 +61,7 @@ std::string vertexTypeToString(VertexType v) { return typeString[static_cast<int
  */
 std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigned long activeTiles, unsigned long maxAB,
                                          unsigned long bufSize, unsigned long maxBatches,
-                                         const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt, bool use_remote_buffer) {
+                                         const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt, bool use_remote_buffer, int buf_rows) {
   program::Sequence prog;
 
   auto target = graph.getTarget();
@@ -162,12 +162,25 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         b_size /= 1024;
     }
    PLOGI.printf("Use a RemoteBuffer of banksize %.2f %s", (double) b_size, units[i]);
+    auto offset = graph.addVariable(INT, {1}, "Remote Buffer Offset");
+    graph.setTileMapping(offset, 0);
+    // graph.setInitialValue<int>(offset, {0});
+    // auto cs = graph.addComputeSet("AddMod");
+    // auto vtx = graph.addVertex(cs, "AddMod");
+    // graph.connect(vtx["val"], offset[0]);
+    // graph.setInitialValue<int>(vtx["mod"], buf_rows);
+    // graph.setTileMapping(vtx, 0);
     
-    // 256 MB row limit.
+    // 256 MB row limit?
     // https://docs.graphcore.ai/projects/poplar-user-guide/en/latest/poplar_programs.html#remote-buffer-restrictions
-    auto remote_mem = graph.addRemoteBuffer(REMOTE_MEMORY, inputs_tensor.elementType(), inputs_tensor.numElements(), 1, true, true);
+    auto host_stream_offset = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT, INT, 1);
+    h2d_prog_concat.add(poplar::program::Copy(host_stream_offset, offset));
+    h2d_prog_concat.add(program::PrintTensor(offset));
+    auto remote_mem = graph.addRemoteBuffer(REMOTE_MEMORY, inputs_tensor.elementType(), inputs_tensor.numElements(), buf_rows, true, true);
+    h2d_prog_concat.add(poplar::program::Copy(remote_mem, inputs_tensor, offset,"Copy Inputs from Remote->IPU"));
+    // d2h_prog_concat.add(program::Execute(cs));
+
     auto device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL, INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
-    h2d_prog_concat.add(poplar::program::Copy(remote_mem, inputs_tensor, "Copy Inputs from Remote->IPU"));
     d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat, "Copy Outputs from IPU->Host"));
   } else {
     auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT, INT, inputs_tensor.numElements());
@@ -200,8 +213,12 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
   return {prog, d2h_prog_concat, print_tensors_prog};
 }
 
-SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer) : IPUAlgorithm(config), algoconfig(algoconfig), thread_id(thread_id), use_remote_buffer(useRemoteBuffer) {
+SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer, size_t bufSize) : IPUAlgorithm(config), algoconfig(algoconfig), thread_id(thread_id), use_remote_buffer(useRemoteBuffer) {
   const auto totalComparisonsCount = algoconfig.getTotalNumberOfComparisons();
+  buf_size = bufSize;
+  buf_cap = buf_size;
+  slots.resize(buf_size);
+  std::fill(slots.begin(), slots.end(), false);
 
   scores.resize(totalComparisonsCount);
   a_range_result.resize(totalComparisonsCount);
@@ -212,15 +229,12 @@ SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig, int thr
   auto similarityMatrix = swatlib::selectMatrix(config.similarity, config.matchValue, config.mismatchValue, config.ambiguityValue);
   std::vector<program::Program> programs =
       buildGraph(graph, algoconfig.vtype, algoconfig.tilesUsed, algoconfig.maxAB, algoconfig.bufsize, algoconfig.maxBatches,
-                 similarityMatrix, config.gapInit, config.gapExtend, use_remote_buffer);
+                 similarityMatrix, config.gapInit, config.gapExtend, use_remote_buffer, buf_size);
 
   createEngine(graph, programs);
 }
 
-SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig) : SWAlgorithm::SWAlgorithm(config, algoconfig, 0) {
-  thread_id = 0;
-  use_remote_buffer = true;
-}
+SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig) : SWAlgorithm::SWAlgorithm(config, algoconfig, 0) {}
 
 BlockAlignmentResults SWAlgorithm::get_result() { return {scores, a_range_result, b_range_result}; }
 
@@ -278,28 +292,38 @@ void SWAlgorithm::refetch() {
   engine->run(1);
 }
 
-void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end) {
-  // We have to reconnect the streams to new memory locations as the destination will be in a shared memroy region.
-  // engine->connectStream(HOST_STREAM_CONCAT, inputs_begin);
-  engine->connectStream(STREAM_CONCAT_ALL, results_begin);
+slotToken SWAlgorithm::upload(int32_t* inputs_begin, int32_t* inputs_end) {
+    slotToken slot = queue_slot();
+    PLOGD.printf("Slot is %d", slot);
 
-  swatlib::TickTock t;
-  t.tick();
-
-  if (use_remote_buffer) {
     swatlib::TickTock rbt;
     rbt.tick();
-    engine->copyToRemoteBuffer(inputs_begin, REMOTE_MEMORY, 0);
+    engine->copyToRemoteBuffer(inputs_begin, REMOTE_MEMORY, slot);
+    release_slot(slot);
     rbt.tock();
     auto transferTime = rbt.duration<std::chrono::milliseconds>();
     size_t totalTransferSize = algoconfig.getInputBufferSize32b() * 4;
     auto transferBandwidth = (double) totalTransferSize / ((double) transferTime / 1000.0) / 1e6;
     PLOGI.printf("Transfer rate to remote buffer %.3f mb/s. %ld bytes in %.2fms", transferBandwidth, totalTransferSize, transferTime);
+    return slot;
+}
+
+void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token) {
+  // We have to reconnect the streams to new memory locations as the destination will be in a shared memroy region.
+  // engine->connectStream(HOST_STREAM_CONCAT, inputs_begin);
+  engine->connectStream(STREAM_CONCAT_ALL, results_begin);
+
+  std::vector<int> vv{slot_token};
+  if (use_remote_buffer) {
+    engine->connectStream(HOST_STREAM_CONCAT, vv.data());
   } else {
     engine->connectStream(HOST_STREAM_CONCAT, inputs_begin);
   }
+  swatlib::TickTock t;
+  t.tick();
   engine->run(0, "Execute Main");
   t.tock();
+  release_slot(slot_token);
   PLOGD << "Total engine run time (in s): "  << static_cast<double>(t.duration<std::chrono::milliseconds>()) / 1000.0;
 
 #ifdef IPUMA_DEBUG
@@ -371,8 +395,12 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
   results[results_size + (1) + 2] = 0xFEEBDAED;
   // prepared_remote_compare(a.data(), a_len.data(), b.data(), b_len.data(), unord_scores.data(), unord_mismatches.data(), unord_a_range.data(),
   //                         unord_b_range.data());
+  slotToken slot = 0;
+  if (use_remote_buffer) {
+    slot = upload(&*inputs.begin() + 2, &*inputs.end() - 2);
+  }
   tCompare.tick();
-  prepared_remote_compare(&*inputs.begin() + 2, &*inputs.end() - 2, &*results.begin() + 2, &*results.end() - 2);
+  prepared_remote_compare(&*inputs.begin() + 2, &*inputs.end() - 2, &*results.begin() + 2, &*results.end() - 2, slot);
   tCompare.tock();
 
   double prepare_time = static_cast<double>(tPrepare.duration<std::chrono::milliseconds>()) / 1e3;
@@ -538,7 +566,11 @@ void SWAlgorithm::compare_mn_local(const std::vector<std::string>& Seqs, const s
   auto mapping = fill_input_buffer(config, algoconfig, Seqs, cmpMapping, numComparisons, &*inputs.begin(), &*inputs.end());
   // std::cout << "Mapping: " << swatlib::printVector(mapping) << "\n";
 
-  prepared_remote_compare(&*inputs.begin(), &*inputs.end(), &*results.begin(), &*results.end());
+  int slot = 0;
+  if (use_remote_buffer) {
+    slot = upload(&*inputs.begin(), &*inputs.end());
+  }
+  prepared_remote_compare(&*inputs.begin(), &*inputs.end(), &*results.begin(), &*results.end(), slot);
 
   transferResults(&*results.begin(), &*results.end(), &*mapping.begin(), &*mapping.end(), &*scores.begin(), &*scores.end(), &*a_range_result.begin(), &*a_range_result.end(), &*b_range_result.begin(), &*b_range_result.end());
 }
