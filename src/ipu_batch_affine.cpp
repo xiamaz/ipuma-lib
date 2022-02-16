@@ -18,6 +18,7 @@ namespace batchaffine {
 
 static const std::string STREAM_CONCAT_ALL = "concat-read-all";
 static const std::string HOST_STREAM_CONCAT = "host-stream-concat";
+static const std::string REMOTE_MEMORY = "inputs-remotebuffer";
 
 static const std::string CYCLE_COUNT_OUTER = "cycle-count-outer";
 static const std::string CYCLE_COUNT_INNER = "cycle-count-inner";
@@ -154,7 +155,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
   program::Sequence d2h_prog_concat;
   if (use_remote_buffer) {
     const char* units[] = {"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
-    int b_size = inputs_tensor.numElements() * 8;
+    int b_size = inputs_tensor.numElements() * 4;
     PLOGI.printf("Use a RemoteBuffer of bytes %.2f", (double) b_size);
     int i = 0;
     for ( ;b_size > 1024; i++) {
@@ -164,7 +165,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     
     // 256 MB row limit.
     // https://docs.graphcore.ai/projects/poplar-user-guide/en/latest/poplar_programs.html#remote-buffer-restrictions
-    auto remote_mem = graph.addRemoteBuffer("inputs_rb", inputs_tensor.elementType(), inputs_tensor.numElements(), 1, true, true);
+    auto remote_mem = graph.addRemoteBuffer(REMOTE_MEMORY, inputs_tensor.elementType(), inputs_tensor.numElements(), 1, true, true);
     auto device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL, INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
     h2d_prog_concat.add(poplar::program::Copy(remote_mem, inputs_tensor, "Copy Inputs from Remote->IPU"));
     d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat, "Copy Outputs from IPU->Host"));
@@ -200,7 +201,6 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
 }
 
 SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer) : IPUAlgorithm(config), algoconfig(algoconfig), thread_id(thread_id), use_remote_buffer(useRemoteBuffer) {
-  use_remote_buffer = true;
   const auto totalComparisonsCount = algoconfig.getTotalNumberOfComparisons();
 
   scores.resize(totalComparisonsCount);
@@ -219,7 +219,7 @@ SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig, int thr
 
 SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig) : SWAlgorithm::SWAlgorithm(config, algoconfig, 0) {
   thread_id = 0;
-  use_remote_buffer = false;
+  use_remote_buffer = true;
 }
 
 BlockAlignmentResults SWAlgorithm::get_result() { return {scores, a_range_result, b_range_result}; }
@@ -285,7 +285,19 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
 
   swatlib::TickTock t;
   t.tick();
-  engine->copyToRemoteBuffer(inputs_begin, "inputs_rb", 0);
+
+  if (use_remote_buffer) {
+    swatlib::TickTock rbt;
+    rbt.tick();
+    engine->copyToRemoteBuffer(inputs_begin, REMOTE_MEMORY, 0);
+    rbt.tock();
+    auto transferTime = rbt.duration<std::chrono::milliseconds>();
+    size_t totalTransferSize = algoconfig.getInputBufferSize32b() * 4;
+    auto transferBandwidth = (double) totalTransferSize / ((double) transferTime / 1000.0) / 1e6;
+    PLOGI.printf("Transfer rate to remote buffer %.3f mb/s. %ld bytes in %.2fms", transferBandwidth, totalTransferSize, transferTime);
+  } else {
+    engine->connectStream(HOST_STREAM_CONCAT, inputs_begin);
+  }
   engine->run(0, "Execute Main");
   t.tock();
   PLOGD << "Total engine run time (in s): "  << static_cast<double>(t.duration<std::chrono::milliseconds>()) / 1000.0;
