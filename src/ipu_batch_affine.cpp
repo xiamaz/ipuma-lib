@@ -298,7 +298,6 @@ void SWAlgorithm::upload(int32_t* inputs_begin, int32_t* inputs_end, slotToken s
     swatlib::TickTock rbt;
     rbt.tick();
     engine->copyToRemoteBuffer(inputs_begin, REMOTE_MEMORY, slot);
-    release_slot(slot);
     rbt.tock();
     auto transferTime = rbt.duration<std::chrono::milliseconds>();
     size_t totalTransferSize = algoconfig.getInputBufferSize32b() * 4;
