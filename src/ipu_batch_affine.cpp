@@ -24,7 +24,8 @@ static const std::string CYCLE_COUNT_OUTER = "cycle-count-outer";
 static const std::string CYCLE_COUNT_INNER = "cycle-count-inner";
 
 void printBucketMapping(BucketMapping bm) {
-  std::cout << "Bucket:" << "\n";
+  std::cout << "Bucket:"
+            << "\n";
   for (auto& c : bm.comparisons) {
     printf("%d: %d %d\n", c.cmpIndex, c.indexA, c.indexB);
   }
@@ -43,11 +44,11 @@ long long getCellCount(const std::vector<std::string>& A, const std::vector<std:
   return cellCount;
 }
 
-int IPUAlgoConfig::getBufsize32b() const {return std::ceil(static_cast<double>(bufsize) / 4.0); }
+int IPUAlgoConfig::getBufsize32b() const { return std::ceil(static_cast<double>(bufsize) / 4.0); }
 
 int IPUAlgoConfig::getTotalNumberOfComparisons() const { return tilesUsed * maxBatches; }
 
-int IPUAlgoConfig::getMetaBufferSize32b() const {return getTotalNumberOfComparisons() * 4;};
+int IPUAlgoConfig::getMetaBufferSize32b() const { return getTotalNumberOfComparisons() * 4; };
 
 int IPUAlgoConfig::getSequenceBufferSize8b() const { return tilesUsed * bufsize; }
 int IPUAlgoConfig::getSequenceBufferSize32b() const { return tilesUsed * getBufsize32b(); }
@@ -61,7 +62,8 @@ std::string vertexTypeToString(VertexType v) { return typeString[static_cast<int
  */
 std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigned long activeTiles, unsigned long maxAB,
                                          unsigned long bufSize, unsigned long maxBatches,
-                                         const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt, bool use_remote_buffer, int buf_rows) {
+                                         const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt,
+                                         bool use_remote_buffer, int buf_rows) {
   program::Sequence prog;
 
   auto target = graph.getTarget();
@@ -79,9 +81,15 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
   switch (vtype) {
     case VertexType::cpp: sType = INT; break;
     case VertexType::assembly: sType = FLOAT; break;
-    case VertexType::multi: sType = INT; workerMultiplier = target.getNumWorkerContexts(); break;
-    case VertexType::multiasm: sType = FLOAT; workerMultiplier = target.getNumWorkerContexts(); break;
-    case VertexType::multistriped: sType = INT; break;  // all threads are going to work on the same problem
+    case VertexType::multi:
+      sType = INT;
+      workerMultiplier = target.getNumWorkerContexts();
+      break;
+    case VertexType::multiasm:
+      sType = FLOAT;
+      workerMultiplier = target.getNumWorkerContexts();
+      break;
+    case VertexType::multistriped: sType = INT; break;       // all threads are going to work on the same problem
     case VertexType::multistripedasm: sType = FLOAT; break;  // all threads are going to work on the same problem
     case VertexType::stripedasm: sType = HALF; break;
   }
@@ -156,12 +164,12 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
   if (use_remote_buffer) {
     const char* units[] = {"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
     int b_size = inputs_tensor.numElements() * 4;
-    PLOGI.printf("Use a RemoteBuffer of bytes %.2f", (double) b_size);
+    PLOGI.printf("Use a RemoteBuffer of bytes %.2f", (double)b_size);
     int i = 0;
-    for ( ;b_size > 1024; i++) {
-        b_size /= 1024;
+    for (; b_size > 1024; i++) {
+      b_size /= 1024;
     }
-   PLOGI.printf("Use a RemoteBuffer of banksize %.2f %s", (double) b_size, units[i]);
+    PLOGI.printf("Use a RemoteBuffer of %dx(Banksize %.2f %s)", buf_rows, (double)b_size, units[i]);
     auto offset = graph.addVariable(INT, {1}, "Remote Buffer Offset");
     graph.setTileMapping(offset, 0);
     // graph.setInitialValue<int>(offset, {0});
@@ -170,34 +178,35 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     // graph.connect(vtx["val"], offset[0]);
     // graph.setInitialValue<int>(vtx["mod"], buf_rows);
     // graph.setTileMapping(vtx, 0);
-    
+
     // 256 MB row limit?
     // https://docs.graphcore.ai/projects/poplar-user-guide/en/latest/poplar_programs.html#remote-buffer-restrictions
     auto host_stream_offset = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT, INT, 1);
     h2d_prog_concat.add(poplar::program::Copy(host_stream_offset, offset));
-    h2d_prog_concat.add(program::PrintTensor(offset));
-    auto remote_mem = graph.addRemoteBuffer(REMOTE_MEMORY, inputs_tensor.elementType(), inputs_tensor.numElements(), buf_rows, true, true);
-    h2d_prog_concat.add(poplar::program::Copy(remote_mem, inputs_tensor, offset,"Copy Inputs from Remote->IPU"));
+    auto remote_mem =
+        graph.addRemoteBuffer(REMOTE_MEMORY, inputs_tensor.elementType(), inputs_tensor.numElements(), buf_rows, true, true);
+    h2d_prog_concat.add(poplar::program::Copy(remote_mem, inputs_tensor, offset, "Copy Inputs from Remote->IPU"));
     // d2h_prog_concat.add(program::Execute(cs));
 
-    auto device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL, INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
+    auto device_stream_concat =
+        graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL, INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
     d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat, "Copy Outputs from IPU->Host"));
   } else {
     auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT, INT, inputs_tensor.numElements());
-    auto device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL, INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
+    auto device_stream_concat =
+        graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL, INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
     h2d_prog_concat.add(poplar::program::Copy(host_stream_concat, inputs_tensor));
     d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat));
   }
 
-
   auto print_tensors_prog = program::Sequence({
-    // program::PrintTensor("Alens", Alens),
-    // program::PrintTensor("Blens", Blens),
-    program::PrintTensor("CompMeta", CompMeta),
-    // program::PrintTensor("Scores", Scores),
+      // program::PrintTensor("Alens", Alens),
+      // program::PrintTensor("Blens", Blens),
+      program::PrintTensor("CompMeta", CompMeta),
+      // program::PrintTensor("Scores", Scores),
   });
 #ifdef IPUMA_DEBUG
- program::Sequence main_prog;
+  program::Sequence main_prog;
   main_prog.add(program::Execute(frontCs));
   addCycleCount(graph, main_prog, CYCLE_COUNT_INNER);
 #else
@@ -213,11 +222,14 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
   return {prog, d2h_prog_concat, print_tensors_prog};
 }
 
-SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer, size_t bufSize) : IPUAlgorithm(config), algoconfig(algoconfig), thread_id(thread_id), use_remote_buffer(useRemoteBuffer) {
+SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer, size_t slotCap)
+    : IPUAlgorithm(config)
+    , algoconfig(algoconfig)
+    , thread_id(thread_id)
+    , use_remote_buffer(useRemoteBuffer) {
   const auto totalComparisonsCount = algoconfig.getTotalNumberOfComparisons();
-  buf_size = bufSize;
-  buf_cap = buf_size;
-  slots.resize(buf_size);
+  slot_avail = slotCap;
+  slots.resize(slot_avail);
   std::fill(slots.begin(), slots.end(), false);
 
   scores.resize(totalComparisonsCount);
@@ -229,16 +241,18 @@ SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig, int thr
   auto similarityMatrix = swatlib::selectMatrix(config.similarity, config.matchValue, config.mismatchValue, config.ambiguityValue);
   std::vector<program::Program> programs =
       buildGraph(graph, algoconfig.vtype, algoconfig.tilesUsed, algoconfig.maxAB, algoconfig.bufsize, algoconfig.maxBatches,
-                 similarityMatrix, config.gapInit, config.gapExtend, use_remote_buffer, buf_size);
+                 similarityMatrix, config.gapInit, config.gapExtend, use_remote_buffer, slot_avail);
 
   createEngine(graph, programs);
 }
 
-SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig) : SWAlgorithm::SWAlgorithm(config, algoconfig, 0) {}
+SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig)
+    : SWAlgorithm::SWAlgorithm(config, algoconfig, 0) {}
 
 BlockAlignmentResults SWAlgorithm::get_result() { return {scores, a_range_result, b_range_result}; }
 
-void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B) {
+void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A,
+                                     const std::vector<std::string>& B) {
   if (A.size() != B.size()) {
     PLOGW << "Mismatched size A " << A.size() << " != B " << B.size();
     exit(1);
@@ -264,55 +278,50 @@ void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std:
   }
 }
 
-std::vector<std::tuple<int, int>> SWAlgorithm::fillBuckets(const IPUAlgoConfig& algoconfig,const std::vector<std::string>& A, const std::vector<std::string>& B, int& err) {
+std::vector<std::tuple<int, int>> SWAlgorithm::fillBuckets(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A,
+                                                           const std::vector<std::string>& B, int& err) {
   std::vector<std::tuple<int, int>> bucket_pairs;
   switch (algoconfig.fillAlgo) {
-  case partition::Algorithm::fillFirst:
-    err = partition::fillFirst(bucket_pairs, A, B, algoconfig.tilesUsed, algoconfig.bufsize, algoconfig.maxBatches);
-    break;
-  case partition::Algorithm::roundRobin:
-    err = partition::roundRobin(bucket_pairs, A, B, algoconfig.tilesUsed, algoconfig.bufsize, algoconfig.maxBatches);
-    break;
-  case partition::Algorithm::greedy:
-    err = partition::greedy(bucket_pairs, A, B, algoconfig.tilesUsed, algoconfig.bufsize, algoconfig.maxBatches);
-    break;
+    case partition::Algorithm::fillFirst:
+      err = partition::fillFirst(bucket_pairs, A, B, algoconfig.tilesUsed, algoconfig.bufsize, algoconfig.maxBatches);
+      break;
+    case partition::Algorithm::roundRobin:
+      err = partition::roundRobin(bucket_pairs, A, B, algoconfig.tilesUsed, algoconfig.bufsize, algoconfig.maxBatches);
+      break;
+    case partition::Algorithm::greedy:
+      err = partition::greedy(bucket_pairs, A, B, algoconfig.tilesUsed, algoconfig.bufsize, algoconfig.maxBatches);
+      break;
   }
   return bucket_pairs;
 }
 
-size_t SWAlgorithm::getSeqsOffset(const IPUAlgoConfig& config) {
-  return 0;
-}
+size_t SWAlgorithm::getSeqsOffset(const IPUAlgoConfig& config) { return 0; }
 
-size_t SWAlgorithm::getMetaOffset(const IPUAlgoConfig& config) {
-  return config.getSequenceBufferSize32b();
-}
+size_t SWAlgorithm::getMetaOffset(const IPUAlgoConfig& config) { return config.getSequenceBufferSize32b(); }
 
-void SWAlgorithm::refetch() {
-  engine->run(1);
-}
+void SWAlgorithm::refetch() { engine->run(1); }
 
 void SWAlgorithm::upload(int32_t* inputs_begin, int32_t* inputs_end, slotToken slot) {
-    PLOGD.printf("Slot is %d", slot);
-
-    swatlib::TickTock rbt;
-    rbt.tick();
-    engine->copyToRemoteBuffer(inputs_begin, REMOTE_MEMORY, slot);
-    release_slot(slot);
-    rbt.tock();
-    auto transferTime = rbt.duration<std::chrono::milliseconds>();
-    size_t totalTransferSize = algoconfig.getInputBufferSize32b() * 4;
-    auto transferBandwidth = (double) totalTransferSize / ((double) transferTime / 1000.0) / 1e6;
-    PLOGI.printf("Transfer rate to remote buffer %.3f mb/s. %ld bytes in %.2fms", transferBandwidth, totalTransferSize, transferTime);
+  PLOGD.printf("Slot is %d", slot);
+  swatlib::TickTock rbt;
+  rbt.tick();
+  engine->copyToRemoteBuffer(inputs_begin, REMOTE_MEMORY, slot);
+  rbt.tock();
+  auto transferTime = rbt.duration<std::chrono::milliseconds>();
+  size_t totalTransferSize = algoconfig.getInputBufferSize32b() * 4;
+  auto transferBandwidth = (double)totalTransferSize / ((double)transferTime / 1000.0) / 1e6;
+  PLOGI.printf("Transfer rate to remote buffer %.3f mb/s. %ld bytes in %.2fms", transferBandwidth, totalTransferSize, transferTime);
 }
 
-void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token) {
+void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end,
+                                          slotToken slot_token) {
   // We have to reconnect the streams to new memory locations as the destination will be in a shared memroy region.
   // engine->connectStream(HOST_STREAM_CONCAT, inputs_begin);
   engine->connectStream(STREAM_CONCAT_ALL, results_begin);
 
   std::vector<int> vv{slot_token};
   if (use_remote_buffer) {
+    PLOGD.printf("Use remote buffer with slot %d", vv[0]);
     engine->connectStream(HOST_STREAM_CONCAT, vv.data());
   } else {
     engine->connectStream(HOST_STREAM_CONCAT, inputs_begin);
@@ -322,14 +331,15 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   engine->run(0, "Execute Main");
   t.tock();
   release_slot(slot_token);
-  PLOGD << "Total engine run time (in s): "  << static_cast<double>(t.duration<std::chrono::milliseconds>()) / 1000.0;
+  PLOGD << "Total engine run time (in s): " << static_cast<double>(t.duration<std::chrono::milliseconds>()) / 1000.0;
 
 #ifdef IPUMA_DEBUG
   auto cyclesOuter = getTotalCycles(*engine, CYCLE_COUNT_OUTER);
   auto cyclesInner = getTotalCycles(*engine, CYCLE_COUNT_INNER);
   auto timeOuter = static_cast<double>(cyclesOuter) / getTarget().getTileClockFrequency();
   auto timeInner = static_cast<double>(cyclesInner) / getTarget().getTileClockFrequency();
-  PLOGD << "Poplar cycle count: " << cyclesInner << "/" << cyclesOuter << " computed time (in s): " << timeInner << "/" << timeOuter;
+  PLOGD << "Poplar cycle count: " << cyclesInner << "/" << cyclesOuter << " computed time (in s): " << timeInner << "/"
+        << timeOuter;
 
   int32_t* meta_input = inputs_begin + getMetaOffset(algoconfig);
 
@@ -337,12 +347,12 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   uint64_t cellCount = 0;
   uint64_t dataCount = 0;
   for (size_t i = 0; i < algoconfig.getTotalNumberOfComparisons(); i++) {
-    auto a_len = meta_input[4*i];
-    auto b_len = meta_input[4*i+2];
+    auto a_len = meta_input[4 * i];
+    auto b_len = meta_input[4 * i + 2];
     cellCount += a_len * b_len;
     dataCount += a_len + b_len;
   }
-  
+
   double GCUPSOuter = static_cast<double>(cellCount) / timeOuter / 1e9;
   double GCUPSInner = static_cast<double>(cellCount) / timeInner / 1e9;
   PLOGD << "Poplar estimated cells(" << cellCount << ") GCUPS " << GCUPSInner << "/" << GCUPSOuter;
@@ -354,7 +364,9 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   auto transferTime = timeOuter - timeInner;
   auto transferInfoRatio = static_cast<double>(dataCount) / totalTransferSize * 100;
   auto transferBandwidth = totalTransferSize / transferTime / 1e6;
-  PLOGD << "Transfer time: " << transferTime << "s transfer ratio: " << transferInfoRatio << "% estimated bandwidth: " << transferBandwidth << "mb/s, per vertex: " << transferBandwidth / algoconfig.tilesUsed << "mb/s";
+  PLOGD << "Transfer time: " << transferTime << "s transfer ratio: " << transferInfoRatio
+        << "% estimated bandwidth: " << transferBandwidth << "mb/s, per vertex: " << transferBandwidth / algoconfig.tilesUsed
+        << "mb/s";
 #endif
 }
 
@@ -386,12 +398,14 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
     exit(1);
   }
 
-  // std::vector<int32_t> unord_scores(scores), unord_mismatches(mismatches), unord_a_range(a_range_result), unord_b_range(b_range_result);
+  // std::vector<int32_t> unord_scores(scores), unord_mismatches(mismatches), unord_a_range(a_range_result),
+  // unord_b_range(b_range_result);
   results[0] = 0xDEADBEEF;
   results[1] = 0xDEADBEEF;
   results[results_size + (1) + 1] = 0xFEEBDAED;
   results[results_size + (1) + 2] = 0xFEEBDAED;
-  // prepared_remote_compare(a.data(), a_len.data(), b.data(), b_len.data(), unord_scores.data(), unord_mismatches.data(), unord_a_range.data(),
+  // prepared_remote_compare(a.data(), a_len.data(), b.data(), b_len.data(), unord_scores.data(), unord_mismatches.data(),
+  // unord_a_range.data(),
   //                         unord_b_range.data());
   slotToken slot = 0;
   if (use_remote_buffer) {
@@ -405,7 +419,8 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
   double compare_time = static_cast<double>(tCompare.duration<std::chrono::milliseconds>()) / 1e3;
   double total_time = prepare_time + compare_time;
   double prepare_perc = prepare_time / total_time * 100;
-  PLOGD << "Total time: " << total_time << " prepare(" << prepare_time << ") compare(" << compare_time << ") preprocessing is " << prepare_perc << "% of total";
+  PLOGD << "Total time: " << total_time << " prepare(" << prepare_time << ") compare(" << compare_time << ") preprocessing is "
+        << prepare_perc << "% of total";
 
   // check canaries
   if (results[0] != 0xDEADBEEF || results[1] != 0xDEADBEEF) {
@@ -419,12 +434,13 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
     exit(1);
   }
 
-  // PLOGD << "Unordered results: " << swatlib::printVector(std::vector<int32_t>(results.begin() + 2, results.begin() + scores.size() + 2));
+  // PLOGD << "Unordered results: " << swatlib::printVector(std::vector<int32_t>(results.begin() + 2, results.begin() +
+  // scores.size() + 2));
 
   // reorder results based on mapping
   int nthTry = 0;
   int sc;
-  retry:
+retry:
   nthTry++;
   sc = 0;
   for (size_t i = 0; i < mapping.size(); ++i) {
@@ -433,7 +449,8 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
     if (errcheck) {
       if (scores[i] >= algoconfig.maxAB) {
         PLOGW << "ERROR Expected " << A.size() << " valid comparisons. But got " << i << " instead.";
-        PLOGW.printf("ERROR Thread %d received wrong data FIRST, try again data=%d, map_translate=%d\n", thread_id, scores[i], mapping[i] + 2);
+        PLOGW.printf("ERROR Thread %d received wrong data FIRST, try again data=%d, map_translate=%d\n", thread_id, scores[i],
+                     mapping[i] + 2);
         refetch();
         goto retry;
       }
@@ -445,7 +462,7 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
     b_range_result[i] = results[b_range_offset + mapped_i + 2];
   }
   if (errcheck) {
-    if ((double)sc/A.size() < 0.5) {
+    if ((double)sc / A.size() < 0.5) {
       PLOGW << "ERROR Too many scores are 0, retry number " << (nthTry - 1);
       refetch();
       goto retry;
@@ -465,12 +482,11 @@ struct BucketFillInfo {
   size_t bucketCmps;
   std::vector<int8_t> seqs;
 
-  void resizeSeqs(int numSeqs) {
-    seqs.resize(numSeqs, 0);
-  }
+  void resizeSeqs(int numSeqs) { seqs.resize(numSeqs, 0); }
 };
 
-std::vector<BucketMapping> SWAlgorithm::fillMNBuckets(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& Seqs, const std::vector<int>& comparisons) {
+std::vector<BucketMapping> SWAlgorithm::fillMNBuckets(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& Seqs,
+                                                      const std::vector<int>& comparisons) {
   if (comparisons.size() & 0b1) {
     throw std::logic_error("Length of comparisons is not a multiple of 2, got " + std::to_string(comparisons.size()) + " instead");
   }
@@ -485,8 +501,8 @@ std::vector<BucketMapping> SWAlgorithm::fillMNBuckets(const IPUAlgoConfig& algoc
   int bucketIndex = 0;
   bool incrementBucket = false;
   for (int n = 0; n < numComparisons; ++n) {
-    int ai = comparisons[2*n];
-    int bi = comparisons[2*n+1];
+    int ai = comparisons[2 * n];
+    int bi = comparisons[2 * n + 1];
 
     int eff_asize, eff_bsize;
     bool mapped = false;
@@ -505,7 +521,7 @@ std::vector<BucketMapping> SWAlgorithm::fillMNBuckets(const IPUAlgoConfig& algoc
       if (bInfo.seqs[ai] == 1) eff_asize = 0;
       eff_bsize = Seqs[bi].size();
       if (bInfo.seqs[bi] == 1) eff_bsize = 0;
-      
+
       nextContentSize = bInfo.bucketContent + eff_asize + eff_bsize;
       if (nextContentSize > algoconfig.bufsize) {
         continue;
@@ -535,8 +551,9 @@ std::vector<BucketMapping> SWAlgorithm::fillMNBuckets(const IPUAlgoConfig& algoc
   return buckets;
 }
 
-
-void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end) {
+void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end,
+                                  int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end,
+                                  int32_t* brange_begin, int32_t* brange_end) {
   int maxComparisons = scores_end - scores_begin;
   size_t a_range_offset = maxComparisons;
   size_t b_range_offset = maxComparisons * 2;
@@ -570,7 +587,8 @@ void SWAlgorithm::compare_mn_local(const std::vector<std::string>& Seqs, const s
   }
   prepared_remote_compare(&*inputs.begin(), &*inputs.end(), &*results.begin(), &*results.end(), slot);
 
-  transferResults(&*results.begin(), &*results.end(), &*mapping.begin(), &*mapping.end(), &*scores.begin(), &*scores.end(), &*a_range_result.begin(), &*a_range_result.end(), &*b_range_result.begin(), &*b_range_result.end());
+  transferResults(&*results.begin(), &*results.end(), &*mapping.begin(), &*mapping.end(), &*scores.begin(), &*scores.end(),
+                  &*a_range_result.begin(), &*a_range_result.end(), &*b_range_result.begin(), &*b_range_result.end());
 }
 
 struct BucketSequenceInfo {
@@ -578,7 +596,8 @@ struct BucketSequenceInfo {
   int bucketOffset;
 };
 
-BucketSequenceInfo& fillIfNotExists(std::unordered_map<int, BucketSequenceInfo>& bM, int sIndex, const std::string& data, int& bucketSeqN, int& bucketSeqOffset, int8_t* bSeq, swatlib::Encoding& encoder) {
+BucketSequenceInfo& fillIfNotExists(std::unordered_map<int, BucketSequenceInfo>& bM, int sIndex, const std::string& data,
+                                    int& bucketSeqN, int& bucketSeqOffset, int8_t* bSeq, swatlib::Encoding& encoder) {
   auto bit = bM.find(sIndex);
   // insert ai into bucket
   if (bit == bM.end()) {
@@ -592,7 +611,10 @@ BucketSequenceInfo& fillIfNotExists(std::unordered_map<int, BucketSequenceInfo>&
   return bM[sIndex];
 }
 
-std::vector<int> SWAlgorithm::fill_input_buffer(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& Seqs, const std::vector<BucketMapping>& comparisonMapping, int numComparisons, int32_t* inputs_begin, int32_t* inputs_end) {
+std::vector<int> SWAlgorithm::fill_input_buffer(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig,
+                                                const std::vector<std::string>& Seqs,
+                                                const std::vector<BucketMapping>& comparisonMapping, int numComparisons,
+                                                int32_t* inputs_begin, int32_t* inputs_end) {
   size_t input_elems = inputs_end - inputs_begin;
   memset(inputs_begin, 0, input_elems * sizeof(int32_t));
 
@@ -616,10 +638,10 @@ std::vector<int> SWAlgorithm::fill_input_buffer(const SWConfig& swconfig, const 
       const auto [ci, ai, bi] = comparisons[n];
       auto& aInfo = fillIfNotExists(bucketSequences, ai, Seqs[ai], bucketSeqN, bucketSeqOffset, bSeq, encoder);
       auto& bInfo = fillIfNotExists(bucketSequences, bi, Seqs[bi], bucketSeqN, bucketSeqOffset, bSeq, encoder);
-      bMeta[n*4 ] = Seqs[ai].size();
-      bMeta[n*4+1] = aInfo.bucketOffset;
-      bMeta[n*4+2] = Seqs[bi].size();
-      bMeta[n*4+3] = bInfo.bucketOffset;
+      bMeta[n * 4] = Seqs[ai].size();
+      bMeta[n * 4 + 1] = aInfo.bucketOffset;
+      bMeta[n * 4 + 2] = Seqs[bi].size();
+      bMeta[n * 4 + 3] = bInfo.bucketOffset;
 
       if (aInfo.bucketOffset + Seqs[ai].size() > algoconfig.bufsize) {
         throw runtime_error("Offset larger than buffer size.");
@@ -635,7 +657,8 @@ std::vector<int> SWAlgorithm::fill_input_buffer(const SWConfig& swconfig, const 
   return mapping;
 }
 
-void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, int* seqMapping) {
+void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A,
+                                 const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, int* seqMapping) {
   swatlib::TickTock preprocessTimer;
   std::vector<swatlib::TickTock> stageTimers(5);
   preprocessTimer.tick();
@@ -691,11 +714,11 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
     auto* bucket_meta = meta + offsetMeta;
     auto* bucket_seq = seqs + offsetBuffer;
 
-    if (bN*4+3 >= algoconfig.maxBatches * 4) {
+    if (bN * 4 + 3 >= algoconfig.maxBatches * 4) {
       std::runtime_error("Bucket meta out of bounds.");
     }
-    bucket_meta[bN*4] = aSize;
-    bucket_meta[bN*4+1] = bO;
+    bucket_meta[bN * 4] = aSize;
+    bucket_meta[bN * 4 + 1] = bO;
     if (bO + aSize > algoconfig.bufsize) {
       throw std::runtime_error("Sequence A too large for buffer.");
     }
@@ -704,8 +727,8 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
     }
     bO += aSize;
 
-    bucket_meta[bN*4+2] = bSize;
-    bucket_meta[bN*4+3] = bO;
+    bucket_meta[bN * 4 + 2] = bSize;
+    bucket_meta[bN * 4 + 3] = bO;
     if (bO + bSize > algoconfig.bufsize) {
       throw std::runtime_error("Sequence B too large for buffer.");
     }
@@ -720,10 +743,11 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
   stageTimers[4].tock();
 
   preprocessTimer.tock();
-  PLOGD << "Total preprocessing time (in s): "  << static_cast<double>(preprocessTimer.duration<std::chrono::milliseconds>()) / 1000.0;
+  PLOGD << "Total preprocessing time (in s): "
+        << static_cast<double>(preprocessTimer.duration<std::chrono::milliseconds>()) / 1000.0;
 
   PLOGD << "Stage timers:";
-  for (int i = 0; i < stageTimers.size(); ++i)  {
+  for (int i = 0; i < stageTimers.size(); ++i) {
     PLOGD << i << ": " << stageTimers[i].duration<std::chrono::milliseconds>();
   }
 
@@ -738,7 +762,7 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
   }
   std::stringstream ss;
   ss << "Map[";
-  for (auto [k ,v] : occurence) {
+  for (auto [k, v] : occurence) {
     ss << k << ": " << v << ",";
   }
   ss << "]";
@@ -748,5 +772,34 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
 #endif
   // SLOG("Inner comparison time: ", preprocessTimer.get_elapsed(), " engine run: ", engineTimer.get_elapsed(), "\n");
 }
+slotToken SWAlgorithm::queue_slot() {
+  assert(buf_has_capacity());
+  int s = -1;
+  for (size_t i = 0; i < slots.size(); i++) {
+    if (!slots[i]) {
+      s = i;
+      break;
+    }
+  }
+  assert(s != -1);
+  slots[s] = true;
+  slot_avail--;
+  last_slot = s;
+  return s;
+}
+void SWAlgorithm::release_slot(slotToken i) {
+  assert(slots[i] == true);
+  slots[i] = false;
+  slot_avail++;
+}
+
+bool SWAlgorithm::slot_available() { return slot_avail > 0; }
+
+slotToken SWAlgorithm::upload(int32_t* inputs_begin, int32_t* inputs_end) {
+  int slot = queue_slot();
+  upload(inputs_begin, inputs_end, slot);
+  return slot;
+}
+
 }  // namespace batchaffine
 }  // namespace ipu

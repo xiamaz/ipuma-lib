@@ -70,8 +70,7 @@ class SWAlgorithm : public IPUAlgorithm {
   int thread_id;
   bool use_remote_buffer;
 
-  int buf_size;
-  int buf_cap;
+  int slot_avail;
   int last_slot;
   std::vector<bool> slots;
 
@@ -79,38 +78,18 @@ class SWAlgorithm : public IPUAlgorithm {
   static size_t getMetaOffset(const IPUAlgoConfig& config);
 
 
-  void release_slot(slotToken i) {
-    slots[i] = false;
-    buf_cap++;
-  }
+  void release_slot(slotToken i);
 
  public:
   IPUAlgoConfig algoconfig;
 
   SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig);
-  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer = true, size_t bufSize = 1);
+  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer = true, size_t  = 1);
 
   std::string printTensors();
 
-  bool buf_has_capacity() {
-    return buf_cap > 0;
-  }
-
-  slotToken queue_slot() {
-    assert(buf_has_capacity);
-    int s = -1;
-    for (size_t i = 0; i < slots.size(); i++) {
-       if (!slots[i]) {
-        s = i;
-        break;
-      }
-    }
-    assert(s != -1);
-    slots[s] = true;
-    buf_cap--;
-    last_slot = s;
-    return s;
-  }
+  bool slot_available();
+  slotToken queue_slot();
 
 
   static std::vector<std::tuple<int, int>> fillBuckets(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int& err);
@@ -129,11 +108,7 @@ class SWAlgorithm : public IPUAlgorithm {
   void prepared_remote_compare(int32_t* inputs_begin,  int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token = 0);
 
   void upload(int32_t* inputs_begin, int32_t* inputs_end, slotToken slot);
-  slotToken upload(int32_t* inputs_begin, int32_t* inputs_end) {
-    int slot = queue_slot();
-    upload(inputs_begin, inputs_end, slot);
-    return slot;
-  };
+  slotToken upload(int32_t* inputs_begin, int32_t* inputs_end);
  
   static void prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B,  int32_t* inputs_begin, int32_t* inputs_end, int* deviceMapping);
   static std::vector<int> fill_input_buffer(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& Seqs, const std::vector<BucketMapping>& comparisonMapping, int numComparisons, int32_t* inputs_begin, int32_t* inputs_end);
