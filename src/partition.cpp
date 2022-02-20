@@ -302,9 +302,17 @@ namespace partition {
       q.push(std::ref(b));
     }
 
-    for (int i = 0; i < A.size(); ++i) {
+    std::vector<std::pair<int, int>> srts(A.size());
+    for (size_t i = 0; i < A.size(); i++) {
       const auto& aLen = A[i].size();
       const auto& bLen = B[i].size();
+      srts[i] = {aLen * bLen, i};
+    }
+    std::sort(srts.begin(), srts.end());
+
+    for (int i = 0; i < A.size(); ++i) {
+      const auto& aLen = A[std::get<1>(srts[i])].size();
+      const auto& bLen = B[std::get<1>(srts[i])].size();
 
       auto& bucket = q.top().get();
       q.pop();
