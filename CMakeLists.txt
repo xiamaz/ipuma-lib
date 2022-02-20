@@ -41,7 +41,12 @@ include_directories("plog/include")
 add_subdirectory(src)
 
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
-  option(PACKAGE_TESTS "Build the tests" ON)
+  set(PACKAGE_TESTS ON)
+  set(PACKAGE_MAIN ON)
+endif()
+
+if(PACKAGE_MAIN)
+  add_subdirectory(ipusw)
 endif()
 
 if(PACKAGE_TESTS)

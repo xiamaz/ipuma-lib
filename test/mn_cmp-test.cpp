@@ -5,9 +5,9 @@
 
 class MN_Partitioning : public ::testing::Test {
 protected:
-  ipu::batchaffine::IPUAlgoConfig algoconfig = {2, 30, 10, 1000};
+  ipu::IPUAlgoConfig algoconfig = {2, 30, 10, 1000};
   std::vector<std::string> seqs = {"AAAA", "TTTT", "GGGG", "CCCC"};
-  Comparisons comparisons = {{0, 1}};
+  ipu::Comparisons comparisons = {{0, 1}};
 };
 
 using MN_PartitioningDeath = MN_Partitioning;
@@ -33,7 +33,7 @@ TEST(MN_Test, CompareAll) {
 		"TTTTAT",
 		"AAAAAA",
 	};
-  Comparisons comparisons = {
+  ipu::Comparisons comparisons = {
     {0, 2}, // expected 1
     {0, 3}, // expected 6
     {1, 2}, // expected 4
@@ -47,7 +47,7 @@ TEST(MN_Test, CompareAll) {
     .gapInit = 0, .gapExtend = -1, .matchValue = 1, .mismatchValue = -1, .ambiguityValue = -1,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::assembly});
+  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::assembly});
   driver.compare_mn_local(seqs, comparisons);
   auto result = driver.get_result();
   EXPECT_EQ(result.scores[0], 1);
@@ -63,7 +63,7 @@ TEST(MN_Test, CompareAllRR) {
 		"TTTTAT",
 		"AAAAAA",
 	};
-  Comparisons comparisons = {
+  ipu::Comparisons comparisons = {
     {0, 2}, // expected 1
     {0, 3}, // expected 6
     {1, 2}, // expected 4
@@ -77,7 +77,7 @@ TEST(MN_Test, CompareAllRR) {
     .gapInit = 0, .gapExtend = -1, .matchValue = 1, .mismatchValue = -1, .ambiguityValue = -1,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::assembly, ipu::partition::Algorithm::roundRobin});
+  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::assembly, ipu::Algorithm::roundRobin});
   driver.compare_mn_local(seqs, comparisons);
   auto result = driver.get_result();
   EXPECT_EQ(result.scores[0], 1);
@@ -93,7 +93,7 @@ TEST(MN_Test, CompareAllGreedy) {
 		"TTTTAT",
 		"AAAAAA",
 	};
-  Comparisons comparisons = {
+  ipu::Comparisons comparisons = {
     {0, 2}, // expected 1
     {0, 3}, // expected 6
     {1, 2}, // expected 4
@@ -107,7 +107,7 @@ TEST(MN_Test, CompareAllGreedy) {
     .gapInit = 0, .gapExtend = -1, .matchValue = 1, .mismatchValue = -1, .ambiguityValue = -1,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::assembly, ipu::partition::Algorithm::greedy});
+  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::assembly, ipu::Algorithm::greedy});
   driver.compare_mn_local(seqs, comparisons);
   auto result = driver.get_result();
   EXPECT_EQ(result.scores[0], 1);

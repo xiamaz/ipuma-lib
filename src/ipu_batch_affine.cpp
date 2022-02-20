@@ -8,8 +8,6 @@
 #include <poputil/TileMapping.hpp>
 #include <popops/Zero.hpp>
 
-#include "ipu_base.h"
-#include "partition.h"
 #include "swatlib/swatlib.h"
 #include "ipu_batch_affine.h"
 
@@ -22,18 +20,6 @@ static const std::string REMOTE_MEMORY = "inputs-remotebuffer";
 
 static const std::string CYCLE_COUNT_OUTER = "cycle-count-outer";
 static const std::string CYCLE_COUNT_INNER = "cycle-count-inner";
-
-int IPUAlgoConfig::getBufsize32b() const { return std::ceil(static_cast<double>(bufsize) / 4.0); }
-
-int IPUAlgoConfig::getTotalNumberOfComparisons() const { return tilesUsed * maxBatches; }
-
-int IPUAlgoConfig::getMetaBufferSize32b() const { return getTotalNumberOfComparisons() * 4; };
-
-int IPUAlgoConfig::getTotalBufsize32b() const { return tilesUsed * getBufsize32b(); }
-
-int IPUAlgoConfig::getInputBufferSize32b() const { return getTotalBufsize32b() + getMetaBufferSize32b(); }
-
-std::string vertexTypeToString(VertexType v) { return typeString[static_cast<int>(v)]; }
 
 /**
  * Streamable IPU graph for SW
@@ -200,7 +186,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
   return {prog, d2h_prog_concat, print_tensors_prog};
 }
 
-SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer, size_t slotCap)
+SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer, size_t slotCap)
     : IPUAlgorithm(config)
     , algoconfig(algoconfig)
     , thread_id(thread_id)
@@ -256,29 +242,29 @@ void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std:
   }
 }
 
-void SWAlgorithm::fillMNBuckets(partition::Algorithm algo, partition::BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int offset) {
+void SWAlgorithm::fillMNBuckets(Algorithm algo, partition::BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int offset) {
   switch (algo) {
-  case partition::Algorithm::fillFirst:
+  case Algorithm::fillFirst:
     partition::fillFirst(map, Seqs, Cmps, offset);
     break;
-  case partition::Algorithm::roundRobin:
+  case Algorithm::roundRobin:
     partition::roundRobin(map, Seqs, Cmps, offset);
     break;
-  case partition::Algorithm::greedy:
+  case Algorithm::greedy:
     partition::greedy(map, Seqs, Cmps, offset);
     break;
   }
 }
 
-void SWAlgorithm::fillBuckets(partition::Algorithm algo, partition::BucketMap& map, const RawSequences& A, const RawSequences& B, int offset) {
+void SWAlgorithm::fillBuckets(Algorithm algo, partition::BucketMap& map, const RawSequences& A, const RawSequences& B, int offset) {
   switch (algo) {
-  case partition::Algorithm::fillFirst:
+  case Algorithm::fillFirst:
     partition::fillFirst(map, A, B, offset);
     break;
-  case partition::Algorithm::roundRobin:
+  case Algorithm::roundRobin:
     partition::roundRobin(map, A, B, offset);
     break;
-  case partition::Algorithm::greedy:
+  case Algorithm::greedy:
     partition::greedy(map, A, B, offset);
     break;
   }
@@ -353,9 +339,8 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   auto transferTime = timeOuter - timeInner;
   auto transferInfoRatio = static_cast<double>(dataCount) / totalTransferSize * 100;
   auto transferBandwidth = totalTransferSize / transferTime / 1e6;
-  PLOGD << "Transfer time: " << transferTime << "s transfer ratio: " << transferInfoRatio
-        << "% estimated bandwidth: " << transferBandwidth << "mb/s, per vertex: " << transferBandwidth / algoconfig.tilesUsed
-        << "mb/s";
+  PLOGD << "Transfer time: " << transferTime << "s estimated bandwidth: " << transferBandwidth
+        << "mb/s, per vertex: " << transferBandwidth / algoconfig.tilesUsed << "mb/s";
 #endif
 }
 
@@ -494,6 +479,35 @@ void SWAlgorithm::compare_mn_local(const std::vector<std::string>& Seqs, const C
   fillMNBuckets(algoconfig.fillAlgo, map, Seqs, Cmps, 0);
   fill_input_buffer(map, config.datatype, algoconfig, Seqs, Cmps, &*inputs.begin(), &*inputs.end(), mapping.data());
   // std::cout << "Mapping: " << swatlib::printVector(mapping) << "\n";
+
+#ifdef IPUMA_DEBUG
+  int emptyBuckets = 0;
+  int maxBucket = 0;
+  long dataCount = 0;
+  std::vector<int> bucketCmps;
+  std::map<int, int> occurence;
+  for (const auto& bucket : map.buckets) {
+    if (bucket.cmps.size() == 0) emptyBuckets++;
+    occurence[bucket.cmps.size()]++;
+    bucketCmps.push_back(bucket.cmps.size());
+    maxBucket = std::max(maxBucket, bucket.seqSize);
+    dataCount += bucket.seqSize;
+  }
+  std::stringstream ss;
+  ss << "Map[";
+  for (auto [k, v] : occurence) {
+    ss << k << ": " << v << ",";
+  }
+  ss << "]";
+  // SLOG(swatlib::printVector(bucketCmps), "\n");
+  PLOGD << "Total number of buckets: " << map.numBuckets << " empty buckets: " << emptyBuckets;
+  PLOGD << "Bucket size occurence: " << ss.str();
+  double bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(algoconfig.bufsize) * 100.0;
+  PLOGD << "Max bucket: " << maxBucket << "/" << algoconfig.bufsize << " (" << bucketPerc << "%)\n";
+  double totalTransferSize = algoconfig.getInputBufferSize32b() * 4;
+  auto transferInfoRatio = static_cast<double>(dataCount) / totalTransferSize * 100;
+  PLOGD << "Transfer info/total: " << dataCount << "/" << totalTransferSize << " (" << transferInfoRatio << "%)\n";
+#endif
 
   int slot = 0;
   if (use_remote_buffer) {
@@ -684,12 +698,16 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
 
 #ifdef IPUMA_DEBUG
   int emptyBuckets = 0;
+  int maxBucket = 0;
+  long dataCount = 0;
   std::vector<int> bucketCmps;
   std::map<int, int> occurence;
   for (const auto& bucket : map.buckets) {
     if (bucket.cmps.size() == 0) emptyBuckets++;
     occurence[bucket.cmps.size()]++;
     bucketCmps.push_back(bucket.cmps.size());
+    maxBucket = std::max(maxBucket, bucket.seqSize);
+    dataCount += bucket.seqSize;
   }
   std::stringstream ss;
   ss << "Map[";
@@ -700,6 +718,11 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
   // SLOG(swatlib::printVector(bucketCmps), "\n");
   PLOGD << "Total number of buckets: " << map.numBuckets << " empty buckets: " << emptyBuckets;
   PLOGD << "Bucket size occurence: " << ss.str();
+  double bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(algoconfig.bufsize) * 100.0;
+  PLOGD << "Max bucket: " << maxBucket << "/" << algoconfig.bufsize << " (" << bucketPerc << "%)\n";
+  double totalTransferSize = algoconfig.getInputBufferSize32b() * 4;
+  auto transferInfoRatio = static_cast<double>(dataCount) / totalTransferSize * 100;
+  PLOGD << "Transfer info/total: " << dataCount << "/" << totalTransferSize << " (" << transferInfoRatio << "%)\n";
 #endif
   // SLOG("Inner comparison time: ", preprocessTimer.get_elapsed(), " engine run: ", engineTimer.get_elapsed(), "\n");
 }

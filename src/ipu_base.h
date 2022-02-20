@@ -6,6 +6,7 @@
 
 #include "swatlib/similarity.h"
 #include "swatlib/encoding.h"
+#include "ipu_config.h"
 
 using namespace poplar;
 namespace ipu {
@@ -13,16 +14,6 @@ namespace ipu {
 void addCycleCount(Graph& graph, program::Sequence& mainProgram, const std::string handle);
 uint64_t getTotalCycles(Engine& engine, const std::string handle);
 double calculateGCUPS(uint64_t cellCount, double elapsedSeconds);
-
-struct SWConfig {
-        int gapInit = 0;
-        int gapExtend = -1;
-        int matchValue = 1;
-        int mismatchValue = -1;
-        int ambiguityValue = -1;
-        swatlib::Similarity similarity = swatlib::Similarity::nucleicAcid;
-        swatlib::DataType datatype = swatlib::DataType::nucleicAcid;
-};
 
 Type formatToType(const std::string& format);
 

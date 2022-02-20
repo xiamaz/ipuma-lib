@@ -95,7 +95,7 @@ TEST_F(SimpleCorrectnessTest, UseAssemblyVertex) {
     .ambiguityValue = -ALN_AMBIGUITY_COST,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::assembly});
+  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::assembly});
 
   driver.compare_local(queries, refs);
   auto aln_results = driver.get_result();
@@ -108,8 +108,8 @@ TEST_F(SimpleCorrectnessTest, UseCppVertex) {
     .maxAB = 300,
     .maxBatches = 20,
     .bufsize = 3000,
-    .vtype = ipu::batchaffine::VertexType::cpp,
-    .fillAlgo = ipu::partition::Algorithm::roundRobin
+    .vtype = ipu::VertexType::cpp,
+    .fillAlgo = ipu::Algorithm::roundRobin
   });
 
   driver.compare_local(queries, refs);
@@ -123,8 +123,8 @@ TEST_F(SimpleCorrectnessTest, UseCppMultiVertex) {
     .maxAB = 300,
     .maxBatches = 20,
     .bufsize = 3000,
-    .vtype = ipu::batchaffine::VertexType::multi,
-    .fillAlgo = ipu::partition::Algorithm::roundRobin
+    .vtype = ipu::VertexType::multi,
+    .fillAlgo = ipu::Algorithm::roundRobin
   });
 
   driver.compare_local(queries, refs);
@@ -138,8 +138,8 @@ TEST_F(SimpleCorrectnessTest, UseAsmMultiVertex) {
     .maxAB = 300,
     .maxBatches = 20,
     .bufsize = 3000,
-    .vtype = ipu::batchaffine::VertexType::multiasm,
-    .fillAlgo = ipu::partition::Algorithm::roundRobin
+    .vtype = ipu::VertexType::multiasm,
+    .fillAlgo = ipu::Algorithm::roundRobin
   });
 
   driver.compare_local(queries, refs);
@@ -153,12 +153,12 @@ TEST_F(SimpleCorrectnessTest, useMNComparisons) {
     .maxAB = 300,
     .maxBatches = 5,
     .bufsize = 3000,
-    .vtype = ipu::batchaffine::VertexType::cpp,
-    .fillAlgo = ipu::partition::Algorithm::roundRobin
+    .vtype = ipu::VertexType::cpp,
+    .fillAlgo = ipu::Algorithm::roundRobin
   });
 
   std::vector<std::string> seqs;
-  Comparisons comparisons;
+  ipu::Comparisons comparisons;
   for (int i = 0; i < queries.size(); ++i) {
     seqs.push_back(queries[i]);
     seqs.push_back(refs[i]);
@@ -184,7 +184,7 @@ TEST_F(SimpleCorrectnessTest, prepareTest) {
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
   };
-  ipu::batchaffine::IPUAlgoConfig algoconfig = {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::assembly};
+  ipu::IPUAlgoConfig algoconfig = {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::assembly};
 
   std::vector<int32_t> inputs(algoconfig.getInputBufferSize32b());
   std::vector<int> mapping;
@@ -198,13 +198,13 @@ TEST(PrepareTest, simple) {
   int maxAB = 10;
   int bufsize = maxBatches * maxAB * 2;
   ipu::SWConfig swconfig = {};
-  ipu::batchaffine::IPUAlgoConfig config = {
+  ipu::IPUAlgoConfig config = {
     .tilesUsed = tilesUsed,
     .maxAB = maxAB,
     .maxBatches = maxBatches,
     .bufsize = bufsize,
-    .vtype = ipu::batchaffine::VertexType::cpp,
-    .fillAlgo = ipu::partition::Algorithm::fillFirst
+    .vtype = ipu::VertexType::cpp,
+    .fillAlgo = ipu::Algorithm::fillFirst
   };
 
   std::vector<std::string> A, B;

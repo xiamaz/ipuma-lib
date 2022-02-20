@@ -6,5 +6,6 @@
 #include "timing.hpp"
 #include "vector.hpp"
 #include "encoding.h"
+#include "fasta.h"
 
 #endif // SWATLIB_H

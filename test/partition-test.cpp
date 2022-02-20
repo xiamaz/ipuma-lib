@@ -35,7 +35,7 @@ protected:
 
 TEST_F(PartitioningTest, fullFillFirst) {
   genFull();
-  ipu::batchaffine::SWAlgorithm::fillBuckets(ipu::partition::Algorithm::fillFirst, map, a, b, 0);
+  ipu::batchaffine::SWAlgorithm::fillBuckets(ipu::Algorithm::fillFirst, map, a, b, 0);
 
   checkBucketIndices();
   for (int i = 0; i < tilesUsed; ++i) {
@@ -47,7 +47,7 @@ TEST_F(PartitioningTest, fullFillFirst) {
 
 TEST_F(PartitioningTest, fullRoundRobin) {
   genFull();
-  ipu::batchaffine::SWAlgorithm::fillBuckets(ipu::partition::Algorithm::roundRobin, map, a, b, 0);
+  ipu::batchaffine::SWAlgorithm::fillBuckets(ipu::Algorithm::roundRobin, map, a, b, 0);
 
   checkBucketIndices();
   for (int i = 0; i < tilesUsed; ++i) {
@@ -59,7 +59,7 @@ TEST_F(PartitioningTest, fullRoundRobin) {
 
 TEST_F(PartitioningTest, fullGreedy) {
   genFull();
-  ipu::batchaffine::SWAlgorithm::fillBuckets(ipu::partition::Algorithm::greedy, map, a, b, 0);
+  ipu::batchaffine::SWAlgorithm::fillBuckets(ipu::Algorithm::greedy, map, a, b, 0);
 
   checkBucketIndices();
   for (int i = 0; i < tilesUsed; ++i) {
@@ -72,7 +72,7 @@ TEST_F(PartitioningTest, fullGreedy) {
 TEST_F(PartitioningTest, partialFillFirst) {
   a = {"AAAAAA", "AA"};
   b = {"AAAAAA", "AAA"};
-  ipu::batchaffine::SWAlgorithm::fillBuckets(ipu::partition::Algorithm::fillFirst, map, a, b, 0);
+  ipu::batchaffine::SWAlgorithm::fillBuckets(ipu::Algorithm::fillFirst, map, a, b, 0);
 
   checkBucketIndices();
   for (int i = 0; i < tilesUsed; ++i) {
@@ -90,7 +90,7 @@ TEST_F(PartitioningTest, partialFillFirst) {
 TEST_F(PartitioningTest, partialRoundRobin) {
   a = {"AAAAAA", "AA"};
   b = {"AAAAAA", "AAA"};
-  ipu::batchaffine::SWAlgorithm::fillBuckets(ipu::partition::Algorithm::roundRobin, map, a, b, 0);
+  ipu::batchaffine::SWAlgorithm::fillBuckets(ipu::Algorithm::roundRobin, map, a, b, 0);
 
   checkBucketIndices();
   for (int i = 0; i < tilesUsed; ++i) {
@@ -109,25 +109,25 @@ TEST_F(PartitioningTest, partialRoundRobin) {
 }
 
 TEST(PartitionMNTest, compression) {
-  RawSequences Seqs = {"AAAA", "AAAA", "AAAA"};
-  Comparisons Cmps = {{0, 1}, {0, 2}, {0, 2}};
+  ipu::RawSequences Seqs = {"AAAA", "AAAA", "AAAA"};
+  ipu::Comparisons Cmps = {{0, 1}, {0, 2}, {0, 2}};
   ipu::partition::BucketMap map(1, 5, 100);
-  ipu::batchaffine::SWAlgorithm::fillMNBuckets(ipu::partition::Algorithm::fillFirst, map, Seqs, Cmps);
+  ipu::batchaffine::SWAlgorithm::fillMNBuckets(ipu::Algorithm::fillFirst, map, Seqs, Cmps);
   EXPECT_EQ(map.buckets[0].seqSize, 12);
 }
 
 TEST(PartitionMNTest, compressionRR) {
-  RawSequences Seqs = {"AAAA", "AAAA", "AAAA"};
-  Comparisons Cmps = {{0, 1}, {0, 2}, {0, 2}};
+  ipu::RawSequences Seqs = {"AAAA", "AAAA", "AAAA"};
+  ipu::Comparisons Cmps = {{0, 1}, {0, 2}, {0, 2}};
   ipu::partition::BucketMap map(1, 5, 100);
-  ipu::batchaffine::SWAlgorithm::fillMNBuckets(ipu::partition::Algorithm::roundRobin, map, Seqs, Cmps);
+  ipu::batchaffine::SWAlgorithm::fillMNBuckets(ipu::Algorithm::roundRobin, map, Seqs, Cmps);
   EXPECT_EQ(map.buckets[0].seqSize, 12);
 }
 
 TEST(PartitionMNTest, compressionGreedy) {
-  RawSequences Seqs = {"AAAA", "AAAA", "AAAA"};
-  Comparisons Cmps = {{0, 1}, {0, 2}, {0, 2}};
+  ipu::RawSequences Seqs = {"AAAA", "AAAA", "AAAA"};
+  ipu::Comparisons Cmps = {{0, 1}, {0, 2}, {0, 2}};
   ipu::partition::BucketMap map(1, 5, 100);
-  ipu::batchaffine::SWAlgorithm::fillMNBuckets(ipu::partition::Algorithm::greedy, map, Seqs, Cmps);
+  ipu::batchaffine::SWAlgorithm::fillMNBuckets(ipu::Algorithm::greedy, map, Seqs, Cmps);
   EXPECT_EQ(map.buckets[0].seqSize, 12);
 }

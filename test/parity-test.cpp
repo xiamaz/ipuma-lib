@@ -128,7 +128,7 @@ TEST_F(ParityTest, UseAssembly) {
     .ambiguityValue = -ambiguityCost,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::assembly, ipu::partition::Algorithm::greedy});
+  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::assembly, ipu::Algorithm::greedy});
 
   std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
   test_aligns_ipu(alns_ipu, refs, queries, driver);
@@ -149,7 +149,7 @@ TEST_F(ParityTest, UseMultiAssembly) {
     .ambiguityValue = -ambiguityCost,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::multiasm, ipu::partition::Algorithm::greedy});
+  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::multiasm, ipu::Algorithm::greedy});
 
   std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
   test_aligns_ipu(alns_ipu, refs, queries, driver);
@@ -171,7 +171,7 @@ TEST_F(ParityTest, UseGapOpeningCostMultiAsm) {
     .ambiguityValue = -ambiguityCost,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::multiasm, ipu::partition::Algorithm::greedy});
+  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::multiasm, ipu::Algorithm::greedy});
 
   std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
   test_aligns_ipu(alns_ipu, refs, queries, driver);
@@ -271,7 +271,7 @@ TEST_F(AAParityTest, UseCppVertex) {
     .ambiguityValue = -ambiguityCost,
     .similarity = swatlib::Similarity::blosum50,
     .datatype = swatlib::DataType::aminoAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::cpp, ipu::partition::Algorithm::greedy});
+  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::cpp, ipu::Algorithm::greedy});
 
   std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
   test_aligns_ipu(alns_ipu, refs, queries, driver);

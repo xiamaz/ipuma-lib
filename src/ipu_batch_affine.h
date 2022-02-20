@@ -4,37 +4,13 @@
 #include <vector>
 #include "ipu_base.h"
 #include "partition.h"
+#include "ipu_config.h"
 
 
 using namespace poplar;
 
 namespace ipu {
 namespace batchaffine {
-
-enum class VertexType { cpp, assembly, multi, multiasm, stripedasm, multistriped, multistripedasm };
-
-static const std::string typeString[] = {"SWAffine", "SWAffineAsm", "MultiSWAffine", "MultiSWAffineAsm", "StripedSWAffineAsm", "MultiSWStriped", "MultiSWStripedAsm"};
-std::string vertexTypeToString(VertexType v);
-
-struct IPUAlgoConfig {
-  int tilesUsed = 1; // number of active vertices
-  int maxAB = 300; // maximum length of a single comparison
-  int maxBatches = 20; // maximum number of comparisons in a single batch
-  int bufsize = 3000; // total size of buffer for A and B individually
-  VertexType vtype = VertexType::cpp;
-  partition::Algorithm fillAlgo = partition::Algorithm::fillFirst;
-
-  // this is maxbatches * num_vertices
-  int getTotalNumberOfComparisons() const;
-
-  // size of the sequence buffer with 32bits
-  int getBufsize32b() const;
-  int getTotalBufsize32b() const;
-  int getMetaBufferSize32b() const;
-  int getLenBufferSize32b() const;
-  int getInputBufferSize32b() const;
-};
-
 struct BlockAlignmentResults {
   std::vector<int32_t> scores;
   std::vector<int32_t> a_range_result;
@@ -72,8 +48,8 @@ class SWAlgorithm : public IPUAlgorithm {
   bool slot_available();
   slotToken queue_slot();
 
-  static void fillBuckets(partition::Algorithm algo, partition::BucketMap& map, const RawSequences& A, const RawSequences& B, int offset = 0);
-  static void fillMNBuckets(partition::Algorithm algo, partition::BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int offset = 0);
+  static void fillBuckets(Algorithm algo, partition::BucketMap& map, const RawSequences& A, const RawSequences& B, int offset = 0);
+  static void fillMNBuckets(Algorithm algo, partition::BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int offset = 0);
   static void checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B);
 
   static void fill_input_buffer(const partition::BucketMap& map, const swatlib::DataType dtype, const IPUAlgoConfig& algoconfig, const RawSequences& Seqs, const Comparisons& Cmps, int32_t* inputs_begin, int32_t* inputs_end, int32_t* mapping);

@@ -55,7 +55,7 @@ protected:
   vector<string> refs, queries;
 };
 
-class AlgoPerformance : public PerformanceBase, public ::testing::WithParamInterface<ipu::batchaffine::VertexType> {
+class AlgoPerformance : public PerformanceBase, public ::testing::WithParamInterface<ipu::VertexType> {
 };
 
 TEST_P(AlgoPerformance, StressTest) {
@@ -63,7 +63,7 @@ TEST_P(AlgoPerformance, StressTest) {
   int numWorkers = 8832;
   int numCmps = 40;
   int strlen = 150;
-  if (algotype == ipu::batchaffine::VertexType::multi || algotype == ipu::batchaffine::VertexType::multiasm) {
+  if (algotype == ipu::VertexType::multi || algotype == ipu::VertexType::multiasm) {
     numWorkers = numWorkers / 6;
     numCmps = numCmps * 6;
   }
@@ -103,7 +103,7 @@ TEST_P(AlgoPerformance, RunOptimalWithReverse) {
   int numWorkers = 8832;
   int numCmps = 40;
   int strlen = 150;
-  if (algotype == ipu::batchaffine::VertexType::multi || algotype == ipu::batchaffine::VertexType::multiasm) {
+  if (algotype == ipu::VertexType::multi || algotype == ipu::VertexType::multiasm) {
     numWorkers = numWorkers / 6;
     numCmps = numCmps * 6;
   }
@@ -136,7 +136,7 @@ TEST_P(AlgoPerformance, RunOptimal) {
   int numWorkers = 8832;
   int numCmps = 40;
   int strlen = 150;
-  if (algotype == ipu::batchaffine::VertexType::multi || algotype == ipu::batchaffine::VertexType::multiasm) {
+  if (algotype == ipu::VertexType::multi || algotype == ipu::VertexType::multiasm) {
     numWorkers = numWorkers / 6;
     numCmps = numCmps * 6;
   }
@@ -167,10 +167,10 @@ TEST_P(AlgoPerformance, RunOptimal) {
 INSTANTIATE_TEST_SUITE_P(
   VertexTypePerformance,
   AlgoPerformance,
-  testing::Values(ipu::batchaffine::VertexType::cpp, ipu::batchaffine::VertexType::assembly, ipu::batchaffine::VertexType::multi, ipu::batchaffine::VertexType::multiasm)
+  testing::Values(ipu::VertexType::cpp, ipu::VertexType::assembly, ipu::VertexType::multi, ipu::VertexType::multiasm)
   );
 
-class PartitionPerformance : public PerformanceBase, public ::testing::WithParamInterface<ipu::partition::Algorithm> {
+class PartitionPerformance : public PerformanceBase, public ::testing::WithParamInterface<ipu::Algorithm> {
 };
 
 TEST_F(PerformanceBase, rrError) {
@@ -178,7 +178,7 @@ TEST_F(PerformanceBase, rrError) {
   int numCmps = 300;
   int strlen = 2000;
 
-  auto driver = ipu::batchaffine::SWAlgorithm({0, -1, 1, -1, -1, swatlib::Similarity::blosum62, swatlib::DataType::aminoAcid}, {numWorkers, strlen, numCmps, 60000, ipu::batchaffine::VertexType::assembly, ipu::partition::Algorithm::greedy});
+  auto driver = ipu::batchaffine::SWAlgorithm({0, -1, 1, -1, -1, swatlib::Similarity::blosum62, swatlib::DataType::aminoAcid}, {numWorkers, strlen, numCmps, 60000, ipu::VertexType::assembly, ipu::Algorithm::greedy});
 
   for (auto& [path_a, path_b] : RR_ERROR_BATCHS) {
     refs = loadSequences(path_a);
@@ -193,7 +193,7 @@ TEST_P(PartitionPerformance, RealBatches) {
   int numCmps = 100;
   int strlen = 200;
 
-  auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, 8000 * 2, ipu::batchaffine::VertexType::multiasm, GetParam()});
+  auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, 8000 * 2, ipu::VertexType::multiasm, GetParam()});
   for (auto& [path_a, path_b] : INPUT_BATCHS) {
     refs = loadSequences(path_a);
     queries = loadSequences(path_b);
@@ -205,7 +205,7 @@ TEST_P(PartitionPerformance, RealBatches) {
 INSTANTIATE_TEST_SUITE_P(
   PartitionTests,
   PartitionPerformance,
-  testing::Values(ipu::partition::Algorithm::fillFirst, ipu::partition::Algorithm::roundRobin, ipu::partition::Algorithm::greedy)
+  testing::Values(ipu::Algorithm::fillFirst, ipu::Algorithm::roundRobin, ipu::Algorithm::greedy)
 );
 
 TEST(MNPerformance, fullyMxN) {
@@ -215,10 +215,10 @@ TEST(MNPerformance, fullyMxN) {
   int bufsize = 8000 * 2;
   int strPerBucket = bufsize / strlen;
 
-  auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::multiasm});
+  auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::multiasm});
 
   std::vector<std::string> seqs;
-  Comparisons cmps;
+  ipu::Comparisons cmps;
   for (int s = 0; s < bufsize * numWorkers; s += strlen) {
     seqs.push_back(string(strlen, 'A'));
   }

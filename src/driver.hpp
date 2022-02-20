@@ -22,6 +22,26 @@
 #define KLIGN_IPU_BUFSIZE 30000
 #endif
 
+#ifndef ALN_GAP_OPENING_COST
+#define ALN_GAP_OPENING_COST 1
+#endif
+
+#ifndef ALN_GAP_EXTENDING_COST
+#define ALN_GAP_EXTENDING_COST 1
+#endif
+
+#ifndef ALN_MATCH_SCORE
+#define ALN_MATCH_SCORE 1
+#endif
+
+#ifndef ALN_MISMATCH_COST
+#define ALN_MISMATCH_COST 1
+#endif
+
+#ifndef ALN_AMBIGUITY_COST
+#define ALN_AMBIGUITY_COST 1
+#endif
+
 #include "ipu_batch_affine.h"
 
 static const ipu::SWConfig SW_CONFIGURATION = {
@@ -34,17 +54,17 @@ static const ipu::SWConfig SW_CONFIGURATION = {
               .datatype = swatlib::DataType::nucleicAcid,
 };
 
-static const ipu::batchaffine::IPUAlgoConfig ALGO_CONFIGURATION = {
+static const ipu::IPUAlgoConfig ALGO_CONFIGURATION = {
             KLIGN_IPU_TILES,
             KLIGN_IPU_MAXAB_SIZE,
             KLIGN_IPU_MAX_BATCHES,
             KLIGN_IPU_BUFSIZE,
-            ipu::batchaffine::VertexType::cpp,
-            ipu::partition::Algorithm::fillFirst
+            ipu::VertexType::cpp,
+            ipu::Algorithm::fillFirst
 };
 
 ipu::batchaffine::SWAlgorithm* getDriver();
-void init_single_ipu(ipu::SWConfig config, ipu::batchaffine::IPUAlgoConfig algoconfig);
+void init_single_ipu(ipu::SWConfig config, ipu::IPUAlgoConfig algoconfig);
 
 
 

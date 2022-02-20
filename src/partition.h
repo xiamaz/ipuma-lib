@@ -5,8 +5,6 @@
 #include "types.h"
 
 namespace ipu { namespace partition {
-  enum class Algorithm {fillFirst, roundRobin, greedy};
-
   enum class SequenceOrigin{unordered, A, B};
   std::string sequenceOriginToString(SequenceOrigin o);
 
