@@ -7,6 +7,8 @@
 # and upcxx::finalize()
 #
 
+add_subdirectory("${PROJECT_SOURCE_DIR}/googletest" "googletest")
+
 if(ENABLE_POPLAR)
   add_definitions(-DENABLE_IPUS)
   message(STATUS "Building tests for IPUs with poplar")

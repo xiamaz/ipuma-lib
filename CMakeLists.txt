@@ -36,13 +36,18 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-enable_testing()
-
 include_directories("plog/include")
-add_subdirectory(googletest)
 
 add_subdirectory(src)
-add_subdirectory(test)
+
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+  option(PACKAGE_TESTS "Build the tests" ON)
+endif()
+
+if(PACKAGE_TESTS)
+  enable_testing()
+  add_subdirectory(test)
+endif()
 
 #   - POPC_EXECUTABLE
 #   - POPC_FLAGS
