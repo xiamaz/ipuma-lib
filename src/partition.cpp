@@ -220,8 +220,17 @@ namespace partition {
       q.push(std::ref(b));
     }
 
-    for (int i = 0; i < Cmps.size(); ++i) {
+    std::vector<std::pair<int, int>> srts(Cmps.size());
+    for (size_t i = 0; i < Cmps.size(); i++) {
       const auto& cmp = Cmps[i];
+      const auto aLen = Seqs[cmp.indexA].size();
+      const auto bLen = Seqs[cmp.indexB].size();
+      srts[i] = {aLen * bLen, i};
+    }
+    std::sort(srts.begin(), srts.end());
+
+    for (int i = 0; i < Cmps.size(); ++i) {
+      const auto& cmp = Cmps[std::get<1>(srts[i])];
       const auto aLen = Seqs[cmp.indexA].size();
       const auto bLen = Seqs[cmp.indexB].size();
 
