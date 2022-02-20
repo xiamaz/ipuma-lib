@@ -23,37 +23,15 @@ static const std::string REMOTE_MEMORY = "inputs-remotebuffer";
 static const std::string CYCLE_COUNT_OUTER = "cycle-count-outer";
 static const std::string CYCLE_COUNT_INNER = "cycle-count-inner";
 
-void printBucketMapping(BucketMapping bm) {
-  std::cout << "Bucket:"
-            << "\n";
-  for (auto& c : bm.comparisons) {
-    printf("%d: %d %d\n", c.cmpIndex, c.indexA, c.indexB);
-  }
-  std::cout << "=======================\n";
-}
-
-long long getCellCount(const std::vector<std::string>& A, const std::vector<std::string>& B) {
-  long long cellCount = 0;
-  if (A.size() != B.size()) {
-    PLOGW << "Mismatch between size of A " << A.size() << " and size of B " << B.size();
-  }
-  // count cells based on 1:1 comparisons
-  for (int i = 0; i < A.size(); ++i) {
-    cellCount += A[i].size() * B[i].size();
-  }
-  return cellCount;
-}
-
 int IPUAlgoConfig::getBufsize32b() const { return std::ceil(static_cast<double>(bufsize) / 4.0); }
 
 int IPUAlgoConfig::getTotalNumberOfComparisons() const { return tilesUsed * maxBatches; }
 
 int IPUAlgoConfig::getMetaBufferSize32b() const { return getTotalNumberOfComparisons() * 4; };
 
-int IPUAlgoConfig::getSequenceBufferSize8b() const { return tilesUsed * bufsize; }
-int IPUAlgoConfig::getSequenceBufferSize32b() const { return tilesUsed * getBufsize32b(); }
+int IPUAlgoConfig::getTotalBufsize32b() const { return tilesUsed * getBufsize32b(); }
 
-int IPUAlgoConfig::getInputBufferSize32b() const { return getSequenceBufferSize32b() + getMetaBufferSize32b(); }
+int IPUAlgoConfig::getInputBufferSize32b() const { return getTotalBufsize32b() + getMetaBufferSize32b(); }
 
 std::string vertexTypeToString(VertexType v) { return typeString[static_cast<int>(v)]; }
 
@@ -308,7 +286,7 @@ void SWAlgorithm::fillBuckets(partition::Algorithm algo, partition::BucketMap& m
 
 size_t SWAlgorithm::getSeqsOffset(const IPUAlgoConfig& config) { return 0; }
 
-size_t SWAlgorithm::getMetaOffset(const IPUAlgoConfig& config) { return config.getSequenceBufferSize32b(); }
+size_t SWAlgorithm::getMetaOffset(const IPUAlgoConfig& config) { return config.getTotalBufsize32b(); }
 
 void SWAlgorithm::refetch() { engine->run(1); }
 

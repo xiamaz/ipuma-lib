@@ -24,21 +24,12 @@ struct IPUAlgoConfig {
   VertexType vtype = VertexType::cpp;
   partition::Algorithm fillAlgo = partition::Algorithm::fillFirst;
 
-  /**
-   * @brief This calculates the total number of comparisons that can be computed in a single engine run on the IPU.
-   * 
-   * @return int 
-   */
+  // this is maxbatches * num_vertices
   int getTotalNumberOfComparisons() const;
 
-  /**
-   * @brief This calculated the required buffer size for input strings across all vertices.
-   * 
-   * @return int 
-   */
+  // size of the sequence buffer with 32bits
   int getBufsize32b() const;
-  int getSequenceBufferSize8b() const;
-  int getSequenceBufferSize32b() const;
+  int getTotalBufsize32b() const;
   int getMetaBufferSize32b() const;
   int getLenBufferSize32b() const;
   int getInputBufferSize32b() const;
@@ -48,16 +39,6 @@ struct BlockAlignmentResults {
   std::vector<int32_t> scores;
   std::vector<int32_t> a_range_result;
   std::vector<int32_t> b_range_result;
-};
-
-struct Comparison {
-  int cmpIndex;
-  int indexA;
-  int indexB;
-};
-
-struct BucketMapping {
-  std::vector<Comparison> comparisons;
 };
 
 using slotToken = int;

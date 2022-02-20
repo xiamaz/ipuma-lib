@@ -36,9 +36,6 @@ namespace ipu { namespace partition {
     std::vector<SequenceMapping> seqs;
     std::vector<ComparisonMapping> cmps;
 
-    // bool operator<(const BucketMapping& rhs);
-    // bool operator>(const BucketMapping& rhs);
-
     std::string toString();
   };
 
