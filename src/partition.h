@@ -2,9 +2,60 @@
 #define PARTITION_H
 #include<string>
 #include<vector>
+#include "types.h"
 
 namespace ipu { namespace partition {
   enum class Algorithm {fillFirst, roundRobin, greedy};
+
+  enum class SequenceOrigin{unordered, A, B};
+  std::string sequenceOriginToString(SequenceOrigin o);
+
+  struct ComparisonMapping {
+    int comparisonIndex;  // index in cmp input list
+    int sizeA;
+    int offsetA;
+    int sizeB;
+    int offsetB;
+
+    std::string toString();
+  };
+
+  struct SequenceMapping {
+    int index;  // index in input list
+    int offset;
+    SequenceOrigin origin = SequenceOrigin::unordered;
+
+    std::string toString();
+  };
+
+  struct BucketMapping {
+    int bucketIndex;
+    int maxLen; // length of longest sequence
+    int seqSize; // length of current sequences
+    int weight; // custom weight (currently only used in round robin)
+    std::vector<SequenceMapping> seqs;
+    std::vector<ComparisonMapping> cmps;
+
+    // bool operator<(const BucketMapping& rhs);
+    // bool operator>(const BucketMapping& rhs);
+
+    std::string toString();
+  };
+
+  bool operator<(const ipu::partition::BucketMapping& b1, const ipu::partition::BucketMapping& b2);
+  bool operator>(const ipu::partition::BucketMapping& b1, const ipu::partition::BucketMapping& b2);
+
+  struct BucketMap {
+    std::vector<BucketMapping> buckets;
+    int numBuckets;
+    int cmpCapacity;
+    int sequenceCapacity;
+
+    BucketMap();
+    BucketMap(int nB, int nC, int sC);
+
+    std::string toString();
+  };
 
   struct BucketData {
     int count;
@@ -12,9 +63,13 @@ namespace ipu { namespace partition {
     int weight;
   };
 
-  int fillFirst(std::vector<std::tuple<int, int>>& mapping, const std::vector<std::string>& A, const std::vector<std::string>& B, int bucketCount, int bucketCapacity, int bucketCountCapacity);
-  int roundRobin(std::vector<std::tuple<int, int>>& mapping, const std::vector<std::string>& A, const std::vector<std::string>& B, int bucketCount, int bucketCapacity, int bucketCountCapacity);
-  int greedy(std::vector<std::tuple<int, int>>& mapping, const std::vector<std::string>& A, const std::vector<std::string>& B, int bucketCount, int bucketCapacity, int bucketCountCapacity);
+  void fillFirst(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset = 0);
+  void roundRobin(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset = 0);
+  void greedy(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset = 0);
+
+  void fillFirst(BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset = 0);
+  void roundRobin(BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset = 0);
+  void greedy(BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset = 0);
 }}
 
 #endif

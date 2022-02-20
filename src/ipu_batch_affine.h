@@ -1,7 +1,7 @@
 #ifndef IPU_BATCH_AFFINE_HPP
 #define IPU_BATCH_AFFINE_HPP
 
-#include<vector>
+#include <vector>
 #include "ipu_base.h"
 #include "partition.h"
 
@@ -91,16 +91,18 @@ class SWAlgorithm : public IPUAlgorithm {
   bool slot_available();
   slotToken queue_slot();
 
-
-  static std::vector<std::tuple<int, int>> fillBuckets(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int& err);
-  static std::vector<BucketMapping> fillMNBuckets(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& Seqs, const std::vector<int>& comparisons);
+  static void fillBuckets(partition::Algorithm algo, partition::BucketMap& map, const RawSequences& A, const RawSequences& B, int offset = 0);
+  static void fillMNBuckets(partition::Algorithm algo, partition::BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int offset = 0);
   static void checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B);
+
+  static void fill_input_buffer(const partition::BucketMap& map, const swatlib::DataType dtype, const IPUAlgoConfig& algoconfig, const RawSequences& Seqs, const Comparisons& Cmps, int32_t* inputs_begin, int32_t* inputs_end, int32_t* mapping);
+  static void fill_input_buffer(const partition::BucketMap& map, const swatlib::DataType dtype, const IPUAlgoConfig& algoconfig, const RawSequences& A, const RawSequences& B, int32_t* inputs_begin, int32_t* inputs_end, int32_t* mapping);
 
   BlockAlignmentResults get_result();
 
   // Local Buffers
   void compare_local(const std::vector<std::string>& A, const std::vector<std::string>& B, bool errcheck = false);
-  void compare_mn_local(const std::vector<std::string>& Seqs, const std::vector<int>& comparisons, bool errcheck = false);
+  void compare_mn_local(const std::vector<std::string>& Seqs, const Comparisons& Cmps, bool errcheck = false);
 
   void refetch();
 
@@ -111,7 +113,6 @@ class SWAlgorithm : public IPUAlgorithm {
   slotToken upload(int32_t* inputs_begin, int32_t* inputs_end);
  
   static void prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B,  int32_t* inputs_begin, int32_t* inputs_end, int* deviceMapping);
-  static std::vector<int> fill_input_buffer(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& Seqs, const std::vector<BucketMapping>& comparisonMapping, int numComparisons, int32_t* inputs_begin, int32_t* inputs_end);
   static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end);
 };
 }  // namespace batchaffine

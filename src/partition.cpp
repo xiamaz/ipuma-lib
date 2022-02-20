@@ -1,105 +1,341 @@
 #include "partition.h"
 
+#include <sstream>
+#include <functional>
+#include <queue>
 #include <tuple>
+
+#include <iostream>
 
 namespace ipu {
 namespace partition {
-
-  // BucketMap::BucketMap(int nB, int cC, int sC) : numBuckets(nB), cmpCapacity(cC), sequenceCapacity(sC) {
-  //   buckets.resize(nB);
-  // }
-
-  int fillFirst(std::vector<std::tuple<int, int>>& mapping, const std::vector<std::string>& A, const std::vector<std::string>& B, int bucketCount, int bucketCapacity, int bucketCountCapacity) {
-    mapping = std::vector<std::tuple<int, int>>(A.size(), {0, 0});
-    std::vector<BucketData> buckets(bucketCount, {0, 0, 0});
-    int bucketIndex = 0;
-    for (int i = 0; i < A.size(); ++i) {
-      const auto& a = A[i];
-      const auto& b = B[i];
-
-      // find next empty bucket
-      while (bucketIndex < bucketCount) {
-        auto& [bN, bSeq, _] = buckets[bucketIndex];
-        if (bN + 1 <= bucketCountCapacity && bSeq + a.size() + b.size() <= bucketCapacity) {
-          mapping[i] = {bucketIndex, i};
-          bN++;
-          bSeq += a.size() + b.size();
-          // PLOGD << "i: " << i << " bucket index: " << bucketIndex << " cap: " << bA << "/" << bucketCapacity << " n: " << bN << "/" << bucketCountCapacity << "\n";
-          break;
-        } else {
-          bucketIndex++;
-        }
-      }
-      if (bucketIndex >= bucketCount) {
-          return 1;
-      }
+  std::string sequenceOriginToString(SequenceOrigin o) {
+    switch(o) {
+    case SequenceOrigin::A:
+      return "SequenceOrigin::A";
+    case SequenceOrigin::B:
+      return "SequenceOrigin::B";
+    case SequenceOrigin::unordered:
+      return "SequenceOrigin::unordered";
     }
-
-    return 0;
   }
 
-  int roundRobin(std::vector<std::tuple<int, int>>& mapping, const std::vector<std::string>& A, const std::vector<std::string>& B, int bucketCount, int bucketCapacity, int bucketCountCapacity) {
-    mapping = std::vector<std::tuple<int, int>>(A.size(), {0, 0});
-    std::vector<BucketData> buckets(bucketCount, {0, 0, 0});
-    int bucketIndex = 0;
-    for (int i = 0; i < A.size(); ++i) {
-      const auto& a = A[i];
-      const auto& b = B[i];
-
-      // find next empty bucket
-      int boff = 0;
-      for (; boff < bucketCount; ++boff) {
-        int bi = (bucketIndex + boff) % bucketCount;
-        auto& [bN, bSeq, _] = buckets[bi];
-        if (bN + 1 > bucketCountCapacity || bSeq + a.size() + b.size() > bucketCapacity) {
-          continue;
-        } else {
-          mapping[i] = {bi, i};
-          bN++;
-          bSeq += a.size() + b.size();
-          break;
-        }
-      }
-      if (boff >= bucketCount) {
-          return 1;
-      }
-      bucketIndex = (bucketIndex + 1) % bucketCount; // increment bucket index
-    }
-    return 0;
+  std::string ComparisonMapping::toString() {
+    std::stringstream ss;
+    ss << "CM[" << comparisonIndex << ": a(l" << sizeA << " o" << offsetA << ") b(l" << sizeB << " o" << offsetB << ")]";
+    return ss.str();
   }
 
-  // Greedy approach in which we always put current sequence into one with lowest weight
-  int greedy(std::vector<std::tuple<int, int>>& mapping, const std::vector<std::string>& A, const std::vector<std::string>& B, int bucketCount, int bucketCapacity, int bucketCountCapacity) {
-    mapping = std::vector<std::tuple<int, int>>(A.size(), {0, 0});
-    std::vector<BucketData> buckets(bucketCount, {0, 0, 0});
-    for (int i = 0; i < A.size(); ++i) {
-      const auto& a = A[i];
-      const auto& b = B[i];
+  std::string SequenceMapping::toString() {
+    std::stringstream ss;
+    ss << "SM[" << index << ": o" << offset << " t" << sequenceOriginToString(origin) << "]";
+    return ss.str();
+  }
 
-      auto weight = a.size() * b.size();
-      int smallestBucket = -1;
-      int smallestBucketWeight = 0;
-      for (int bi = 0; bi < bucketCount; ++bi) {
-        auto [bN, bSeq, bW] = buckets[bi];
-        if (!(bN + 1 > bucketCountCapacity || bSeq + a.size() + b.size() > bucketCapacity)) {
-          if (smallestBucket == -1 || smallestBucketWeight > bW) {
-            smallestBucket = bi;
-            smallestBucketWeight = bW;
+  std::string BucketMapping::toString() {
+    std::stringstream ss;
+    ss << "BMapping[" << bucketIndex << ": cmps(" << cmps.size() << ") maxLen(" << maxLen << ") seqSize(" << seqSize << ") weight(" << weight << ")]";
+    return ss.str();
+  }
+
+  std::string BucketMap::toString() {
+    std::stringstream ss;
+    ss << "BMap[" << numBuckets << ": maxCmps(" << cmpCapacity << ") bufsize(" << sequenceCapacity << ")]";
+    return ss.str();
+  }
+
+  BucketMap::BucketMap() : numBuckets(0), cmpCapacity(0), sequenceCapacity(0) { }
+
+  BucketMap::BucketMap(int nB, int cC, int sC) : numBuckets(nB), cmpCapacity(cC), sequenceCapacity(sC) {
+    buckets.resize(nB);
+    for (int i = 0; i < nB; ++i) {
+      buckets[i].bucketIndex = i;
+    }
+  }
+
+  bool operator>(const ipu::partition::BucketMapping& b1, const ipu::partition::BucketMapping& b2) {
+    return b1.weight > b2.weight;
+  }
+
+  bool operator<(const ipu::partition::BucketMapping& b1, const ipu::partition::BucketMapping& b2) {
+    return b1.weight < b2.weight;
+  }
+
+  struct SequenceInfo {
+    const int aLen;
+    const int bLen;
+    int effALen;
+    int effBLen;
+    int offsetA;
+    int offsetB;
+  };
+
+  BucketMapping& getNextBucket(BucketMap& map, int curBucket, const Comparison& cmp, SequenceInfo& info, int indexOffset) {
+      int offset = 0;
+      int effAlen, offsetA, effBlen, offsetB;
+      for (; offset < map.numBuckets; ++offset) {
+        int wrapped = (curBucket + offset) % map.numBuckets;
+        const auto& bucket = map.buckets[wrapped];
+
+        const SequenceMapping* smap = nullptr;
+        effAlen = info.aLen;
+        effBlen = info.bLen;
+        for (int n = 0; n < bucket.seqs.size(); ++n) {
+          const auto& s = bucket.seqs[n];
+          if (s.index == indexOffset + cmp.indexA) {
+            effAlen = 0;
+            offsetA = s.offset;
+          }
+          if (s.index == indexOffset + cmp.indexB) {
+            effBlen = 0;
+            offsetB = s.offset;
           }
         }
+        if ((bucket.cmps.size() + 1 <= map.cmpCapacity) && (bucket.seqSize + effAlen + effBlen <= map.sequenceCapacity)) {
+          break;
+        }
       }
-
-      if (smallestBucket == -1) {
-        return 1;
+      if (offset >= map.numBuckets) {
+        throw std::runtime_error("Out of buckets.");
       }
+      curBucket = (curBucket + offset) % map.numBuckets;
+      info.effALen = effAlen;
+      info.effBLen = effBlen;
+      info.offsetA = offsetA;
+      info.offsetB = offsetB;
+      return map.buckets[curBucket];
+  }
 
-      auto& [bN, bSeq, bW] = buckets[smallestBucket];
-      bN++;
-      bSeq += a.size() + b.size();
-      bW += weight;
-      mapping[i] = {smallestBucket, i};
+  void addCmpToBucket(BucketMapping& bucket, SequenceInfo& info, const Comparison& cmp, int bucketCmpIndex, int indexOffset) {
+      bucket.maxLen = std::max(bucket.maxLen, static_cast<int>(info.aLen > info.bLen ? info.aLen : info.bLen));
+      auto ai = indexOffset + cmp.indexA;
+      auto bi = indexOffset + cmp.indexB;
+      auto ci = indexOffset + bucketCmpIndex;
+      if (info.effALen) {
+        info.offsetA = bucket.seqSize;
+        bucket.seqs.push_back({.index=ai, .offset=info.offsetA, .origin = SequenceOrigin::unordered});
+      }
+      if (info.effBLen) {
+        info.offsetB = bucket.seqSize + info.effALen;
+        bucket.seqs.push_back({.index=bi, .offset=info.offsetB, .origin = SequenceOrigin::unordered});
+      }
+      bucket.cmps.push_back({.comparisonIndex = ci, .sizeA = static_cast<int>(info.aLen), .offsetA = info.offsetA, .sizeB = static_cast<int>(info.bLen), .offsetB = info.offsetB});
+      bucket.seqSize += info.effALen + info.effBLen;
+  }
+
+  void fillFirst(BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset) {
+    int curBucket = 0;
+    for (int i = 0; i < Cmps.size(); ++i) {
+      const auto& cmp = Cmps[i];
+      SequenceInfo info = {
+        .aLen = static_cast<int>(Seqs[cmp.indexA].size()),
+        .bLen = static_cast<int>(Seqs[cmp.indexB].size()),
+        0, 0, 0, 0
+      };
+
+      auto& bucket = getNextBucket(map, curBucket, cmp, info, indexOffset);
+      curBucket = bucket.bucketIndex;
+      addCmpToBucket(bucket, info, cmp, i, indexOffset);
     }
-    return 0;
-    // return mapping;
+  }
+
+  void fillFirst(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset) {
+    int curBucket = 0;
+    for (int i = 0; i < A.size(); ++i) {
+      const auto aLen = A[i].size();
+      const auto bLen = B[i].size();
+
+      int offset = 0;
+      for (; offset < map.numBuckets; ++offset) {
+        int wrapped = (curBucket + offset) % map.numBuckets;
+        const auto& bucket = map.buckets[wrapped];
+        if ((bucket.cmps.size() + 1 <= map.cmpCapacity) && (bucket.seqSize + aLen + bLen <= map.sequenceCapacity)) break;
+      }
+      if (offset >= map.numBuckets) {
+        throw std::runtime_error("Out of buckets.");
+      }
+      curBucket = (curBucket + offset) % map.numBuckets;
+      auto& bucket = map.buckets[curBucket];
+      bucket.maxLen = std::max(bucket.maxLen, static_cast<int>(aLen > bLen ? aLen : bLen));
+      auto ci = indexOffset + i;
+      int offsetA = bucket.seqSize;
+      int offsetB = bucket.seqSize + aLen;
+      bucket.seqs.push_back({.index=ci, .offset=offsetA, .origin = SequenceOrigin::A});
+      bucket.seqs.push_back({.index=ci, .offset=offsetB, .origin = SequenceOrigin::B});
+      bucket.cmps.push_back({.comparisonIndex = ci, .sizeA = static_cast<int>(aLen), .offsetA = offsetA, .sizeB = static_cast<int>(bLen), .offsetB = offsetB});
+      bucket.seqSize += aLen + bLen;
+    }
+  }
+
+  void roundRobin(BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset) {
+    int curBucket = 0;
+    for (int i = 0; i < Cmps.size(); ++i) {
+      const auto& cmp = Cmps[i];
+      SequenceInfo info = {
+        .aLen = static_cast<int>(Seqs[cmp.indexA].size()),
+        .bLen = static_cast<int>(Seqs[cmp.indexB].size()),
+        0, 0, 0, 0
+      };
+
+      auto& bucket = getNextBucket(map, curBucket, cmp, info, indexOffset);
+      addCmpToBucket(bucket, info, cmp, i, indexOffset);
+      curBucket = bucket.bucketIndex + 1;
+    }
+  }
+
+  void roundRobin(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset) {
+    int curBucket = 0;
+    for (int i = 0; i < A.size(); ++i) {
+      const auto& aLen = A[i].size();
+      const auto& bLen = B[i].size();
+
+      int offset = 0;
+      for (; offset < map.numBuckets; ++offset) {
+        int wrapped = (curBucket + offset) % map.numBuckets;
+        const auto& bucket = map.buckets[wrapped];
+        if ((bucket.cmps.size() + 1 <= map.cmpCapacity) && (bucket.seqSize + aLen + bLen <= map.sequenceCapacity)) break;
+      }
+      if (offset >= map.numBuckets) {
+        throw std::runtime_error("Out of buckets.");
+      }
+      curBucket = (curBucket + offset) % map.numBuckets;
+      auto& bucket = map.buckets[curBucket];
+      bucket.maxLen = std::max(bucket.maxLen, static_cast<int>(aLen > bLen ? aLen : bLen));
+      auto ci = indexOffset + i;
+      int offsetA = bucket.seqSize;
+      int offsetB = bucket.seqSize + aLen;
+      bucket.seqs.push_back({.index=ci, .offset=offsetA, .origin = SequenceOrigin::A});
+      bucket.seqs.push_back({.index=ci, .offset=offsetB, .origin = SequenceOrigin::B});
+      bucket.cmps.push_back({.comparisonIndex = ci, .sizeA = static_cast<int>(aLen), .offsetA = offsetA, .sizeB = static_cast<int>(bLen), .offsetB = offsetB});
+      bucket.seqSize += aLen + bLen;
+
+      curBucket++; // increment current bucket for round robin
+    }
+  }
+
+  void greedy(BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset) {
+    // std::priority_queue<BucketMapping, std::deque<BucketMapping>, std::greater<BucketMapping&>> q;
+    std::priority_queue<std::reference_wrapper<BucketMapping>, std::deque<std::reference_wrapper<BucketMapping>>, std::greater<std::deque<std::reference_wrapper<BucketMapping>>::value_type>> q;
+    for (auto& b : map.buckets) {
+      q.push(std::ref(b));
+    }
+
+    for (int i = 0; i < Cmps.size(); ++i) {
+      const auto& cmp = Cmps[i];
+      const auto aLen = Seqs[cmp.indexA].size();
+      const auto bLen = Seqs[cmp.indexB].size();
+
+      auto& bucket = q.top().get();
+      q.pop();
+      std::deque<std::reference_wrapper<BucketMapping>> qq;
+      int tries = 0;
+      int effALen, effBLen;
+      int offsetA = 0;
+      int offsetB = 0;
+      while (tries < map.numBuckets) {
+        effALen = aLen;
+        effBLen = bLen;
+        for (int n = 0; n < bucket.seqs.size(); ++n) {
+          if (bucket.seqs[n].index == cmp.indexA) {
+            effALen = 0;
+            offsetA = bucket.seqs[n].offset;
+          }
+          if (bucket.seqs[n].index == cmp.indexB) {
+            effBLen = 0;
+            offsetB = bucket.seqs[n].offset;
+          }
+        }
+        if ((bucket.cmps.size() + 1 > map.cmpCapacity) || (bucket.seqSize + effALen + effBLen > map.sequenceCapacity)) {
+          qq.push_back(std::ref(bucket));
+          bucket = q.top().get();
+          tries++;
+          continue;
+        } else {
+          break;
+        }
+      }
+
+      if (tries == map.numBuckets) {
+          std::cout << bucket.toString() << "\n";
+          for (auto& b : map.buckets) {
+            std::cout << b.toString() << "\n";
+          }
+          throw std::runtime_error("Out of buckets");
+      }
+
+      for (auto b : qq) {
+        q.push(b);
+      }
+
+      auto ai = indexOffset + cmp.indexA;
+      auto bi = indexOffset + cmp.indexB;
+      auto ci = indexOffset + i;
+      if (effALen) {
+        offsetA = bucket.seqSize;
+        bucket.seqs.push_back({.index=ai, .offset=offsetA, .origin = SequenceOrigin::unordered});
+      }
+      if (effBLen) {
+        offsetB = bucket.seqSize + effALen;
+        bucket.seqs.push_back({.index=bi, .offset=offsetB, .origin = SequenceOrigin::unordered});
+      }
+      bucket.cmps.push_back({.comparisonIndex = ci, .sizeA = static_cast<int>(aLen), .offsetA = offsetA, .sizeB = static_cast<int>(bLen), .offsetB = offsetB});
+
+      bucket.maxLen = std::max(bucket.maxLen, static_cast<int>(aLen > bLen ? aLen : bLen));
+      bucket.seqSize += effALen + effBLen;
+      bucket.weight += aLen * bLen;
+      q.push(std::ref(bucket));
+    }
+  }
+
+  void greedy(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset) {
+    // std::priority_queue<BucketMapping, std::deque<BucketMapping>, std::greater<BucketMapping&>> q;
+    std::priority_queue<std::reference_wrapper<BucketMapping>, std::deque<std::reference_wrapper<BucketMapping>>, std::greater<std::deque<std::reference_wrapper<BucketMapping>>::value_type>> q;
+    for (auto& b : map.buckets) {
+      q.push(std::ref(b));
+    }
+
+    for (int i = 0; i < A.size(); ++i) {
+      const auto& aLen = A[i].size();
+      const auto& bLen = B[i].size();
+
+      auto& bucket = q.top().get();
+      q.pop();
+      std::deque<std::reference_wrapper<BucketMapping>> qq;
+      int tries = 0;
+      while (tries < map.numBuckets) {
+        if ((bucket.cmps.size() + 1 > map.cmpCapacity) || (bucket.seqSize + aLen + bLen > map.sequenceCapacity)) {
+          qq.push_back(std::ref(bucket));
+          bucket = q.top().get();
+          tries++;
+          continue;
+        } else {
+          break;
+        }
+      }
+
+      if (tries == map.numBuckets) {
+          std::cout << bucket.toString() << "\n";
+          for (auto& b : map.buckets) {
+            std::cout << b.toString() << "\n";
+          }
+          throw std::runtime_error("Out of buckets");
+      }
+
+      for (auto b : qq) {
+        q.push(b);
+      }
+
+      auto ci = indexOffset + i;
+      int offsetA = bucket.seqSize;
+      int offsetB = bucket.seqSize + aLen;
+      bucket.seqs.push_back({.index=ci, .offset=offsetA, .origin = SequenceOrigin::A});
+      bucket.seqs.push_back({.index=ci, .offset=offsetB, .origin = SequenceOrigin::B});
+      bucket.cmps.push_back({.comparisonIndex = ci, .sizeA = static_cast<int>(aLen), .offsetA = offsetA, .sizeB = static_cast<int>(bLen), .offsetB = offsetB});
+
+      bucket.maxLen = std::max(bucket.maxLen, static_cast<int>(aLen > bLen ? aLen : bLen));
+      bucket.seqSize += aLen + bLen;
+      bucket.weight += aLen * bLen;
+      q.push(std::ref(bucket));
+    }
   }
 }}

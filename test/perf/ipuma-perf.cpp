@@ -178,7 +178,7 @@ TEST_F(PerformanceBase, rrError) {
   int numCmps = 300;
   int strlen = 2000;
 
-  auto driver = ipu::batchaffine::SWAlgorithm({0, -1, 1, -1, -1, swatlib::Similarity::blosum62, swatlib::DataType::aminoAcid}, {numWorkers, strlen, numCmps, 43000, ipu::batchaffine::VertexType::cpp, ipu::partition::Algorithm::roundRobin});
+  auto driver = ipu::batchaffine::SWAlgorithm({0, -1, 1, -1, -1, swatlib::Similarity::blosum62, swatlib::DataType::aminoAcid}, {numWorkers, strlen, numCmps, 60000, ipu::batchaffine::VertexType::assembly, ipu::partition::Algorithm::greedy});
 
   for (auto& [path_a, path_b] : RR_ERROR_BATCHS) {
     refs = loadSequences(path_a);
@@ -218,7 +218,7 @@ TEST(MNPerformance, fullyMxN) {
   auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::multiasm});
 
   std::vector<std::string> seqs;
-  std::vector<int> cmps;
+  Comparisons cmps;
   for (int s = 0; s < bufsize * numWorkers; s += strlen) {
     seqs.push_back(string(strlen, 'A'));
   }
@@ -226,8 +226,7 @@ TEST(MNPerformance, fullyMxN) {
     for (int i = 1; i < strPerBucket; ++i) {
       for (int j = 0; j < i; ++j)  {
         int seqBase = b * strPerBucket;
-        cmps.push_back(seqBase + i);
-        cmps.push_back(seqBase + j);
+        cmps.push_back({seqBase + i, seqBase + j});
       }
     }
   }

@@ -158,17 +158,38 @@ TEST_F(SimpleCorrectnessTest, useMNComparisons) {
   });
 
   std::vector<std::string> seqs;
-  std::vector<int> comparisons;
+  Comparisons comparisons;
   for (int i = 0; i < queries.size(); ++i) {
     seqs.push_back(queries[i]);
     seqs.push_back(refs[i]);
-    comparisons.push_back(2 * i);
-    comparisons.push_back(2 * i + 1);
+    comparisons.push_back({2 * i, 2 * i + 1});
   }
 
   driver.compare_mn_local(seqs, comparisons);
   auto aln_results = driver.get_result();
   checkResults(aln_results);
+}
+
+TEST_F(SimpleCorrectnessTest, prepareTest) {
+  int numWorkers = 1;
+  int numCmps = 30;
+  int strlen = 20;
+  int bufsize = 1000;
+  ipu::SWConfig swconfig = {
+    .gapInit = 0,
+    .gapExtend = -ALN_GAP_EXTENDING_COST,
+    .matchValue = ALN_MATCH_SCORE,
+    .mismatchValue = -ALN_MISMATCH_COST,
+    .ambiguityValue = -ALN_AMBIGUITY_COST,
+    .similarity = swatlib::Similarity::nucleicAcid,
+    .datatype = swatlib::DataType::nucleicAcid,
+  };
+  ipu::batchaffine::IPUAlgoConfig algoconfig = {numWorkers, strlen, numCmps, bufsize, ipu::batchaffine::VertexType::assembly};
+
+  std::vector<int32_t> inputs(algoconfig.getInputBufferSize32b());
+  std::vector<int> mapping;
+  ipu::batchaffine::SWAlgorithm::prepare_remote(swconfig, algoconfig, queries, refs, &*inputs.begin(), &*inputs.end(), mapping.data());
+  std::cout << swatlib::printVector(inputs) << "\n";
 }
 
 TEST(PrepareTest, simple) {
