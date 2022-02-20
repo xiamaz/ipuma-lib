@@ -288,7 +288,6 @@ namespace partition {
   }
 
   void greedy(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset) {
-    // std::priority_queue<BucketMapping, std::deque<BucketMapping>, std::greater<BucketMapping&>> q;
     std::priority_queue<std::reference_wrapper<BucketMapping>, std::deque<std::reference_wrapper<BucketMapping>>, std::greater<std::deque<std::reference_wrapper<BucketMapping>>::value_type>> q;
     for (auto& b : map.buckets) {
       q.push(std::ref(b));
