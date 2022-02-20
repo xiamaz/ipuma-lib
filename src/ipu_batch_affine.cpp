@@ -89,7 +89,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
   auto frontCs = graph.addComputeSet("SmithWaterman");
   for (int i = 0; i < activeTiles; ++i) {
     int tileIndex = i % tileCount;
-    VertexRef vtx = graph.addVertex(frontCs, vertexTypeToString(vtype),
+    VertexRef vtx = graph.addVertex(frontCs, vertexTypeToIpuLabel(vtype),
                                     {
                                         {"bufSize", bufSize},
                                         {"maxAB", maxAB},

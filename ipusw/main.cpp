@@ -17,9 +17,24 @@ struct IpuSwConfig {
 	IpuSwConfig(ipu::SWConfig sw, ipu::IPUAlgoConfig ipu) : swconfig(sw), ipuconfig(ipu) {}
 
 	IpuSwConfig(json data) {
+		const auto& swdata = data["sw"];
+		const auto& ipudata = data["ipu"];
 		swconfig = {
+			.gapInit = swdata["gapInit"],
+			.gapExtend = swdata["gapExtend"],
+			.matchValue = swdata["matchValue"],
+			.mismatchValue = swdata["mismatchValue"],
+			.ambiguityValue = swdata["ambiguityValue"],
+			.similarity = swatlib::strToSimilarity(swdata["similarity"]),
+			.datatype = swatlib::strToDataType(swdata["datatype"])
 		};
 		ipuconfig = {
+			.tilesUsed = ipudata["tilesUsed"],
+			.maxAB = ipudata["maxAB"],
+			.maxBatches = ipudata["maxBatches"],
+			.bufsize = ipudata["bufsize"],
+			.vtype = ipu::strToVertexType(ipudata["vtype"]),
+			.fillAlgo = ipu::strToAlgorithm(ipudata["fillAlgo"])
 		};
 	}
 };
