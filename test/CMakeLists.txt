@@ -1,12 +1,3 @@
-# MHM2 testing
-
-#
-# The intent here is to include unit tests, like endian correctness for plain
-# old C/C++ and not depend on upcxx / upcxx-run to execute them, so make test
-# can work on all platforms including multi node without calling upcxx::init()
-# and upcxx::finalize()
-#
-
 add_subdirectory("${PROJECT_SOURCE_DIR}/googletest" "googletest")
 
 if(ENABLE_POPLAR)

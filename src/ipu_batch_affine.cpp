@@ -84,8 +84,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     graph.setTileMapping(BRanges[i], tileIndex);
   }
 
-  OptionFlags streamOptions({/*{"bufferingDepth", "2"}, {"splitLimit", "0"}*/});
-  // OptionFlags streamOptions({{"bufferingDepth", "2"}, {"splitLimit", "0"}});
+  OptionFlags streamOptions({});
 
   auto frontCs = graph.addComputeSet("SmithWaterman");
   for (int i = 0; i < activeTiles; ++i) {
@@ -99,8 +98,6 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
                                         {"maxNPerTile", maxBatches},
                                         {"Seqs", Seqs[i]},
                                         {"Meta", CompMeta[i]},
-                                        // {"Alen", Alens[i]},
-                                        // {"Blen", Blens[i]},
                                         {"simMatrix", similarity},
                                         {"score", Scores[i]},
                                         {"ARange", ARanges[i]},
@@ -499,7 +496,6 @@ void SWAlgorithm::compare_mn_local(const std::vector<std::string>& Seqs, const C
     ss << k << ": " << v << ",";
   }
   ss << "]";
-  // SLOG(swatlib::printVector(bucketCmps), "\n");
   PLOGD << "Total number of buckets: " << map.numBuckets << " empty buckets: " << emptyBuckets;
   PLOGD << "Bucket size occurence: " << ss.str();
   double bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(algoconfig.bufsize) * 100.0;
@@ -628,14 +624,6 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
   memset(inputs_begin, 0, input_elems * sizeof(int32_t));
   stageTimers[2].tock();
 
-  // #ifdef IPUMA_DEBUG
-  // for (int32_t* it = inputs_begin; it != inputs_end; ++it) {
-  //   if (*it != 0) {
-  //     PLOGW << "Results are not zero";
-  //   }
-  // }
-  // #endif
-
   stageTimers[3].tick();
   partition::BucketMap map(algoconfig.tilesUsed, algoconfig.maxBatches, algoconfig.bufsize);
   fillBuckets(algoconfig.fillAlgo, map, A, B, 0);
@@ -715,7 +703,6 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
     ss << k << ": " << v << ",";
   }
   ss << "]";
-  // SLOG(swatlib::printVector(bucketCmps), "\n");
   PLOGD << "Total number of buckets: " << map.numBuckets << " empty buckets: " << emptyBuckets;
   PLOGD << "Bucket size occurence: " << ss.str();
   double bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(algoconfig.bufsize) * 100.0;
@@ -724,7 +711,6 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
   auto transferInfoRatio = static_cast<double>(dataCount) / totalTransferSize * 100;
   PLOGD << "Transfer info/total: " << dataCount << "/" << totalTransferSize << " (" << transferInfoRatio << "%)\n";
 #endif
-  // SLOG("Inner comparison time: ", preprocessTimer.get_elapsed(), " engine run: ", engineTimer.get_elapsed(), "\n");
 }
 slotToken SWAlgorithm::queue_slot() {
   assert(buf_has_capacity());
