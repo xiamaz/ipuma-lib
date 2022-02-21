@@ -230,7 +230,8 @@ namespace partition {
     std::sort(srts.begin(), srts.end());
 
     for (int i = 0; i < Cmps.size(); ++i) {
-      const auto& cmp = Cmps[std::get<1>(srts[i])];
+      const auto cmpIndex = std::get<1>(srts[i]);
+      const auto& cmp = Cmps[cmpIndex];
       const auto aLen = Seqs[cmp.indexA].size();
       const auto bLen = Seqs[cmp.indexB].size();
 
@@ -278,7 +279,7 @@ namespace partition {
 
       auto ai = indexOffset + cmp.indexA;
       auto bi = indexOffset + cmp.indexB;
-      auto ci = indexOffset + i;
+      auto ci = indexOffset + cmpIndex;
       if (effALen) {
         offsetA = bucket.seqSize;
         bucket.seqs.push_back({.index=ai, .offset=offsetA, .origin = SequenceOrigin::unordered});
@@ -304,15 +305,16 @@ namespace partition {
 
     std::vector<std::pair<int, int>> srts(A.size());
     for (size_t i = 0; i < A.size(); i++) {
-      const auto& aLen = A[i].size();
-      const auto& bLen = B[i].size();
+      const auto aLen = A[i].size();
+      const auto bLen = B[i].size();
       srts[i] = {aLen * bLen, i};
     }
     std::sort(srts.begin(), srts.end());
 
     for (int i = 0; i < A.size(); ++i) {
-      const auto& aLen = A[std::get<1>(srts[i])].size();
-      const auto& bLen = B[std::get<1>(srts[i])].size();
+      const auto seqIndex = std::get<1>(srts[i]);
+      const auto aLen = A[seqIndex].size();
+      const auto bLen = B[seqIndex].size();
 
       auto& bucket = q.top().get();
       q.pop();
@@ -341,7 +343,7 @@ namespace partition {
         q.push(b);
       }
 
-      auto ci = indexOffset + i;
+      auto ci = indexOffset + seqIndex;
       int offsetA = bucket.seqSize;
       int offsetB = bucket.seqSize + aLen;
       bucket.seqs.push_back({.index=ci, .offset=offsetA, .origin = SequenceOrigin::A});

@@ -187,9 +187,9 @@ TEST_F(SimpleCorrectnessTest, prepareTest) {
   ipu::IPUAlgoConfig algoconfig = {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::assembly};
 
   std::vector<int32_t> inputs(algoconfig.getInputBufferSize32b());
-  std::vector<int> mapping;
+  std::vector<int> mapping(queries.size(), 0);
+
   ipu::batchaffine::SWAlgorithm::prepare_remote(swconfig, algoconfig, queries, refs, &*inputs.begin(), &*inputs.end(), mapping.data());
-  std::cout << swatlib::printVector(inputs) << "\n";
 }
 
 TEST(PrepareTest, simple) {
@@ -218,6 +218,7 @@ TEST(PrepareTest, simple) {
 
   inputs[0] = 0xDEADBEEF;
   inputs[inputs.size() - 1] = 0xDEADBEEF;
+
   ipu::batchaffine::SWAlgorithm::prepare_remote(swconfig, config, A, B, &*inputs.begin() + 1, &*inputs.end() - 1, mapping.data());
   std::vector<int32_t> slice_begin(inputs.begin(), inputs.begin() + 10);
   std::vector<int32_t> slice_end(inputs.end() - 10, inputs.end());

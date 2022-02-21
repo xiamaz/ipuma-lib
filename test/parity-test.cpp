@@ -115,6 +115,42 @@ void test_aligns_ipu(std::vector<StripedSmithWaterman::Alignment> &alns, std::ve
   }
 }
 
+void test_aligns_ipu_mn(std::vector<StripedSmithWaterman::Alignment> &alns, std::vector<std::string> query, std::vector<std::string> ref, ipu::batchaffine::SWAlgorithm &algo) {
+  alns.reserve(query.size());
+
+  ipu::RawSequences seqs;
+  ipu::Comparisons cmps;
+  for (int i = 0; i < query.size(); ++i) {
+    seqs.push_back(query[i]);
+    seqs.push_back(ref[i]);
+    cmps.push_back({i*2, i*2+1});
+  }
+
+  algo.compare_mn_local(seqs, cmps);
+  auto aln_results = algo.get_result();
+
+  for (int i = 0; i < query.size(); i++) {
+    alns.push_back({});
+    StripedSmithWaterman::Alignment &aln = alns[i];
+
+    auto uda = aln_results.a_range_result[i];
+    int16_t query_begin = uda & 0xffff;
+    int16_t query_end = uda >> 16;
+
+    auto udb = aln_results.b_range_result[i];
+    int16_t ref_begin = udb & 0xffff;
+    int16_t ref_end = udb >> 16;
+
+    aln.query_end = query_end;
+    aln.query_begin = query_begin;
+    aln.ref_begin = ref_begin;
+    aln.ref_end = ref_end;
+    aln.sw_score = aln_results.scores[i];
+    aln.sw_score_next_best = 0;
+    aln.mismatches = 0;
+  }
+}
+
 TEST_F(ParityTest, UseAssembly) {
   int numWorkers = 10;
   int numCmps = 10;
@@ -153,6 +189,27 @@ TEST_F(ParityTest, UseMultiAssembly) {
 
   std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
   test_aligns_ipu(alns_ipu, refs, queries, driver);
+
+  checkResults(alns_ipu);
+}
+
+TEST_F(ParityTest, UseMNComparison) {
+  int numWorkers = 10;
+  int numCmps = 10;
+  int strlen = 120;
+  int bufsize = 1000;
+  auto driver = ipu::batchaffine::SWAlgorithm({
+    .gapInit = -(gapOpening-gapExtend),
+    .gapExtend = -gapExtend,
+    .matchValue = matchScore,
+    .mismatchValue = -mismatchScore,
+    .ambiguityValue = -ambiguityCost,
+    .similarity = swatlib::Similarity::nucleicAcid,
+    .datatype = swatlib::DataType::nucleicAcid,
+  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::multiasm, ipu::Algorithm::greedy});
+
+  std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
+  test_aligns_ipu_mn(alns_ipu, refs, queries, driver);
 
   checkResults(alns_ipu);
 }
