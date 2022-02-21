@@ -189,6 +189,8 @@ loopB:
 
 	ld32 $m0, $mzero, $sp, SOFF_ALEN
 
+	setzi $m1, 0
+.align 8
 {
 	rpt $m0, (loopA_end - loopA_start)/8 - 1;
 	fnop
@@ -207,7 +209,7 @@ loopA_start:
 		f32v2add $a0:1, $a0:1, $a2:3 // calc bg + ge and c[j] + gi + ge
 	}
 	{
-		nop
+		movz $apos, $m1, $j
 		f32max $a0, $a0, $a1  // a0 = bgj
 	}
 	{
@@ -231,14 +233,11 @@ loopA_start:
 		f32cmpgt $a0, $lastnogap, $sscore
 	} 
 	{
-		mov $m0, $a0
+		mov $m1, $a0
 		f32max $sscore, $sscore, $lastnogap
 	}
-	{
-		movz $apos, $m0, $j
-		fnop
-	}
 loopA_end:
+	movz $apos, $m1, $j
 
 	ld32 $a0, $mzero, $sp, SOFF_SSCORE
 	f32cmpgt $a0, $sscore, $a0
