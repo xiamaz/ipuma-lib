@@ -4,6 +4,11 @@
 #include <functional>
 #include <queue>
 #include <tuple>
+#include <algorithm>
+#include <array>
+#include <iostream>
+#include <math.h>
+
 
 #include <iostream>
 
@@ -227,7 +232,9 @@ namespace partition {
       const auto bLen = Seqs[cmp.indexB].size();
       srts[i] = {aLen * bLen, i};
     }
-    std::sort(srts.begin(), srts.end());
+    std::sort(srts.begin(), srts.end(), [](std::pair<int, int> &a, std::pair<int, int> &b) {
+        return std::get<0>(a) > std::get<0>(b);
+    });
 
     for (int i = 0; i < Cmps.size(); ++i) {
       const auto cmpIndex = std::get<1>(srts[i]);
@@ -309,7 +316,9 @@ namespace partition {
       const auto bLen = B[i].size();
       srts[i] = {aLen * bLen, i};
     }
-    std::sort(srts.begin(), srts.end());
+    std::sort(srts.begin(), srts.end(), [](std::pair<int, int> &a, std::pair<int, int> &b) { 
+      return std::get<0>(a) > std::get<0>(b);
+    });
 
     for (int i = 0; i < A.size(); ++i) {
       const auto seqIndex = std::get<1>(srts[i]);
