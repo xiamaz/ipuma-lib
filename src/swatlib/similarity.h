@@ -2,6 +2,7 @@
 #define SIMILARITY_H
 #include<cstdint>
 #include "matrix.h"
+#include "nlohmann/json.hpp"
 // Implementations for different similarity scores between single chars
 // Will be extended in the future with specific scoresets for DNA/RNA or Protein.
 
@@ -110,6 +111,9 @@ enum class Similarity {
     blosum62,  // for aa
     simple,  // simple match mismatch 1/-1
 };
+
+void to_json(nlohmann::json& j, const Similarity& s);
+void from_json(const nlohmann::json& j, Similarity& s);
 
 Similarity strToSimilarity(std::string);
 std::string similarityToStr(Similarity);

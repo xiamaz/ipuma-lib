@@ -1,9 +1,18 @@
 #include "similarity.h"
 
+
 int swatlib::simpleSimilarity(char a, char b) {
     if (a == b)
         return 1;
     return -1;
+}
+
+void swatlib::to_json(nlohmann::json& j, const swatlib::Similarity& s) {
+	j = swatlib::similarityToStr(s);
+}
+
+void swatlib::from_json(const nlohmann::json& j, swatlib::Similarity& s) {
+	s = swatlib::strToSimilarity(j);
 }
 
 template <typename T>

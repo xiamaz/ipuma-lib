@@ -2,8 +2,11 @@
 #define IPU_CONFIG_H
 #include "swatlib/swatlib.h"
 #include "types.h"
+#include "nlohmann/json.hpp"
 
 namespace ipu {
+
+using json = nlohmann::json;
 
 struct SWConfig {
         int gapInit = 0;
@@ -33,6 +36,22 @@ struct IPUAlgoConfig {
   int getLenBufferSize32b() const;
   int getInputBufferSize32b() const;
 };
+
+void to_json(json& j, const SWConfig& c);
+
+void from_json(const json& j, SWConfig& c);
+
+void from_json(const json& j, Algorithm& a);
+
+void to_json(json& j, const Algorithm& a);
+
+void from_json(const json& j, VertexType& t);
+
+void to_json(json& j, const VertexType& t);
+
+void to_json(json& j, const IPUAlgoConfig& c);
+
+void from_json(const json& j, IPUAlgoConfig& c);
 
 }
 

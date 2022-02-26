@@ -231,12 +231,12 @@ void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std:
       exit(1);
     }
   }
-  for (const auto& b : B) {
-    if (b.size() > algoconfig.maxAB) {
-      PLOGW << "Sequence size in a " << b.size() << " > " << algoconfig.maxAB;
-      exit(1);
-    }
-  }
+  // for (const auto& b : B) {
+  //   if (b.size() > algoconfig.maxAB) {
+  //     PLOGW << "Sequence size in a " << b.size() << " > " << algoconfig.maxAB;
+  //     exit(1);
+  //   }
+  // }
 }
 
 void SWAlgorithm::fillMNBuckets(Algorithm algo, partition::BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int offset) {
