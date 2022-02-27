@@ -315,11 +315,22 @@ loopBrev:
 	ld32 $j, $mzero, $sp, 0
 	add $m0, $j, 1
 	st32 $sscore, $mzero, $sp, SOFF_SSCORE
+
+	setzi $lastnogap, 0
+
+	add $j, $j, 1
+	setzi $m1, 0
+	sub $apos, $apos, 1
+	.align 8
 {
 	rpt $m0, (loopArev_end - loopArev_start)/8 - 1
 	fnop
 }
 loopArev_start:
+	{
+		sub $j, $j, 1
+		f32max $sscore, $sscore, $lastnogap
+	}
 	{
 		ld32 $a0, $mzero, $bg, $j
 		f32v2add $a4:5, $a4:5, $a2:3
@@ -333,7 +344,7 @@ loopArev_start:
 		f32v2add $a0:1, $a0:1, $a2:3 // calc bg + ge and c[j] + gi + ge
 	}
 	{
-		nop
+		movz $apos, $m1, $j
 		f32max $a0, $a0, $a1  // a0 = bgj
 	}
 	{
@@ -357,18 +368,17 @@ loopArev_start:
 		f32cmpgt $a0, $lastnogap, $sscore
 	} 
 	{
-		mov $m0, $a0
-		f32max $sscore, $sscore, $lastnogap
-	}
-	{
-		movz $apos, $m0, $j
-		fnop
-	}
-	{
-		sub $j, $j, 1
+		mov $m1, $a0
 		fnop
 	}
 loopArev_end:
+	{
+		sub $j, $j, 1
+		f32max $sscore, $sscore, $lastnogap
+	}
+	movz $apos, $m1, $j
+	add $apos, $apos, 1
+	
 	ld32 $a0, $mzero, $sp, SOFF_SSCORE
 	f32cmpgt $a0, $sscore, $a0
 	mov $m0, $a0
