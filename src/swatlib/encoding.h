@@ -5,6 +5,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include "nlohmann/json.hpp"
 
 namespace swatlib {
 
@@ -13,6 +14,10 @@ enum class DataType {
     aminoAcid,
     string  // general string comparison
 };
+
+void to_json(nlohmann::json& j, const DataType& d);
+
+void from_json (const nlohmann::json& j, DataType& d);
 
 DataType strToDataType(std::string);
 

@@ -209,8 +209,8 @@ TEST(PrepareTest, simple) {
 
   std::vector<std::string> A, B;
   for (int i = 0; i < tilesUsed * maxBatches; ++i) {
-    A.push_back(std::string("A", maxAB));
-    B.push_back(std::string("A", maxAB));
+    A.push_back(std::string(maxAB, 'A'));
+    B.push_back(std::string(maxAB, 'A'));
   }
 
   std::vector<int32_t> inputs(config.getInputBufferSize32b() + 2);
@@ -224,4 +224,30 @@ TEST(PrepareTest, simple) {
   std::vector<int32_t> slice_end(inputs.end() - 10, inputs.end());
   EXPECT_EQ(*inputs.begin(), 0xDEADBEEF) << "Start overwritten: " << swatlib::printVector(slice_begin);
   EXPECT_EQ(*(inputs.end() - 1), 0xDEADBEEF) << "End overwritten: " << swatlib::printVector(slice_end);
+}
+
+TEST(LargerTest, simple) {
+  int tilesUsed = 10;
+  int maxBatches = 2;
+  int maxAB = 10;
+  int bufsize = maxBatches * maxAB * 2;
+  ipu::SWConfig swconfig = {};
+  ipu::IPUAlgoConfig config = {
+    .tilesUsed = tilesUsed,
+    .maxAB = maxAB,
+    .maxBatches = maxBatches,
+    .bufsize = bufsize,
+    .vtype = ipu::VertexType::assembly,
+    .fillAlgo = ipu::Algorithm::fillFirst
+  };
+
+  std::vector<std::string> A, B;
+  for (int i = 0; i < 2; ++i) {
+    A.push_back(std::string(maxAB, 'A'));
+    B.push_back("TTTT" + std::string(maxAB, 'A'));
+  }
+  auto driver = ipu::batchaffine::SWAlgorithm(swconfig, config);
+  driver.compare_local(A, B);
+  auto result = driver.get_result();
+  std::cout << A[0].size() << ": " << swatlib::printVector(result.scores) << "\n";
 }

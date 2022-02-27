@@ -29,6 +29,14 @@ namespace swatlib {
 		throw std::runtime_error("Invalid DataType");
 	}
 
+	void to_json(nlohmann::json& j, const DataType& d) {
+		j = swatlib::dataTypeToStr(d);
+	}
+
+	void from_json (const nlohmann::json& j, DataType& d) {
+		d = swatlib::strToDataType(j);
+	}
+
   Encoding::Encoding(std::map<char, uint8_t> mapping) : code(mapping) {
 		codeTable = std::vector<uint8_t>(127, mapping['\0']);
 		decodeTable = std::vector<char>(127, '\0');
