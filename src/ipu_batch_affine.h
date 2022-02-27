@@ -48,9 +48,11 @@ class SWAlgorithm : public IPUAlgorithm {
   bool slot_available();
   slotToken queue_slot();
 
+  static void checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std::vector<int>& SeqSizes);
+  static void checkSequenceSizes(const IPUAlgoConfig& algoconfig, const RawSequences& Seqs);
+
   static void fillBuckets(Algorithm algo, partition::BucketMap& map, const RawSequences& A, const RawSequences& B, int offset = 0);
   static void fillMNBuckets(Algorithm algo, partition::BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int offset = 0);
-  static void checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B);
 
   static void fill_input_buffer(const partition::BucketMap& map, const swatlib::DataType dtype, const IPUAlgoConfig& algoconfig, const RawSequences& Seqs, const Comparisons& Cmps, int32_t* inputs_begin, int32_t* inputs_end, int32_t* mapping);
   static void fill_input_buffer(const partition::BucketMap& map, const swatlib::DataType dtype, const IPUAlgoConfig& algoconfig, const RawSequences& A, const RawSequences& B, int32_t* inputs_begin, int32_t* inputs_end, int32_t* mapping);

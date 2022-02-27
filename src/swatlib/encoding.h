@@ -85,6 +85,8 @@ public:
 	std::string decode(const std::vector<uint8_t>&);
 	std::vector<std::string> decode(const std::vector<std::vector<uint8_t>>&);
 	uint8_t get_terminator();
+
+	std::vector<uint8_t> getCodeTable();
 };
 
 class NAEncoding : public Encoding {

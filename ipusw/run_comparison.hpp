@@ -6,11 +6,14 @@
 #include <mutex>
 #include <condition_variable>
 
+#include <plog/Log.h>
+
 using json = nlohmann::json;
 
 using Fastas = std::vector<swatlib::Fasta>;
 
-void load_data(const std::string& path, Fastas& seqs, int count = 0) {
+void load_data(const std::string& path, std::vector<std::string>& seqs, int count = 0) {
+	PLOGI << "Loading " << count << " entries from " << path;
   std::ifstream is;
   is.open(path);
   if (is.fail()) {
@@ -20,9 +23,9 @@ void load_data(const std::string& path, Fastas& seqs, int count = 0) {
 	int i = 0;
 	while (!(count) || i < count) {
       if (is >> f) {
-          seqs.push_back(f);
+          seqs.push_back(f.sequence);
       } else {
-          seqs.push_back(f);
+          seqs.push_back(f.sequence);
           break;
       }
 			++i;
@@ -39,13 +42,10 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
 	swatlib::TickTock outer, inner;
 	auto driver = ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, 0, false);
 
-	Fastas referenceFasta, queryFasta;
-	PLOGI << "Loading data from " << referencePath;
-	load_data(referencePath, referenceFasta);
-	PLOGI << "Loading data from " << queryPath;
-	load_data(queryPath, queryFasta);
-
 	std::vector<std::string> references, queries;
+	load_data(referencePath, references);
+	load_data(queryPath, queries);
+
 	ipu::partition::BucketMap map(config.ipuconfig.tilesUsed, config.ipuconfig.maxBatches, config.ipuconfig.bufsize);
 	int batchCmps = 0, curBucket = 0;
   ipu::partition::BucketHeap q;
@@ -57,21 +57,37 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
 
 	PLOGI << "Starting comparisons";
 
-	std::vector<int32_t> scores(referenceFasta.size());
-	std::vector<int32_t> arange(referenceFasta.size());
-	std::vector<int32_t> brange(referenceFasta.size());
+	std::vector<int32_t> scores(references.size());
+	std::vector<int32_t> arange(references.size());
+	std::vector<int32_t> brange(references.size());
 
 	outer.tick();
 	int results_offset = 0;
-	for (int i = 0; i < referenceFasta.size(); ++i) {
-		const auto& a = referenceFasta[i].sequence;
-		const auto& b = queryFasta[i].sequence;
-		if (ipu::partition::fillBuckets(config.ipuconfig.fillAlgo, map, {a}, {b}, batchCmps, curBucket, q)) {
-			batchCmps++;
-			references.push_back(a);
-			queries.push_back(b);
+
+	// heuritic slicing for greater speed
+	int numCmps = 0;
+	int totalSize = 0;
+
+	int batchCmpLimit = config.ipuconfig.getTotalNumberOfComparisons() - config.ipuconfig.maxBatches;
+	int batchDataLimit = (config.ipuconfig.getTotalBufsize32b() * 4) - config.ipuconfig.bufsize;
+
+	ipu::RawSequences::iterator aBegin, aEnd, bBegin, bEnd;
+	aBegin = references.begin();
+	bBegin = queries.begin();
+
+	for (int i = 0; i < references.size(); ++i) {
+		const auto alen = references[i].size();
+		const auto blen = queries[i].size();
+		if (numCmps + 1 < batchCmpLimit && totalSize + alen + blen < batchDataLimit) {
+			numCmps++;
+			totalSize += alen + blen;
 		} else {
-			driver.prepare_remote(config.swconfig, config.ipuconfig, references, queries, &*inputs_buf.begin(), &*inputs_buf.end(), mapping.data());
+			aEnd = aBegin + numCmps;
+			bEnd = bBegin + numCmps;
+
+			std::vector<std::string> aBatch(aBegin, aEnd);
+			std::vector<std::string> bBatch(bBegin, bEnd);
+			driver.prepare_remote(config.swconfig, config.ipuconfig, aBatch, bBatch, &*inputs_buf.begin(), &*inputs_buf.end(), mapping.data());
 
 			inner.tick();
 			if (driver.use_remote_buffer) {
@@ -87,25 +103,17 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
 				&*(arange.begin() + results_offset), &*(arange.begin() + results_offset + batchCmps),
 				&*(brange.begin() + results_offset), &*(brange.begin() + results_offset + batchCmps), batchCmps);
 
-			results_offset += batchCmps;
-			references = {a};
-			queries = {b};
-			batchCmps = 1;
-			curBucket = 0;
-			map = ipu::partition::BucketMap(config.ipuconfig.tilesUsed, config.ipuconfig.maxBatches, config.ipuconfig.bufsize);
-			q = {};
-			if (config.ipuconfig.fillAlgo == ipu::Algorithm::greedy) {
-  			for (auto& b : map.buckets) {
-  			  q.push(std::ref(b));
-  			}
-			}
-			if (!ipu::partition::fillBuckets(config.ipuconfig.fillAlgo, map, {a}, {b}, batchCmps, curBucket, q)) {
-				PLOG_FATAL << "Really out of buckets.\n";
-			}
+			results_offset += numCmps;
+			numCmps = 1;
+			totalSize = alen + blen;
+			aBegin = aEnd + 1;
+			bBegin = bEnd + 1;
 		}
 	}
 	if (batchCmps > 0) {
-		driver.prepare_remote(config.swconfig, config.ipuconfig, references, queries, &*inputs_buf.begin(), &*inputs_buf.end(), mapping.data());
+		std::vector<std::string> aBatch(aBegin, aEnd);
+		std::vector<std::string> bBatch(bBegin, bEnd);
+		driver.prepare_remote(config.swconfig, config.ipuconfig, aBatch, bBatch, &*inputs_buf.begin(), &*inputs_buf.end(), mapping.data());
 
 		inner.tick();
 		if (driver.use_remote_buffer) {
@@ -113,12 +121,18 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
 		}
 		driver.prepared_remote_compare(&*inputs_buf.begin(), &*inputs_buf.end(), &*results_buf.begin(), &*results_buf.end());
 		inner.tock();
+		driver.transferResults(
+			&*results_buf.begin(), &*results_buf.end(),
+			&*mapping.begin(), &*mapping.end(),
+			&*(scores.begin() + results_offset), &*(scores.begin() + results_offset + batchCmps),
+			&*(arange.begin() + results_offset), &*(arange.begin() + results_offset + batchCmps),
+			&*(brange.begin() + results_offset), &*(brange.begin() + results_offset + batchCmps), batchCmps);
 	}
 	outer.tock();
 
 	uint64_t cellCount = 0;
-	for (int i = 0; i < referenceFasta.size(); ++i) {
-		cellCount += referenceFasta[i].sequence.size() * queryFasta[i].sequence.size();
+	for (int i = 0; i < references.size(); ++i) {
+		cellCount += references[i].size() * queries[i].size();
 	}
 
 	double outerTime = static_cast<double>(outer.accumulate_microseconds()) / 1e6;

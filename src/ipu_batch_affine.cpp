@@ -198,31 +198,26 @@ SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig)
 
 BlockAlignmentResults SWAlgorithm::get_result() { return {scores, a_range_result, b_range_result}; }
 
-void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A,
-                                     const std::vector<std::string>& B) {
-  if (A.size() != B.size()) {
-    PLOGW << "Mismatched size A " << A.size() << " != B " << B.size();
-    exit(1);
-  }
-  if (A.size() > algoconfig.maxBatches * algoconfig.tilesUsed) {
-    PLOGW << "A has more elements than the maxBatchsize";
-    PLOGW << "A.size() = " << A.size();
+void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std::vector<int>& SeqSizes) {
+  if (SeqSizes.size() > algoconfig.maxBatches * algoconfig.tilesUsed) {
+    PLOGW << "Sequence has more elements than the maxBatchsize";
+    PLOGW << "Seq.size() = " << SeqSizes.size();
     PLOGW << "max comparisons = " << algoconfig.tilesUsed << " * " << algoconfig.maxBatches;
     exit(1);
   }
 
-  for (const auto& a : A) {
-    if (a.size() > algoconfig.maxAB) {
-      PLOGW << "Sequence size in a " << a.size() << " > " << algoconfig.maxAB;
+  for (const auto& s : SeqSizes) {
+    if (s > algoconfig.maxAB) {
+      PLOGW << "Sequence size in seq " << s << " > " << algoconfig.maxAB;
       exit(1);
     }
   }
-  // for (const auto& b : B) {
-  //   if (b.size() > algoconfig.maxAB) {
-  //     PLOGW << "Sequence size in a " << b.size() << " > " << algoconfig.maxAB;
-  //     exit(1);
-  //   }
-  // }
+}
+
+void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const RawSequences& Seqs) {
+  std::vector<int> seqSizes;
+  std::transform(Seqs.begin(), Seqs.end(), std::back_inserter(seqSizes), [](const auto& s) {return s.size();});
+  checkSequenceSizes(algoconfig, seqSizes);
 }
 
 void SWAlgorithm::fillMNBuckets(Algorithm algo, partition::BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int offset) {
@@ -508,7 +503,7 @@ void SWAlgorithm::compare_mn_local(const std::vector<std::string>& Seqs, const C
 }
 
 void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatlib::DataType dtype, const IPUAlgoConfig& algoconfig, const RawSequences& Seqs, const Comparisons& Cmps, int32_t* inputs_begin, int32_t* inputs_end, int32_t* mapping) {
-  auto encoder = swatlib::getEncoder(dtype);
+  auto encodeTable = swatlib::getEncoder(dtype).getCodeTable();
   const size_t seqs_offset = getSeqsOffset(algoconfig);
   const size_t meta_offset = getMetaOffset(algoconfig);
 
@@ -537,7 +532,7 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
         break;
       }
       for (int j = 0; j < seqSize; ++j) {
-        bucket_seq[sm.offset + j] = encoder.encode(seq[j]);
+        bucket_seq[sm.offset + j] = encodeTable[seq[j]];
       }
     }
     for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
@@ -556,7 +551,7 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
   size_t input_elems = inputs_end - inputs_begin;
   memset(inputs_begin, 0, input_elems * sizeof(int32_t));
 
-  auto encoder = swatlib::getEncoder(dtype);
+  const auto encodeTable = swatlib::getEncoder(dtype).getCodeTable();
   const size_t seqs_offset = getSeqsOffset(algoconfig);
   const size_t meta_offset = getMetaOffset(algoconfig);
 
@@ -586,7 +581,7 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
         break;
       }
       for (int j = 0; j < seqSize; ++j) {
-        bucket_seq[sm.offset + j] = encoder.encode(seq[j]);
+        bucket_seq[sm.offset + j] = encodeTable[seq[j]];
       }
     }
     for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
@@ -601,12 +596,12 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
   }
 }
 
-void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A,
-                                 const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, int* seqMapping) {
+void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, int* seqMapping) {
   swatlib::TickTock preprocessTimer;
   std::vector<swatlib::TickTock> stageTimers(3);
   preprocessTimer.tick();
-  checkSequenceSizes(algoconfig, A, B);
+  checkSequenceSizes(algoconfig, A);
+  checkSequenceSizes(algoconfig, B);
 
   stageTimers[1].tick();
   partition::BucketMap map(algoconfig.tilesUsed, algoconfig.maxBatches, algoconfig.bufsize);

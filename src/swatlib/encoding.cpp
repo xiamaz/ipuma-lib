@@ -55,6 +55,10 @@ namespace swatlib {
 		return decodeTable[i];
 	}
 
+	std::vector<uint8_t> Encoding::getCodeTable() {
+		return codeTable;
+	}
+
 	std::vector<uint8_t> Encoding::encode(const std::string& s) {
 		std::vector<uint8_t> v(s.size());
 		for (int i = 0; i < s.size(); ++i) {
