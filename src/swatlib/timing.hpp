@@ -47,12 +47,12 @@ public:
         accumulate_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     }
 
-    int64_t accumulate_microseconds() {
+    int64_t accumulate_microseconds() const {
         return accumulate_time.count();
     }
 
     template<typename Unit = std::chrono::milliseconds>
-    typename Unit::rep duration() {
+    typename Unit::rep duration() const {
         if (!(started && ended))
             throw std::runtime_error("Not started and ended yet.");
         return std::chrono::duration_cast<Unit>(end - start).count();

@@ -4,10 +4,9 @@ set(TEST_SOURCES main.cpp ipuma-perf.cpp)
 
 set(SOURCES ${TEST_SOURCES})
 
-include_directories("${CMAKE_SOURCE_DIR}/src")
-include_directories("${CMAKE_SOURCE_DIR}/src/ssw")
-
 add_executable(${BINARY} ${TEST_SOURCES} ${MHM2_TARGET_OBJECTS})
+
+target_include_directories(ipuma-perf PRIVATE "${CMAKE_SOURCE_DIR}/src" "${CMAKE_SOURCE_DIR}/extern/include")
 
 # add_test(NAME ${BINARY} COMMAND ${BINARY})
 

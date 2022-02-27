@@ -7,16 +7,9 @@ endif()
 
 set(BINARY ipuma-test)
 
-set(TEST_SOURCES main.cpp simple-test.cpp parity-test.cpp partition-test.cpp dev-test.cpp mn_cmp-test.cpp)
+add_executable(${BINARY} main.cpp simple-test.cpp parity-test.cpp partition-test.cpp dev-test.cpp mn_cmp-test.cpp)
+target_include_directories(ipuma-test PRIVATE "${CMAKE_SOURCE_DIR}/src" "${CMAKE_SOURCE_DIR}/extern/include")
 
-# set(SOURCES ${TEST_SOURCES})
-
-include_directories("${CMAKE_SOURCE_DIR}/src")
-include_directories("ssw")
-
-add_subdirectory(ssw)
-
-add_executable(${BINARY} ${TEST_SOURCES})
 
 add_test(NAME ${BINARY} COMMAND ${BINARY})
 

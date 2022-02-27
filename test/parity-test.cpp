@@ -1,7 +1,7 @@
 #include <cmath>
 #include "gtest/gtest.h"
 
-#include "ssw.hpp"
+#include "ssw/ssw.hpp"
 #include "ipu_batch_affine.h"
 
 inline std::string aln2string(StripedSmithWaterman::Alignment &aln) {

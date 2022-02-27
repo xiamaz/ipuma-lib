@@ -7,7 +7,7 @@
 #include <vector>
 #include <tuple>
 
-#include "ssw.hpp"
+#include "ssw/ssw.hpp"
 #include "gtest/gtest.h"
 
 #include "ipu_batch_affine.h"

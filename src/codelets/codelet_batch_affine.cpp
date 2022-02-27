@@ -27,6 +27,7 @@ public:
     poplar::Input<int> gapExt;
     poplar::Input<int> bufSize;
     poplar::Input<int> maxAB;
+    poplar::Input<bool> forwardOnly;
     poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Seqs;
     poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Meta;
     poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> score;
@@ -85,28 +86,30 @@ public:
             
             score[n] = s;
 
-            s = 0;
+            if (!forwardOnly) {
+                s = 0;
 
-            memset(&(C[0]), 0, maxAB * sizeof(int));
-            memset(&(bG[0]), 0, maxAB * sizeof(int));
+                memset(&(C[0]), 0, maxAB * sizeof(int));
+                memset(&(bG[0]), 0, maxAB * sizeof(int));
 
-            // reverse pass
-            for (int i = Bend; i >= 0; --i) {
-                int aGap;
-                lastNoGap = prevNoGap = 0;
-                aGap = gapInit;
-                for (int j = Aend; j >= 0; --j) {
-                    aGap = max(lastNoGap + gI + gE, aGap + gE);
-                    bG[j] = max(C[j] + gI + gE, bG[j] + gE);
-                    lastNoGap = max(prevNoGap + simMatrix[a[j]][b[i]], aGap);
-                    lastNoGap = max(lastNoGap, bG[j]);
-                    lastNoGap = max(lastNoGap, 0);
-                    prevNoGap = C[j];
-                    C[j] = lastNoGap;
-                    if (lastNoGap > s) {
-                        Astart = j;
-                        Bstart = i;
-                        s = lastNoGap;
+                // reverse pass
+                for (int i = Bend; i >= 0; --i) {
+                    int aGap;
+                    lastNoGap = prevNoGap = 0;
+                    aGap = gapInit;
+                    for (int j = Aend; j >= 0; --j) {
+                        aGap = max(lastNoGap + gI + gE, aGap + gE);
+                        bG[j] = max(C[j] + gI + gE, bG[j] + gE);
+                        lastNoGap = max(prevNoGap + simMatrix[a[j]][b[i]], aGap);
+                        lastNoGap = max(lastNoGap, bG[j]);
+                        lastNoGap = max(lastNoGap, 0);
+                        prevNoGap = C[j];
+                        C[j] = lastNoGap;
+                        if (lastNoGap > s) {
+                            Astart = j;
+                            Bstart = i;
+                            s = lastNoGap;
+                        }
                     }
                 }
             }

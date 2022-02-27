@@ -27,6 +27,7 @@ public:
     poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> score;
     poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> ARange;
     poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> BRange;
+    poplar::Input<bool> forwardOnly;
 
 		IS_EXTERNAL_CODELET(1);
 

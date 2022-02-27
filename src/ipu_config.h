@@ -25,6 +25,7 @@ struct IPUAlgoConfig {
   int bufsize = 3000; // total size of buffer for A and B individually
   VertexType vtype = VertexType::cpp;
   Algorithm fillAlgo = Algorithm::fillFirst;
+  bool forwardOnly = false; // do not calculate the start position of a match, this should approx 2x performance, as no reverse pass is needed
 
   // this is maxbatches * num_vertices
   int getTotalNumberOfComparisons() const;

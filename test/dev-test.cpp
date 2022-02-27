@@ -21,7 +21,7 @@ TEST(IPUDev, DISABLED_TestMultiStriping) {
     .ambiguityValue = -ALN_AMBIGUITY_COST,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::multistripedasm});
+  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::multiasm});
 
   vector<string> queries, refs;
   for (int i = 0; i < 1; ++i) {
@@ -55,7 +55,7 @@ TEST(IPUDev, DISABLED_TestStripingAsm) {
     .ambiguityValue = -ALN_AMBIGUITY_COST,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::stripedasm});
+  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::multiasm});
 
   vector<string> queries, refs;
   for (int i = 0; i < 1; ++i) {

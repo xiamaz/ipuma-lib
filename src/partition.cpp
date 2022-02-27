@@ -146,6 +146,28 @@ namespace partition {
 
   void fillFirst(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset) {
     int curBucket = 0;
+    if (!fillFirst(map, A, B, indexOffset, curBucket)) {
+      throw std::runtime_error("Out of buckets.");
+    }
+  }
+  void roundRobin(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset) {
+    int curBucket = 0;
+    if (!roundRobin(map, A, B, indexOffset, curBucket)){
+      throw std::runtime_error("Out of buckets.");
+    }
+  }
+  void greedy(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset) {
+    BucketHeap q;
+    for (auto& b : map.buckets) {
+      q.push(std::ref(b));
+    }
+    if (!greedy(map, A, B, indexOffset, q)) {
+      throw std::runtime_error("Out of buckets.");
+    }
+  }
+
+
+  bool fillFirst(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, int& curBucket) {
     for (int i = 0; i < A.size(); ++i) {
       const auto aLen = A[i].size();
       const auto bLen = B[i].size();
@@ -157,7 +179,7 @@ namespace partition {
         if ((bucket.cmps.size() + 1 <= map.cmpCapacity) && (bucket.seqSize + aLen + bLen <= map.sequenceCapacity)) break;
       }
       if (offset >= map.numBuckets) {
-        throw std::runtime_error("Out of buckets.");
+        return false;
       }
       curBucket = (curBucket + offset) % map.numBuckets;
       auto& bucket = map.buckets[curBucket];
@@ -170,6 +192,7 @@ namespace partition {
       bucket.cmps.push_back({.comparisonIndex = ci, .sizeA = static_cast<int>(aLen), .offsetA = offsetA, .sizeB = static_cast<int>(bLen), .offsetB = offsetB});
       bucket.seqSize += aLen + bLen;
     }
+    return true;
   }
 
   void roundRobin(BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset) {
@@ -188,8 +211,7 @@ namespace partition {
     }
   }
 
-  void roundRobin(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset) {
-    int curBucket = 0;
+  bool roundRobin(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, int& curBucket) {
     for (int i = 0; i < A.size(); ++i) {
       const auto& aLen = A[i].size();
       const auto& bLen = B[i].size();
@@ -201,7 +223,7 @@ namespace partition {
         if ((bucket.cmps.size() + 1 <= map.cmpCapacity) && (bucket.seqSize + aLen + bLen <= map.sequenceCapacity)) break;
       }
       if (offset >= map.numBuckets) {
-        throw std::runtime_error("Out of buckets.");
+        return false;
       }
       curBucket = (curBucket + offset) % map.numBuckets;
       auto& bucket = map.buckets[curBucket];
@@ -216,6 +238,7 @@ namespace partition {
 
       curBucket++; // increment current bucket for round robin
     }
+    return true;
   }
 
   void greedy(BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset) {
@@ -304,12 +327,7 @@ namespace partition {
     }
   }
 
-  void greedy(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset) {
-    std::priority_queue<std::reference_wrapper<BucketMapping>, std::deque<std::reference_wrapper<BucketMapping>>, std::greater<std::deque<std::reference_wrapper<BucketMapping>>::value_type>> q;
-    for (auto& b : map.buckets) {
-      q.push(std::ref(b));
-    }
-
+  bool greedy(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, BucketHeap& q) {
     std::vector<std::pair<int, int>> srts(A.size());
     for (size_t i = 0; i < A.size(); i++) {
       const auto aLen = A[i].size();
@@ -341,11 +359,7 @@ namespace partition {
       }
 
       if (tries == map.numBuckets) {
-          std::cout << bucket.toString() << "\n";
-          for (auto& b : map.buckets) {
-            std::cout << b.toString() << "\n";
-          }
-          throw std::runtime_error("Out of buckets");
+          return false;
       }
 
       for (auto b : qq) {
@@ -364,5 +378,22 @@ namespace partition {
       bucket.weight += aLen * bLen;
       q.push(std::ref(bucket));
     }
+    return true;
+  }
+
+  bool fillBuckets(Algorithm algo, BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, int& curBucket, BucketHeap& heap) {
+    bool ret = false;
+    switch (algo) {
+    case Algorithm::fillFirst:
+      ret = partition::fillFirst(map, A, B, indexOffset, curBucket);
+      break;
+    case Algorithm::roundRobin:
+      ret = partition::roundRobin(map, A, B, indexOffset, curBucket);
+      break;
+    case Algorithm::greedy:
+      ret = partition::greedy(map, A, B, indexOffset, heap);
+      break;
+    }
+    return ret;
   }
 }}

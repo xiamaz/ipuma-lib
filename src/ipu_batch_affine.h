@@ -25,7 +25,6 @@ class SWAlgorithm : public IPUAlgorithm {
   std::vector<int32_t> a_range_result;
   std::vector<int32_t> b_range_result;
   int thread_id;
-  bool use_remote_buffer;
 
   int slot_avail;
   int last_slot;
@@ -39,9 +38,10 @@ class SWAlgorithm : public IPUAlgorithm {
 
  public:
   IPUAlgoConfig algoconfig;
+  bool use_remote_buffer;
 
   SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig);
-  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer = true, size_t  = 1);
+  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer = true, size_t slotCap = 1);
 
   std::string printTensors();
 
@@ -71,6 +71,7 @@ class SWAlgorithm : public IPUAlgorithm {
  
   static void prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B,  int32_t* inputs_begin, int32_t* inputs_end, int* deviceMapping);
   static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end);
+  static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons);
 };
 }  // namespace batchaffine
 }  // namespace ipu

@@ -2,6 +2,7 @@
 #define PARTITION_H
 #include<string>
 #include<vector>
+#include<queue>
 #include "types.h"
 
 namespace ipu { namespace partition {
@@ -58,6 +59,12 @@ namespace ipu { namespace partition {
     int weight;
   };
 
+  using BucketHeap = std::priority_queue<std::reference_wrapper<BucketMapping>, std::deque<std::reference_wrapper<BucketMapping>>, std::greater<std::deque<std::reference_wrapper<BucketMapping>>::value_type>>;
+
+  bool fillFirst(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, int& curBucket);
+  bool roundRobin(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, int& curBucket);
+  bool greedy(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, BucketHeap& heap);
+
   void fillFirst(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset = 0);
   void roundRobin(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset = 0);
   void greedy(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset = 0);
@@ -65,6 +72,9 @@ namespace ipu { namespace partition {
   void fillFirst(BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset = 0);
   void roundRobin(BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset = 0);
   void greedy(BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset = 0);
+
+  // generic methods
+  bool fillBuckets(Algorithm algo, BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, int& curBucket, BucketHeap& heap);
 }}
 
 #endif

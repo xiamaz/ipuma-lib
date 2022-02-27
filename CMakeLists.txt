@@ -38,15 +38,24 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 include_directories("plog/include")
 
+add_subdirectory("extern/include/ssw")
+
 add_subdirectory(src)
 
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
   set(PACKAGE_TESTS ON)
   set(PACKAGE_MAIN ON)
+  set(PACKAGE_CPU ON)
 endif()
+
+set(IPUMA_BIN_INCLUDES "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/extern/cxxopts/include" "${PROJECT_SOURCE_DIR}/extern/include")
 
 if(PACKAGE_MAIN)
   add_subdirectory(ipusw)
+endif()
+
+if(PACKAGE_CPU)
+  add_subdirectory(cpusw)
 endif()
 
 if(PACKAGE_TESTS)

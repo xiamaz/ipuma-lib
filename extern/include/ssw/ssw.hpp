@@ -197,7 +197,6 @@ namespace StripedSmithWaterman {
       const int&    translation_matrix_size);
 
     uint8_t get_match_score() const { return match_score_; }
-  private:
     int8_t* score_matrix_;
     int     score_matrix_size_;
     int8_t* translation_matrix_;
@@ -217,6 +216,7 @@ namespace StripedSmithWaterman {
     void BuildDefaultMatrix(void);
     void ClearMatrices(void);
 
+  private:
     Aligner& operator= (const Aligner&);
     //Aligner (const Aligner&);
   }; // class Aligner

@@ -27,6 +27,8 @@
 #define VOFF_A_RANGE         11
 #define VOFF_B_RANGE         12
 
+#define VOFF_FORWARD_ONLY    13
+
 #define SOFF_C 1
 #define SOFF_BG 2
 #define SOFF_SSCORE 3
@@ -264,6 +266,10 @@ loopB_end:
 	ld32 $m0, $mzero, $mvertex_base, VOFF_B_RANGE
 	stm32 $m1, $m0, $n
 
+	// check if forward only
+	ld32 $m0, $mzero, $mvertex_base, VOFF_FORWARD_ONLY
+	ldz8 $m0, $mzero, $m0, 0
+	brnz $m0, loopReverse_end
 
 // now run in reverse and find startpos
 	zeroCbG
@@ -383,6 +389,7 @@ loopBrev_end:
 	or $m1, $m1, $bpos
 	stm32 $m1, $m0, $n
 
+loopReverse_end:
 	// increment n and check if we run again
 	add $n, $n, CTXT_WORKERS
 	ld32 $m0, $mzero, $mvertex_base, VOFF_MAX_N_PER_TILE
