@@ -2,10 +2,10 @@
 #define IPU_BATCH_AFFINE_HPP
 
 #include <vector>
-#include "ipu_base.h"
-#include "partition.h"
-#include "ipu_config.h"
 
+#include "ipu_base.h"
+#include "ipu_config.h"
+#include "partition.h"
 
 using namespace poplar;
 
@@ -34,7 +34,6 @@ class SWAlgorithm : public IPUAlgorithm {
   static size_t getSeqsOffset(const IPUAlgoConfig& config);
   static size_t getMetaOffset(const IPUAlgoConfig& config);
 
-
   void release_slot(slotToken i);
 
  public:
@@ -45,7 +44,6 @@ class SWAlgorithm : public IPUAlgorithm {
   SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer = true, size_t slotCap = 1);
 
   std::string printTensors();
-
 
   static int calculate_slot_region_index(const IPUAlgoConfig& algoconfig, int max_buffer_size);
   int calculate_slot_region_index(int max_buffer_size);
@@ -71,12 +69,12 @@ class SWAlgorithm : public IPUAlgorithm {
   void refetch();
 
   // Remote bufffer
-  void prepared_remote_compare(int32_t* inputs_begin,  int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token = 0);
+  void prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token = 0);
 
   void upload(int32_t* inputs_begin, int32_t* inputs_end, slotToken slot);
   // slotToken upload(int32_t* inputs_begin, int32_t* inputs_end);
- 
-  static int prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B,  int32_t* inputs_begin, int32_t* inputs_end, int* deviceMapping);
+
+  static int prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, int* deviceMapping);
   static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end);
   static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons);
 };
