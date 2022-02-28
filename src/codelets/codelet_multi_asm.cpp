@@ -12,8 +12,8 @@
  */
 class MultiSWAffineAsm : public poplar::MultiVertex {
 private:
-    poplar::Vector<float, poplar::VectorLayout::ONE_PTR, 8> C;
-    poplar::Vector<float, poplar::VectorLayout::ONE_PTR, 8> bG;
+   poplar::Output<poplar::Vector<float, poplar::VectorLayout::ONE_PTR, 8>> C;
+   poplar::Output<poplar::Vector<float, poplar::VectorLayout::ONE_PTR, 8>> bG;
 public:
     // Fields
     poplar::Vector<poplar::Input<poplar::Vector<float, poplar::VectorLayout::ONE_PTR>>, poplar::VectorLayout::ONE_PTR> simMatrix;
@@ -28,7 +28,7 @@ public:
     poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> ARange;
     poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> BRange;
 
-		IS_EXTERNAL_CODELET(1);
+                IS_EXTERNAL_CODELET(1);
 
     bool compute(unsigned workerId) {
         return true;

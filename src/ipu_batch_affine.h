@@ -17,7 +17,7 @@ struct BlockAlignmentResults {
   std::vector<int32_t> b_range_result;
 };
 
-using slotToken = int;
+using slotToken = long;
 class SWAlgorithm : public IPUAlgorithm {
  private:
   // std::vector<int32_t> results;
@@ -27,9 +27,10 @@ class SWAlgorithm : public IPUAlgorithm {
   int thread_id;
   bool use_remote_buffer;
 
-  int slot_avail;
+  int slot_size;
+  std::vector<int> slot_avail;
   int last_slot;
-  std::vector<bool> slots;
+  std::vector<std::vector<bool>> slots;
 
   static size_t getSeqsOffset(const IPUAlgoConfig& config);
   static size_t getMetaOffset(const IPUAlgoConfig& config);
@@ -41,12 +42,16 @@ class SWAlgorithm : public IPUAlgorithm {
   IPUAlgoConfig algoconfig;
 
   SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig);
-  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer = true, size_t  = 1);
+  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer = true, size_t = 1);
 
   std::string printTensors();
 
-  bool slot_available();
-  slotToken queue_slot();
+
+  static int calculate_slot_region_index(const IPUAlgoConfig& algoconfig, int max_buffer_size);
+  int calculate_slot_region_index(int max_buffer_size);
+  std::tuple<int, slotToken> unpack_slot(slotToken);
+  bool slot_available(int max_buffer_size);
+  slotToken queue_slot(int max_buffer_size);
 
   static void fillBuckets(Algorithm algo, partition::BucketMap& map, const RawSequences& A, const RawSequences& B, int offset = 0);
   static void fillMNBuckets(Algorithm algo, partition::BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int offset = 0);
@@ -67,9 +72,9 @@ class SWAlgorithm : public IPUAlgorithm {
   void prepared_remote_compare(int32_t* inputs_begin,  int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token = 0);
 
   void upload(int32_t* inputs_begin, int32_t* inputs_end, slotToken slot);
-  slotToken upload(int32_t* inputs_begin, int32_t* inputs_end);
+  // slotToken upload(int32_t* inputs_begin, int32_t* inputs_end);
  
-  static void prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B,  int32_t* inputs_begin, int32_t* inputs_end, int* deviceMapping);
+  static int prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B,  int32_t* inputs_begin, int32_t* inputs_end, int* deviceMapping);
   static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end);
 };
 }  // namespace batchaffine

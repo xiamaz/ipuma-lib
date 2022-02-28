@@ -17,8 +17,8 @@ int max(int a, int b) {
  */
 class SWAffine : public poplar::Vertex {
 private:
-    poplar::Vector<int, poplar::VectorLayout::ONE_PTR> C;
-    poplar::Vector<int, poplar::VectorLayout::ONE_PTR> bG;
+   poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> C;
+   poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> bG;
 public:
     // Fields
     poplar::Vector<poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>>> simMatrix;

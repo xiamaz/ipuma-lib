@@ -1,25 +1,25 @@
-#include <string>
-#include <cmath>
-#include <iostream>
+#include "ipu_batch_affine.h"
 
 #include <plog/Log.h>
 
+#include <cmath>
+#include <iostream>
 #include <poplar/Graph.hpp>
-#include <poputil/TileMapping.hpp>
 #include <popops/Zero.hpp>
+#include <poputil/TileMapping.hpp>
+#include <string>
 
 #include "swatlib/swatlib.h"
-#include "ipu_batch_affine.h"
 
 namespace ipu {
 namespace batchaffine {
 
-static const std::string STREAM_CONCAT_ALL = "concat-read-all";
-static const std::string HOST_STREAM_CONCAT = "host-stream-concat";
-static const std::string REMOTE_MEMORY = "inputs-remotebuffer";
+#define STREAM_CONCAT_ALL_N(n)  "concat-read-all"+ std::to_string(n)
+#define HOST_STREAM_CONCAT_N(n)  "host-stream-concat"+ std::to_string(n)
+#define REMOTE_MEMORY_N(n) "inputs-remotebuffer" + std::to_string(n)
 
-static const std::string CYCLE_COUNT_OUTER = "cycle-count-outer";
-static const std::string CYCLE_COUNT_INNER = "cycle-count-inner";
+#define CYCLE_COUNT_OUTER_N(n) "cycle-count-outer"+ std::to_string(n)
+#define CYCLE_COUNT_INNER_N(n) "cycle-count-inner"+ std::to_string(n)
 
 /**
  * Streamable IPU graph for SW
@@ -28,170 +28,209 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
                                          unsigned long bufSize, unsigned long maxBatches,
                                          const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt,
                                          bool use_remote_buffer, int buf_rows) {
-  program::Sequence prog;
-
-  auto target = graph.getTarget();
-  int tileCount = target.getTilesPerIPU();
-
-  Tensor Seqs = graph.addVariable(INT, {activeTiles, static_cast<size_t>(std::ceil(static_cast<double>(bufSize) / 4.0))}, "Seqs");
-
-  // Metadata structure
-  Tensor CompMeta = graph.addVariable(INT, {activeTiles, maxBatches * 4}, "CompMeta");
-
-  auto [m, n] = similarityData.shape();
-
-  poplar::Type sType;
-  int workerMultiplier = 1;
-  switch (vtype) {
-    case VertexType::cpp: sType = INT; break;
-    case VertexType::assembly: sType = FLOAT; break;
-    case VertexType::multi:
-      sType = INT;
-      workerMultiplier = target.getNumWorkerContexts();
-      break;
-    case VertexType::multiasm:
-      sType = FLOAT;
-      workerMultiplier = target.getNumWorkerContexts();
-      break;
-    case VertexType::multistriped: sType = INT; break;       // all threads are going to work on the same problem
-    case VertexType::multistripedasm: sType = FLOAT; break;  // all threads are going to work on the same problem
-    case VertexType::stripedasm: sType = HALF; break;
+  int buffers = 10;
+  if (!use_remote_buffer) {
+    buffers = 1;
   }
+  std::vector<program::Program> progs(buffers);
+  for (size_t buffer_share = 0; buffer_share < buffers; buffer_share++) {
+    program::Sequence prog;
+    auto target = graph.getTarget();
+    int tileCount = target.getTilesPerIPU();
 
-  TypeTraits traits = typeToTrait(sType);
-  void* similarityBuffer;
-  convertSimilarityMatrix(target, sType, similarityData, &similarityBuffer);
-  Tensor similarity;
-  if (vtype == VertexType::stripedasm) {
-    similarity = graph.addConstant(sType, {m * n}, similarityBuffer, traits, false, "similarity");
-  } else {
-    similarity = graph.addConstant(sType, {m, n}, similarityBuffer, traits, false, "similarity");
-  }
-  free(similarityBuffer);
+    int ibufsize = (bufSize / 4) + (bufSize % 4 == 0 ? 0 : 1);
+    size_t seq_scaled_size = static_cast<size_t>( (ibufsize /  buffers + (ibufsize % buffers == 0 ? 0 : 1)) * (buffer_share + 1)  );
+    PLOGD.printf("Set seq size %d of total %d", seq_scaled_size, bufSize / 4);
+    Tensor Seqs = graph.addVariable(INT, {activeTiles, seq_scaled_size}, "Seqs");
 
-  Tensor Scores = graph.addVariable(INT, {activeTiles, maxBatches}, "Scores");
-  Tensor ARanges = graph.addVariable(INT, {activeTiles, maxBatches}, "ARanges");
-  Tensor BRanges = graph.addVariable(INT, {activeTiles, maxBatches}, "BRanges");
 
-  graph.setTileMapping(similarity, 0);
-  for (int i = 0; i < activeTiles; ++i) {
-    int tileIndex = i % tileCount;
-    graph.setTileMapping(Seqs[i], tileIndex);
-    graph.setTileMapping(CompMeta[i], tileIndex);
+    // Metadata structure
+    Tensor CompMeta = graph.addVariable(INT, {activeTiles, maxBatches * 4}, "CompMeta");
 
-    graph.setTileMapping(Scores[i], tileIndex);
-    graph.setTileMapping(ARanges[i], tileIndex);
-    graph.setTileMapping(BRanges[i], tileIndex);
-  }
+    auto [m, n] = similarityData.shape();
 
-  OptionFlags streamOptions({});
+    poplar::Type sType;
+    int workerMultiplier = 1;
+    switch (vtype) {
+      case VertexType::cpp:
+        sType = INT;
+        break;
+      case VertexType::assembly:
+        sType = FLOAT;
+        break;
+      case VertexType::multi:
+        sType = INT;
+        workerMultiplier = target.getNumWorkerContexts();
+        break;
+      case VertexType::multiasm:
+        sType = FLOAT;
+        workerMultiplier = target.getNumWorkerContexts();
+        break;
+      case VertexType::multistriped:
+        sType = INT;
+        break;  // all threads are going to work on the same problem
+      case VertexType::multistripedasm:
+        sType = FLOAT;
+        break;  // all threads are going to work on the same problem
+      case VertexType::stripedasm:
+        sType = HALF;
+        break;
+    }
 
-  auto frontCs = graph.addComputeSet("SmithWaterman");
-  for (int i = 0; i < activeTiles; ++i) {
-    int tileIndex = i % tileCount;
-    VertexRef vtx = graph.addVertex(frontCs, vertexTypeToIpuLabel(vtype),
-                                    {
-                                        {"bufSize", bufSize},
-                                        {"maxAB", maxAB},
-                                        {"gapInit", gapInit},
-                                        {"gapExt", gapExt},
-                                        {"maxNPerTile", maxBatches},
-                                        {"Seqs", Seqs[i]},
-                                        {"Meta", CompMeta[i]},
-                                        {"simMatrix", similarity},
-                                        {"score", Scores[i]},
-                                        {"ARange", ARanges[i]},
-                                        {"BRange", BRanges[i]},
-                                    });
+    TypeTraits traits = typeToTrait(sType);
+    void* similarityBuffer;
+    convertSimilarityMatrix(target, sType, similarityData, &similarityBuffer);
+    Tensor similarity;
     if (vtype == VertexType::stripedasm) {
-      graph.connect(vtx["simWidth"], m);
-      graph.setFieldSize(vtx["tS"], maxAB * workerMultiplier);
+      similarity = graph.addConstant(sType, {m * n}, similarityBuffer, traits, false, "similarity");
+    } else {
+      similarity = graph.addConstant(sType, {m, n}, similarityBuffer, traits, false, "similarity");
     }
-    graph.setFieldSize(vtx["C"], maxAB * workerMultiplier);
-    graph.setFieldSize(vtx["bG"], maxAB * workerMultiplier);
-    if (vtype == VertexType::multistriped || vtype == VertexType::multistripedasm) {
-      graph.setFieldSize(vtx["tS"], maxAB * target.getNumWorkerContexts());
-      graph.setFieldSize(vtx["locks"], target.getNumWorkerContexts());
+    free(similarityBuffer);
+
+    Tensor Scores = graph.addVariable(INT, {activeTiles, maxBatches}, "Scores");
+    Tensor ARanges = graph.addVariable(INT, {activeTiles, maxBatches}, "ARanges");
+    Tensor BRanges = graph.addVariable(INT, {activeTiles, maxBatches}, "BRanges");
+
+    graph.setTileMapping(similarity, 0);
+    for (int i = 0; i < activeTiles; ++i) {
+      int tileIndex = i % tileCount;
+      graph.setTileMapping(Seqs[i], tileIndex);
+      graph.setTileMapping(CompMeta[i], tileIndex);
+
+      graph.setTileMapping(Scores[i], tileIndex);
+      graph.setTileMapping(ARanges[i], tileIndex);
+      graph.setTileMapping(BRanges[i], tileIndex);
     }
-    graph.setTileMapping(vtx, tileIndex);
-    graph.setPerfEstimate(vtx, 1);
-  }
 
-  auto inputs_tensor = concat({Seqs.flatten(), CompMeta.flatten()});
-  auto outputs_tensor = concat({Scores.flatten(), ARanges.flatten(), BRanges.flatten()});
+    OptionFlags streamOptions({});
+    program::Sequence undef;
+    auto frontCs = graph.addComputeSet("SmithWaterman");
+    for (int i = 0; i < activeTiles; ++i) {
+      int tileIndex = i % tileCount;
+      VertexRef vtx = graph.addVertex(frontCs, vertexTypeToIpuLabel(vtype),
+                                      {
+                                          {"bufSize", bufSize},
+                                          {"maxAB", maxAB},
+                                          {"gapInit", gapInit},
+                                          {"gapExt", gapExt},
+                                          {"maxNPerTile", maxBatches},
+                                          {"Seqs", Seqs[i]},
+                                          {"Meta", CompMeta[i]},
+                                          {"simMatrix", similarity},
+                                          {"score", Scores[i]},
+                                          {"ARange", ARanges[i]},
+                                          {"BRange", BRanges[i]},
+                                      });
+      // graph.setFieldSize(vtx["C"], maxAB * workerMultiplier);
+      auto C_T = graph.addVariable(sType, {maxAB * workerMultiplier}, "C["+std::to_string(i)+"]");
+      graph.setTileMapping(C_T, tileIndex);
+      graph.connect(vtx["C"], C_T);
+      undef.add(program::WriteUndef(C_T));
 
-  program::Sequence h2d_prog_concat;
-  program::Sequence d2h_prog_concat;
-  if (use_remote_buffer) {
-    const char* units[] = {"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
-    int b_size = inputs_tensor.numElements() * 4;
-    PLOGI.printf("Use a RemoteBuffer of bytes %.2f", (double)b_size);
-    int i = 0;
-    for (; b_size > 1024; i++) {
-      b_size /= 1024;
+      // graph.setFieldSize(vtx["bG"], maxAB * workerMultiplier);
+      auto bG_T = graph.addVariable(sType, {maxAB * workerMultiplier}, "bG["+std::to_string(i)+"]");
+      graph.setTileMapping(bG_T, tileIndex);
+      graph.connect(vtx["bG"], bG_T);
+      undef.add(program::WriteUndef(bG_T));
+
+      if (vtype == VertexType::stripedasm) {
+        assert(false && "Not Implemented");
+        graph.connect(vtx["simWidth"], m);
+        graph.setFieldSize(vtx["tS"], maxAB * workerMultiplier);
+      }
+      if (vtype == VertexType::multistriped || vtype == VertexType::multistripedasm) {
+        assert(false && "Not Implemented");
+        graph.setFieldSize(vtx["tS"], maxAB * target.getNumWorkerContexts());
+        graph.setFieldSize(vtx["locks"], target.getNumWorkerContexts());
+      }
+      graph.setTileMapping(vtx, tileIndex);
+      graph.setPerfEstimate(vtx, 1);
     }
-    PLOGI.printf("Use a RemoteBuffer of %dx(Banksize %.2f %s)", buf_rows, (double)b_size, units[i]);
-    auto offset = graph.addVariable(INT, {1}, "Remote Buffer Offset");
-    graph.setTileMapping(offset, 0);
-    // graph.setInitialValue<int>(offset, {0});
-    // auto cs = graph.addComputeSet("AddMod");
-    // auto vtx = graph.addVertex(cs, "AddMod");
-    // graph.connect(vtx["val"], offset[0]);
-    // graph.setInitialValue<int>(vtx["mod"], buf_rows);
-    // graph.setTileMapping(vtx, 0);
 
-    // 256 MB row limit?
-    // https://docs.graphcore.ai/projects/poplar-user-guide/en/latest/poplar_programs.html#remote-buffer-restrictions
-    auto host_stream_offset = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT, INT, 1);
-    h2d_prog_concat.add(poplar::program::Copy(host_stream_offset, offset));
-    auto remote_mem =
-        graph.addRemoteBuffer(REMOTE_MEMORY, inputs_tensor.elementType(), inputs_tensor.numElements(), buf_rows, true, true);
-    h2d_prog_concat.add(poplar::program::Copy(remote_mem, inputs_tensor, offset, "Copy Inputs from Remote->IPU"));
-    // d2h_prog_concat.add(program::Execute(cs));
+    PLOGD.printf("Seqs offset %d in bytes %d", Seqs.flatten().numElements(), Seqs.flatten().numElements() * 4);
+    auto inputs_tensor = concat({Seqs.flatten(), CompMeta.flatten()});
+    auto outputs_tensor = concat({Scores.flatten(), ARanges.flatten(), BRanges.flatten()});
 
-    auto device_stream_concat =
-        graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL, INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
-    d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat, "Copy Outputs from IPU->Host"));
-  } else {
-    auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT, INT, inputs_tensor.numElements());
-    auto device_stream_concat =
-        graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL, INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
-    h2d_prog_concat.add(poplar::program::Copy(host_stream_concat, inputs_tensor));
-    d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat));
-  }
+    program::Sequence h2d_prog_concat;
+    program::Sequence d2h_prog_concat;
+    if (use_remote_buffer) {
+      const char* units[] = {"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
+      int b_size = inputs_tensor.numElements() * 4;
+      PLOGI.printf("Use a RemoteBuffer of bytes %.2f", (double)b_size);
+      int i = 0;
+      for (; b_size > 1024; i++) {
+        b_size /= 1024;
+      }
+      PLOGI.printf("Use a RemoteBuffer of %dx(Banksize %.2f %s)", buf_rows, (double)b_size, units[i]);
+      auto offset = graph.addVariable(INT, {1}, "Remote Buffer Offset");
+      graph.setTileMapping(offset, 0);
+      // graph.setInitialValue<int>(offset, {0});
+      // auto cs = graph.addComputeSet("AddMod");
+      // auto vtx = graph.addVertex(cs, "AddMod");
+      // graph.connect(vtx["val"], offset[0]);
+      // graph.setInitialValue<int>(vtx["mod"], buf_rows);
+      // graph.setTileMapping(vtx, 0);
 
-  auto print_tensors_prog = program::Sequence({
-      // program::PrintTensor("Alens", Alens),
-      // program::PrintTensor("Blens", Blens),
-      program::PrintTensor("CompMeta", CompMeta),
-      // program::PrintTensor("Scores", Scores),
-  });
+      // 256 MB row limit?
+      // https://docs.graphcore.ai/projects/poplar-user-guide/en/latest/poplar_programs.html#remote-buffer-restrictions
+      auto host_stream_offset = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, 1);
+      h2d_prog_concat.add(poplar::program::Copy(host_stream_offset, offset));
+      auto memid = REMOTE_MEMORY_N(buffer_share);
+      auto remote_mem = graph.addRemoteBuffer(memid, inputs_tensor.elementType(), inputs_tensor.numElements(), buf_rows, true, true);
+      h2d_prog_concat.add(poplar::program::Copy(remote_mem, inputs_tensor, offset, "Copy Inputs from Remote->IPU"));
+      // d2h_prog_concat.add(program::Execute(cs));
+
+      auto device_stream_concat =
+          graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
+      d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat, "Copy Outputs from IPU->Host"));
+    } else {
+      auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, inputs_tensor.numElements());
+      auto device_stream_concat =
+          graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
+      h2d_prog_concat.add(poplar::program::Copy(host_stream_concat, inputs_tensor));
+      d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat));
+    }
+
+    auto print_tensors_prog = program::Sequence({
+        // program::PrintTensor("Alens", Alens),
+        // program::PrintTensor("Blens", Blens),
+        program::PrintTensor("CompMeta", CompMeta),
+        // program::PrintTensor("Scores", Scores),
+    });
 #ifdef IPUMA_DEBUG
-  program::Sequence main_prog;
-  main_prog.add(program::Execute(frontCs));
-  addCycleCount(graph, main_prog, CYCLE_COUNT_INNER);
+    program::Sequence main_prog;
+    main_prog.add(program::Execute(frontCs));
+    main_prog.add(undef);
+    addCycleCount(graph, main_prog, CYCLE_COUNT_INNER_N(buffer_share));
 #else
-  auto main_prog = program::Execute(frontCs);
+    auto main_prog = program::Execute(frontCs);
 #endif
-  prog.add(h2d_prog_concat);
-  prog.add(main_prog);
-  prog.add(d2h_prog_concat);
+    prog.add(h2d_prog_concat);
+    prog.add(main_prog);
+    prog.add(d2h_prog_concat);
 
 #ifdef IPUMA_DEBUG
-  addCycleCount(graph, prog, CYCLE_COUNT_OUTER);
+    addCycleCount(graph, prog, CYCLE_COUNT_OUTER_N(buffer_share));
 #endif
-  return {prog, d2h_prog_concat, print_tensors_prog};
+
+    progs[buffer_share] = prog;
+  }
+  return progs;
+  // return {prog, d2h_prog_concat, print_tensors_prog};
 }
 
 SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer, size_t slotCap)
-    : IPUAlgorithm(config)
-    , algoconfig(algoconfig)
-    , thread_id(thread_id)
-    , use_remote_buffer(useRemoteBuffer) {
+    : IPUAlgorithm(config), algoconfig(algoconfig), thread_id(thread_id), use_remote_buffer(useRemoteBuffer) {
   const auto totalComparisonsCount = algoconfig.getTotalNumberOfComparisons();
-  slot_avail = slotCap;
-  slots.resize(slot_avail);
-  std::fill(slots.begin(), slots.end(), false);
+  slot_size = slotCap;
+  slot_avail.resize(10);
+  std::fill(slot_avail.begin(), slot_avail.end(), slotCap);
+  slots.resize(10);
+  for (size_t i = 0; i < 10; i++) {
+    slots[i].resize(slot_size);
+    std::fill(slots[i].begin(), slots[i].end(), false);
+  }
 
   scores.resize(totalComparisonsCount);
   a_range_result.resize(totalComparisonsCount);
@@ -202,7 +241,7 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
   auto similarityMatrix = swatlib::selectMatrix(config.similarity, config.matchValue, config.mismatchValue, config.ambiguityValue);
   std::vector<program::Program> programs =
       buildGraph(graph, algoconfig.vtype, algoconfig.tilesUsed, algoconfig.maxAB, algoconfig.bufsize, algoconfig.maxBatches,
-                 similarityMatrix, config.gapInit, config.gapExtend, use_remote_buffer, slot_avail);
+                 similarityMatrix, config.gapInit, config.gapExtend, use_remote_buffer, slot_size);
 
   createEngine(graph, programs);
 }
@@ -241,43 +280,53 @@ void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std:
 
 void SWAlgorithm::fillMNBuckets(Algorithm algo, partition::BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int offset) {
   switch (algo) {
-  case Algorithm::fillFirst:
-    partition::fillFirst(map, Seqs, Cmps, offset);
-    break;
-  case Algorithm::roundRobin:
-    partition::roundRobin(map, Seqs, Cmps, offset);
-    break;
-  case Algorithm::greedy:
-    partition::greedy(map, Seqs, Cmps, offset);
-    break;
+    case Algorithm::fillFirst:
+      partition::fillFirst(map, Seqs, Cmps, offset);
+      break;
+    case Algorithm::roundRobin:
+      partition::roundRobin(map, Seqs, Cmps, offset);
+      break;
+    case Algorithm::greedy:
+      partition::greedy(map, Seqs, Cmps, offset);
+      break;
   }
 }
 
 void SWAlgorithm::fillBuckets(Algorithm algo, partition::BucketMap& map, const RawSequences& A, const RawSequences& B, int offset) {
   switch (algo) {
-  case Algorithm::fillFirst:
-    partition::fillFirst(map, A, B, offset);
-    break;
-  case Algorithm::roundRobin:
-    partition::roundRobin(map, A, B, offset);
-    break;
-  case Algorithm::greedy:
-    partition::greedy(map, A, B, offset);
-    break;
+    case Algorithm::fillFirst:
+      partition::fillFirst(map, A, B, offset);
+      break;
+    case Algorithm::roundRobin:
+      partition::roundRobin(map, A, B, offset);
+      break;
+    case Algorithm::greedy:
+      partition::greedy(map, A, B, offset);
+      break;
   }
 }
 
 size_t SWAlgorithm::getSeqsOffset(const IPUAlgoConfig& config) { return 0; }
 
-size_t SWAlgorithm::getMetaOffset(const IPUAlgoConfig& config) { return config.getTotalBufsize32b(); }
+size_t SWAlgorithm::getMetaOffset(const IPUAlgoConfig& config) { 
+  return config.getTotalBufsize32b(); 
+}
 
-void SWAlgorithm::refetch() { engine->run(1); }
+void SWAlgorithm::refetch() {
+  assert(false && "Not implemented");
+  engine->run(1);
+}
+
+std::tuple<int, slotToken> SWAlgorithm::unpack_slot(slotToken s) {
+  return {s / slot_size, s % slot_size};
+}
 
 void SWAlgorithm::upload(int32_t* inputs_begin, int32_t* inputs_end, slotToken slot) {
-  PLOGD.printf("Slot is %d", slot);
+  auto [lot, sid] = unpack_slot(slot);
+  PLOGD.printf("Slot is %d, lot is %d", sid, lot);
   swatlib::TickTock rbt;
   rbt.tick();
-  engine->copyToRemoteBuffer(inputs_begin, REMOTE_MEMORY, slot);
+  engine->copyToRemoteBuffer(inputs_begin, REMOTE_MEMORY_N(lot), sid);
   rbt.tock();
   auto transferTime = rbt.duration<std::chrono::milliseconds>();
   size_t totalTransferSize = algoconfig.getInputBufferSize32b() * 4;
@@ -289,31 +338,37 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
                                           slotToken slot_token) {
   // We have to reconnect the streams to new memory locations as the destination will be in a shared memroy region.
   // engine->connectStream(HOST_STREAM_CONCAT, inputs_begin);
-  engine->connectStream(STREAM_CONCAT_ALL, results_begin);
+  auto [lot, sid] = unpack_slot(slot_token);
+  engine->connectStream(STREAM_CONCAT_ALL_N(lot), results_begin);
 
-  std::vector<int> vv{slot_token};
+  std::vector<int> vv{(int)sid};
   if (use_remote_buffer) {
-    PLOGD.printf("Use remote buffer with slot %d", vv[0]);
-    engine->connectStream(HOST_STREAM_CONCAT, vv.data());
+    PLOGD.printf("Use remote buffer with slot %d on lot", vv[0], lot);
+    engine->connectStream(HOST_STREAM_CONCAT_N(lot), vv.data());
   } else {
-    engine->connectStream(HOST_STREAM_CONCAT, inputs_begin);
+    engine->connectStream(HOST_STREAM_CONCAT_N(lot), inputs_begin);
   }
   swatlib::TickTock t;
   t.tick();
-  engine->run(0, "Execute Main");
+  engine->run(lot, "Execute Main-"+std::to_string(lot));
   t.tock();
   release_slot(slot_token);
   PLOGD << "Total engine run time (in s): " << static_cast<double>(t.duration<std::chrono::milliseconds>()) / 1000.0;
 
 #ifdef IPUMA_DEBUG
-  auto cyclesOuter = getTotalCycles(*engine, CYCLE_COUNT_OUTER);
-  auto cyclesInner = getTotalCycles(*engine, CYCLE_COUNT_INNER);
+  auto cyclesOuter = getTotalCycles(*engine, CYCLE_COUNT_OUTER_N(lot));
+  auto cyclesInner = getTotalCycles(*engine, CYCLE_COUNT_INNER_N(lot));
   auto timeOuter = static_cast<double>(cyclesOuter) / getTarget().getTileClockFrequency();
   auto timeInner = static_cast<double>(cyclesInner) / getTarget().getTileClockFrequency();
   PLOGD << "Poplar cycle count: " << cyclesInner << "/" << cyclesOuter << " computed time (in s): " << timeInner << "/"
         << timeOuter;
 
-  int32_t* meta_input = inputs_begin + getMetaOffset(algoconfig);
+  int buffers = 10;
+  int ibufsize = (algoconfig.bufsize / 4) + (algoconfig.bufsize % 4 == 0 ? 0 : 1);
+  auto scale_bufsize = [=](int bufsize, int lot) {
+    return static_cast<size_t>( (bufsize /  buffers + (bufsize % buffers == 0 ? 0 : 1)) * (lot + 1)  );
+  };
+ int32_t* meta_input = inputs_begin + scale_bufsize(getMetaOffset(algoconfig), lot);
 
   // GCUPS computation
   uint64_t cellCount = 0;
@@ -355,7 +410,7 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
   inputs[inputs_size + (1) + 1] = 0xFEEBDAED;
   inputs[inputs_size + (1) + 2] = 0xFEEBDAED;
   tPrepare.tick();
-  prepare_remote(config, algoconfig, A, B, &*inputs.begin() + 2, &*inputs.end() - 2, mapping.data());
+  int maxbucket = prepare_remote(config, algoconfig, A, B, &*inputs.begin() + 2, &*inputs.end() - 2, mapping.data());
   tPrepare.tock();
 
   if (inputs[0] != 0xDEADBEEF || inputs[1] != 0xDEADBEEF) {
@@ -380,7 +435,8 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
   //                         unord_b_range.data());
   slotToken slot = 0;
   if (use_remote_buffer) {
-    slot = upload(&*inputs.begin() + 2, &*inputs.end() - 2);
+    slot = queue_slot(maxbucket);
+    upload(&*inputs.begin() + 2, &*inputs.end() - 2, slot);
   }
   tCompare.tick();
   prepared_remote_compare(&*inputs.begin() + 2, &*inputs.end() - 2, &*results.begin() + 2, &*results.end() - 2, slot);
@@ -442,10 +498,12 @@ retry:
 }
 
 std::string SWAlgorithm::printTensors() {
-  std::stringstream graphstream;
-  engine->setPrintTensorStream(graphstream);
-  engine->run(2);
-  return graphstream.str();
+  // std::stringstream graphstream;
+  // engine->setPrintTensorStream(graphstream);
+  // engine->run(2);
+  // return graphstream.str();
+  assert(false && "Not implemented");
+  return "";
 }
 
 void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end) {
@@ -476,10 +534,13 @@ void SWAlgorithm::compare_mn_local(const std::vector<std::string>& Seqs, const C
   fillMNBuckets(algoconfig.fillAlgo, map, Seqs, Cmps, 0);
   fill_input_buffer(map, config.datatype, algoconfig, Seqs, Cmps, &*inputs.begin(), &*inputs.end(), mapping.data());
   // std::cout << "Mapping: " << swatlib::printVector(mapping) << "\n";
+  int maxBucket = 0;
+  for (const auto& bucket : map.buckets) {
+    maxBucket = std::max(maxBucket, bucket.seqSize);
+  }
 
 #ifdef IPUMA_DEBUG
   int emptyBuckets = 0;
-  int maxBucket = 0;
   long dataCount = 0;
   std::vector<int> bucketCmps;
   std::map<int, int> occurence;
@@ -487,7 +548,6 @@ void SWAlgorithm::compare_mn_local(const std::vector<std::string>& Seqs, const C
     if (bucket.cmps.size() == 0) emptyBuckets++;
     occurence[bucket.cmps.size()]++;
     bucketCmps.push_back(bucket.cmps.size());
-    maxBucket = std::max(maxBucket, bucket.seqSize);
     dataCount += bucket.seqSize;
   }
   std::stringstream ss;
@@ -498,16 +558,20 @@ void SWAlgorithm::compare_mn_local(const std::vector<std::string>& Seqs, const C
   ss << "]";
   PLOGD << "Total number of buckets: " << map.numBuckets << " empty buckets: " << emptyBuckets;
   PLOGD << "Bucket size occurence: " << ss.str();
+  int adjusted_bufsize = ((algoconfig.bufsize / 10) * (1+calculate_slot_region_index(algoconfig, maxBucket)));
   double bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(algoconfig.bufsize) * 100.0;
-  PLOGD << "Max bucket: " << maxBucket << "/" << algoconfig.bufsize << " (" << bucketPerc << "%)\n";
-  double totalTransferSize = algoconfig.getInputBufferSize32b() * 4;
+  double adjusted_bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(adjusted_bufsize) * 100.0;
+  PLOGD << "Max bucket: " << maxBucket << "/" << algoconfig.bufsize << " (" << bucketPerc << "%), adjusted " <<
+   maxBucket << "/" << adjusted_bufsize << " (" <<  adjusted_bucketPerc << "%)";
+  double totalTransferSize = ((algoconfig.getInputBufferSize32b() * 4)/ 10) * (1+calculate_slot_region_index(algoconfig, maxBucket));
   auto transferInfoRatio = static_cast<double>(dataCount) / totalTransferSize * 100;
-  PLOGD << "Transfer info/total: " << dataCount << "/" << totalTransferSize << " (" << transferInfoRatio << "%)\n";
+  PLOGD << "Transfer info/total: " << dataCount << "/" << totalTransferSize << " (" << transferInfoRatio << "%)";
 #endif
 
-  int slot = 0;
+  slotToken slot = 0;
   if (use_remote_buffer) {
-    slot = upload(&*inputs.begin(), &*inputs.end());
+    slot = queue_slot(maxBucket);
+    upload(&*inputs.begin(), &*inputs.end(), slot);
   }
   prepared_remote_compare(&*inputs.begin(), &*inputs.end(), &*results.begin(), &*results.end(), slot);
 
@@ -518,13 +582,30 @@ void SWAlgorithm::compare_mn_local(const std::vector<std::string>& Seqs, const C
 void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatlib::DataType dtype, const IPUAlgoConfig& algoconfig, const RawSequences& Seqs, const Comparisons& Cmps, int32_t* inputs_begin, int32_t* inputs_end, int32_t* mapping) {
   auto encoder = swatlib::getEncoder(dtype);
   const size_t seqs_offset = getSeqsOffset(algoconfig);
-  const size_t meta_offset = getMetaOffset(algoconfig);
+  size_t meta_offset = getMetaOffset(algoconfig);
+
+  int maxBucket = 0;
+  for (const auto& bucketMapping : map.buckets) {
+    maxBucket = std::max(maxBucket, bucketMapping.seqSize);
+  }
+
+  int buffers = 10;
+  int buffer_share = calculate_slot_region_index(algoconfig, maxBucket);
+  int ibufsize = (algoconfig.bufsize / 4) + (algoconfig.bufsize % 4 == 0 ? 0 : 1);
+  auto scale_bufsize = [=](int bufsize) {
+    return static_cast<size_t>( (bufsize /  buffers + (bufsize % buffers == 0 ? 0 : 1)) * (buffer_share + 1)  );
+  };
+  size_t seq_scaled_size = scale_bufsize(ibufsize);
+
+  PLOGD.printf("Detected max buffer of %d, this corresponds to lot %d, %d/%d", maxBucket, buffer_share, seq_scaled_size, ibufsize);
+  PLOGD.printf("Old buffer %d/%d recalculated offsets %d/%d", seq_scaled_size, ibufsize, seq_scaled_size*algoconfig.tilesUsed, meta_offset);
+  meta_offset = seq_scaled_size*algoconfig.tilesUsed;
 
   int8_t* seqs = (int8_t*)inputs_begin + seqs_offset;
   int32_t* meta = inputs_begin + meta_offset;
 
   for (const auto& bucketMapping : map.buckets) {
-    const size_t offsetBuffer = bucketMapping.bucketIndex * algoconfig.getBufsize32b() * 4;
+    const size_t offsetBuffer = bucketMapping.bucketIndex * scale_bufsize(algoconfig.getBufsize32b() * 4);
     const size_t offsetMeta = bucketMapping.bucketIndex * algoconfig.maxBatches * 4;
     auto* bucket_meta = meta + offsetMeta;
     auto* bucket_seq = seqs + offsetBuffer;
@@ -532,17 +613,17 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
     for (const auto& sm : bucketMapping.seqs) {
       const char* seq;
       int seqSize;
-      switch(sm.origin) {
-      case partition::SequenceOrigin::A:
-        throw std::runtime_error("Using A/B mapping with unordered comparison.");
-        break;
-      case partition::SequenceOrigin::B:
-        throw std::runtime_error("Using A/B mapping with unordered comparison.");
-        break;
-      case partition::SequenceOrigin::unordered:
-        seq = Seqs[sm.index].data();
-        seqSize = Seqs[sm.index].size();
-        break;
+      switch (sm.origin) {
+        case partition::SequenceOrigin::A:
+          throw std::runtime_error("Using A/B mapping with unordered comparison.");
+          break;
+        case partition::SequenceOrigin::B:
+          throw std::runtime_error("Using A/B mapping with unordered comparison.");
+          break;
+        case partition::SequenceOrigin::unordered:
+          seq = Seqs[sm.index].data();
+          seqSize = Seqs[sm.index].size();
+          break;
       }
       for (int j = 0; j < seqSize; ++j) {
         bucket_seq[sm.offset + j] = encoder.encode(seq[j]);
@@ -550,10 +631,10 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
     }
     for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
       const auto& cmpMapping = bucketMapping.cmps[i];
-      bucket_meta[i*4  ] = cmpMapping.sizeA;
-      bucket_meta[i*4+1] = cmpMapping.offsetA;
-      bucket_meta[i*4+2] = cmpMapping.sizeB;
-      bucket_meta[i*4+3] = cmpMapping.offsetB;
+      bucket_meta[i * 4] = cmpMapping.sizeA;
+      bucket_meta[i * 4 + 1] = cmpMapping.offsetA;
+      bucket_meta[i * 4 + 2] = cmpMapping.sizeB;
+      bucket_meta[i * 4 + 3] = cmpMapping.offsetB;
 
       mapping[cmpMapping.comparisonIndex] = map.cmpCapacity * bucketMapping.bucketIndex + i;
     }
@@ -561,15 +642,32 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
 }
 
 void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatlib::DataType dtype, const IPUAlgoConfig& algoconfig, const RawSequences& A, const RawSequences& B, int32_t* inputs_begin, int32_t* inputs_end, int32_t* mapping) {
+  int maxBucket = 0;
+  for (const auto& bucketMapping : map.buckets) {
+    maxBucket = std::max(maxBucket, bucketMapping.seqSize);
+  }
+
+  int buffers = 10;
+  int buffer_share = calculate_slot_region_index(algoconfig, maxBucket);
+  int ibufsize = (algoconfig.bufsize / 4) + (algoconfig.bufsize % 4 == 0 ? 0 : 1);
+  auto scale_bufsize = [=](int bufsize) {
+    return static_cast<size_t>( (bufsize /  buffers + (bufsize % buffers == 0 ? 0 : 1)) * (buffer_share + 1)  );
+  };
+  size_t seq_scaled_size = scale_bufsize(ibufsize);
+
+  PLOGD.printf("Detected max buffer of %d, this corresponds to lot %d, %d/%d", maxBucket, buffer_share, seq_scaled_size, ibufsize);
+  size_t meta_offset = getMetaOffset(algoconfig);
+  PLOGD.printf("Old buffer %d/%d recalculated offsets %d/%d", seq_scaled_size, ibufsize, seq_scaled_size*algoconfig.tilesUsed, meta_offset);
+  meta_offset = seq_scaled_size*algoconfig.tilesUsed;
   auto encoder = swatlib::getEncoder(dtype);
   const size_t seqs_offset = getSeqsOffset(algoconfig);
-  const size_t meta_offset = getMetaOffset(algoconfig);
 
   int8_t* seqs = (int8_t*)inputs_begin + seqs_offset;
   int32_t* meta = inputs_begin + meta_offset;
 
+
   for (const auto& bucketMapping : map.buckets) {
-    const size_t offsetBuffer = bucketMapping.bucketIndex * algoconfig.getBufsize32b() * 4;
+    const size_t offsetBuffer = bucketMapping.bucketIndex * scale_bufsize(algoconfig.getBufsize32b() * 4);
     const size_t offsetMeta = bucketMapping.bucketIndex * algoconfig.maxBatches * 4;
     auto* bucket_meta = meta + offsetMeta;
     auto* bucket_seq = seqs + offsetBuffer;
@@ -577,18 +675,18 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
     for (const auto& sm : bucketMapping.seqs) {
       const char* seq;
       int seqSize;
-      switch(sm.origin) {
-      case partition::SequenceOrigin::A:
-        seq = A[sm.index].data();
-        seqSize = A[sm.index].size();
-        break;
-      case partition::SequenceOrigin::B:
-        seq = B[sm.index].data();
-        seqSize = B[sm.index].size();
-        break;
-      case partition::SequenceOrigin::unordered:
-        throw std::runtime_error("Using unordered mapping with A/B comparison.");
-        break;
+      switch (sm.origin) {
+        case partition::SequenceOrigin::A:
+          seq = A[sm.index].data();
+          seqSize = A[sm.index].size();
+          break;
+        case partition::SequenceOrigin::B:
+          seq = B[sm.index].data();
+          seqSize = B[sm.index].size();
+          break;
+        case partition::SequenceOrigin::unordered:
+          throw std::runtime_error("Using unordered mapping with A/B comparison.");
+          break;
       }
       for (int j = 0; j < seqSize; ++j) {
         bucket_seq[sm.offset + j] = encoder.encode(seq[j]);
@@ -596,17 +694,17 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
     }
     for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
       const auto& cmpMapping = bucketMapping.cmps[i];
-      bucket_meta[i*4  ] = cmpMapping.sizeA;
-      bucket_meta[i*4+1] = cmpMapping.offsetA;
-      bucket_meta[i*4+2] = cmpMapping.sizeB;
-      bucket_meta[i*4+3] = cmpMapping.offsetB;
+      bucket_meta[i * 4] = cmpMapping.sizeA;
+      bucket_meta[i * 4 + 1] = cmpMapping.offsetA;
+      bucket_meta[i * 4 + 2] = cmpMapping.sizeB;
+      bucket_meta[i * 4 + 3] = cmpMapping.offsetB;
 
       mapping[cmpMapping.comparisonIndex] = map.cmpCapacity * bucketMapping.bucketIndex + i;
     }
   }
 }
 
-void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A,
+int SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A,
                                  const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, int* seqMapping) {
   swatlib::TickTock preprocessTimer;
   std::vector<swatlib::TickTock> stageTimers(5);
@@ -627,52 +725,10 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
   stageTimers[3].tick();
   partition::BucketMap map(algoconfig.tilesUsed, algoconfig.maxBatches, algoconfig.bufsize);
   fillBuckets(algoconfig.fillAlgo, map, A, B, 0);
-
   stageTimers[3].tock();
 
   stageTimers[4].tick();
-  const size_t seqs_offset = getSeqsOffset(algoconfig);
-  const size_t meta_offset = getMetaOffset(algoconfig);
-
-  int8_t* seqs = (int8_t*)inputs_begin + seqs_offset;
-  int32_t* meta = inputs_begin + meta_offset;
-
-  for (const auto& bucketMapping : map.buckets) {
-    const size_t offsetBuffer = bucketMapping.bucketIndex * algoconfig.getBufsize32b() * 4;
-    const size_t offsetMeta = bucketMapping.bucketIndex * algoconfig.maxBatches * 4;
-    auto* bucket_meta = meta + offsetMeta;
-    auto* bucket_seq = seqs + offsetBuffer;
-
-    for (const auto& sm : bucketMapping.seqs) {
-      const char* seq;
-      int seqSize;
-      switch(sm.origin) {
-      case partition::SequenceOrigin::A:
-        seq = A[sm.index].data();
-        seqSize = A[sm.index].size();
-        break;
-      case partition::SequenceOrigin::B:
-        seq = B[sm.index].data();
-        seqSize = B[sm.index].size();
-        break;
-      case partition::SequenceOrigin::unordered:
-        throw std::runtime_error("Using unordered mapping with A/B comparison.");
-        break;
-      }
-      for (int j = 0; j < seqSize; ++j) {
-        bucket_seq[sm.offset + j] = encoder.encode(seq[j]);
-      }
-    }
-    for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
-      const auto& cmpMapping = bucketMapping.cmps[i];
-      bucket_meta[i*4  ] = cmpMapping.sizeA;
-      bucket_meta[i*4+1] = cmpMapping.offsetA;
-      bucket_meta[i*4+2] = cmpMapping.sizeB;
-      bucket_meta[i*4+3] = cmpMapping.offsetB;
-
-      seqMapping[cmpMapping.comparisonIndex] = map.cmpCapacity * bucketMapping.bucketIndex + i;
-    }
-  }
+  fill_input_buffer(map, swconfig.datatype, algoconfig, A, B, inputs_begin, inputs_end, seqMapping);
   stageTimers[4].tock();
 
   preprocessTimer.tock();
@@ -684,9 +740,12 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
     PLOGD << i << ": " << stageTimers[i].duration<std::chrono::milliseconds>();
   }
 
+int maxBucket = 0;
+for (const auto& bucket : map.buckets) {
+  maxBucket = std::max(maxBucket, bucket.seqSize);
+}
 #ifdef IPUMA_DEBUG
   int emptyBuckets = 0;
-  int maxBucket = 0;
   long dataCount = 0;
   std::vector<int> bucketCmps;
   std::map<int, int> occurence;
@@ -694,7 +753,6 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
     if (bucket.cmps.size() == 0) emptyBuckets++;
     occurence[bucket.cmps.size()]++;
     bucketCmps.push_back(bucket.cmps.size());
-    maxBucket = std::max(maxBucket, bucket.seqSize);
     dataCount += bucket.seqSize;
   }
   std::stringstream ss;
@@ -705,40 +763,57 @@ void SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& 
   ss << "]";
   PLOGD << "Total number of buckets: " << map.numBuckets << " empty buckets: " << emptyBuckets;
   PLOGD << "Bucket size occurence: " << ss.str();
+  int adjusted_bufsize = ((algoconfig.bufsize / 10) * (1+calculate_slot_region_index(algoconfig, maxBucket)));
   double bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(algoconfig.bufsize) * 100.0;
-  PLOGD << "Max bucket: " << maxBucket << "/" << algoconfig.bufsize << " (" << bucketPerc << "%)\n";
-  double totalTransferSize = algoconfig.getInputBufferSize32b() * 4;
+  double adjusted_bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(adjusted_bufsize) * 100.0;
+  PLOGD << "Max bucket: " << maxBucket << "/" << algoconfig.bufsize << " (" << bucketPerc << "%), adjusted " <<
+   maxBucket << "/" << adjusted_bufsize << " (" <<  adjusted_bucketPerc << "%)";
+  double totalTransferSize = ((algoconfig.getInputBufferSize32b() * 4)/ 10) * (1+calculate_slot_region_index(algoconfig, maxBucket));
   auto transferInfoRatio = static_cast<double>(dataCount) / totalTransferSize * 100;
-  PLOGD << "Transfer info/total: " << dataCount << "/" << totalTransferSize << " (" << transferInfoRatio << "%)\n";
+  PLOGD << "Transfer info/total: " << dataCount << "/" << totalTransferSize << " (" << transferInfoRatio << "%)";
 #endif
+
+  return maxBucket;
 }
-slotToken SWAlgorithm::queue_slot() {
-  assert(buf_has_capacity());
+
+slotToken SWAlgorithm::queue_slot(int max_bucket_size) {
+  assert(buf_has_capacity(max_bucket_size));
+  auto si = calculate_slot_region_index(max_bucket_size);
   int s = -1;
   for (size_t i = 0; i < slots.size(); i++) {
-    if (!slots[i]) {
+    if (!slots[si][i]) {
       s = i;
       break;
     }
   }
   assert(s != -1);
-  slots[s] = true;
-  slot_avail--;
+  slots[si][s] = true;
+  slot_avail[si]--;
   last_slot = s;
-  return s;
+  return s + (si * slot_size);
 }
+
 void SWAlgorithm::release_slot(slotToken i) {
-  assert(slots[i] == true);
-  slots[i] = false;
-  slot_avail++;
+  auto [lot, sid] = unpack_slot(i);
+  assert(slots[lot][sid] == true);
+  slots[lot][sid] = false;
+  slot_avail[lot]++;
 }
 
-bool SWAlgorithm::slot_available() { return slot_avail > 0; }
+bool SWAlgorithm::slot_available(int max_buffer_size) {
+  return slot_avail[calculate_slot_region_index(max_buffer_size)] > 0;
+}
 
-slotToken SWAlgorithm::upload(int32_t* inputs_begin, int32_t* inputs_end) {
-  int slot = queue_slot();
-  upload(inputs_begin, inputs_end, slot);
-  return slot;
+int SWAlgorithm::calculate_slot_region_index(const IPUAlgoConfig& algoconfig, int max_buffer_size) {
+  auto ret = (int)ceil((max_buffer_size / (double)algoconfig.bufsize) * 10.0) - 1;
+  PLOGD.printf("Calculated slot region %d from maxbuf %d and bufsize %d", ret, max_buffer_size, algoconfig.bufsize);
+  return ret;
+}
+
+int SWAlgorithm::calculate_slot_region_index(int max_buffer_size) {
+  auto ret = (int)ceil((max_buffer_size / (double)algoconfig.bufsize) * 10.0) - 1;
+  PLOGD.printf("Calculated slot region %d from maxbuf %d and bufsize %d", ret, max_buffer_size, algoconfig.bufsize);
+  return ret;
 }
 
 }  // namespace batchaffine
