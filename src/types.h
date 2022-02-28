@@ -14,12 +14,12 @@ struct __attribute__((__packed__)) Comparison {
 
 typedef std::vector<Comparison> Comparisons;
 
-enum class VertexType { cpp, assembly, multi, multiasm, stripedasm, multistriped, multistripedasm };
-static const std::vector<std::string> vertexTypeNames = {"cpp", "assembly", "multi", "multiasm", "stripedasm", "multistriped", "multistripedasm"};
+enum class VertexType { cpp, assembly, multi, multiasm};
+static const std::vector<std::string> vertexTypeNames = {"cpp", "assembly", "multi", "multiasm"};
 enum class Algorithm {fillFirst, roundRobin, greedy};
 static const std::vector<std::string> algoNames = {"fillfirst", "roundrobin", "greedy"};
 
-static const std::string typeLabels[] = {"SWAffine", "SWAffineAsm", "MultiSWAffine", "MultiSWAffineAsm", "StripedSWAffineAsm", "MultiSWStriped", "MultiSWStripedAsm"};
+static const std::string typeLabels[] = {"SWAffine", "SWAffineAsm", "MultiSWAffine", "MultiSWAffineAsm"};
 std::string vertexTypeToIpuLabel(VertexType v);
 std::string vertexTypeToConfigString(VertexType v);
 std::string algorithmToConfigString(Algorithm a);

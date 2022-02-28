@@ -58,7 +58,8 @@ void to_json(json& j, const IPUAlgoConfig& c) {
 		{"maxBatches", c.maxBatches},
 		{"bufsize", c.bufsize},
 		{"vtype", c.vtype},
-		{"fillAlgo", c.fillAlgo}
+		{"fillAlgo", c.fillAlgo},
+		{"forwardOnly", c.forwardOnly}
 	};
 }
 
@@ -69,5 +70,6 @@ void from_json(const json& j, IPUAlgoConfig& c) {
 	j.at("bufsize").get_to(c.bufsize);
 	j.at("vtype").get_to(c.vtype);
 	j.at("fillAlgo").get_to(c.fillAlgo);
+	j.at("forwardOnly").get_to(c.forwardOnly);
 }
 }

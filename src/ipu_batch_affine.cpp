@@ -27,7 +27,7 @@ namespace batchaffine {
 std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigned long activeTiles, unsigned long maxAB,
                                          unsigned long bufSize, unsigned long maxBatches,
                                          const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt,
-                                         bool use_remote_buffer, int buf_rows) {
+                                         bool use_remote_buffer, int buf_rows, bool forward_only) {
   int buffers = 10;
   if (!use_remote_buffer) {
     buffers = 1;
@@ -49,44 +49,38 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
 
     auto [m, n] = similarityData.shape();
 
-    poplar::Type sType;
-    int workerMultiplier = 1;
-    switch (vtype) {
-      case VertexType::cpp:
-        sType = INT;
-        break;
-      case VertexType::assembly:
-        sType = FLOAT;
-        break;
-      case VertexType::multi:
-        sType = INT;
-        workerMultiplier = target.getNumWorkerContexts();
-        break;
-      case VertexType::multiasm:
-        sType = FLOAT;
-        workerMultiplier = target.getNumWorkerContexts();
-        break;
-      case VertexType::multistriped:
-        sType = INT;
-        break;  // all threads are going to work on the same problem
-      case VertexType::multistripedasm:
-        sType = FLOAT;
-        break;  // all threads are going to work on the same problem
-      case VertexType::stripedasm:
-        sType = HALF;
-        break;
-    }
+  poplar::Type sType;
+  int workerMultiplier = 1;
+  switch (vtype) {
+    case VertexType::cpp: sType = INT; break;
+    case VertexType::assembly: sType = FLOAT; break;
+    case VertexType::multi:
+      sType = INT;
+      workerMultiplier = target.getNumWorkerContexts();
+      break;
+    case VertexType::multiasm:
+      sType = FLOAT;
+      workerMultiplier = target.getNumWorkerContexts();
+      break;
+  }
 
-    TypeTraits traits = typeToTrait(sType);
-    void* similarityBuffer;
-    convertSimilarityMatrix(target, sType, similarityData, &similarityBuffer);
-    Tensor similarity;
-    if (vtype == VertexType::stripedasm) {
-      similarity = graph.addConstant(sType, {m * n}, similarityBuffer, traits, false, "similarity");
-    } else {
-      similarity = graph.addConstant(sType, {m, n}, similarityBuffer, traits, false, "similarity");
-    }
-    free(similarityBuffer);
+  TypeTraits traits = typeToTrait(sType);
+  void* similarityBuffer;
+  convertSimilarityMatrix(target, sType, similarityData, &similarityBuffer);
+  Tensor similarity;
+  similarity = graph.addConstant(sType, {m, n}, similarityBuffer, traits, false, "similarity");
+  free(similarityBuffer);
+
+    // TypeTraits traits = typeToTrait(sType);
+    // void* similarityBuffer;
+    // convertSimilarityMatrix(target, sType, similarityData, &similarityBuffer);
+    // Tensor similarity;
+    // if (vtype == VertexType::stripedasm) {
+    //   similarity = graph.addConstant(sType, {m * n}, similarityBuffer, traits, false, "similarity");
+    // } else {
+    //   similarity = graph.addConstant(sType, {m, n}, similarityBuffer, traits, false, "similarity");
+    // }
+    // free(similarityBuffer);
 
     Tensor Scores = graph.addVariable(INT, {activeTiles, maxBatches}, "Scores");
     Tensor ARanges = graph.addVariable(INT, {activeTiles, maxBatches}, "ARanges");
@@ -121,6 +115,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
                                           {"score", Scores[i]},
                                           {"ARange", ARanges[i]},
                                           {"BRange", BRanges[i]},
+                                          {"forwardOnly", forward_only},
                                       });
       // graph.setFieldSize(vtx["C"], maxAB * workerMultiplier);
       auto C_T = graph.addVariable(sType, {maxAB * workerMultiplier}, "C["+std::to_string(i)+"]");
@@ -134,16 +129,16 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
       graph.connect(vtx["bG"], bG_T);
       undef.add(program::WriteUndef(bG_T));
 
-      if (vtype == VertexType::stripedasm) {
-        assert(false && "Not Implemented");
-        graph.connect(vtx["simWidth"], m);
-        graph.setFieldSize(vtx["tS"], maxAB * workerMultiplier);
-      }
-      if (vtype == VertexType::multistriped || vtype == VertexType::multistripedasm) {
-        assert(false && "Not Implemented");
-        graph.setFieldSize(vtx["tS"], maxAB * target.getNumWorkerContexts());
-        graph.setFieldSize(vtx["locks"], target.getNumWorkerContexts());
-      }
+      // if (vtype == VertexType::stripedasm) {
+      //   assert(false && "Not Implemented");
+      //   graph.connect(vtx["simWidth"], m);
+      //   graph.setFieldSize(vtx["tS"], maxAB * workerMultiplier);
+      // }
+      // if (vtype == VertexType::multistriped || vtype == VertexType::multistripedasm) {
+      //   assert(false && "Not Implemented");
+      //   graph.setFieldSize(vtx["tS"], maxAB * target.getNumWorkerContexts());
+      //   graph.setFieldSize(vtx["locks"], target.getNumWorkerContexts());
+      // }
       graph.setTileMapping(vtx, tileIndex);
       graph.setPerfEstimate(vtx, 1);
     }
@@ -241,7 +236,7 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
   auto similarityMatrix = swatlib::selectMatrix(config.similarity, config.matchValue, config.mismatchValue, config.ambiguityValue);
   std::vector<program::Program> programs =
       buildGraph(graph, algoconfig.vtype, algoconfig.tilesUsed, algoconfig.maxAB, algoconfig.bufsize, algoconfig.maxBatches,
-                 similarityMatrix, config.gapInit, config.gapExtend, use_remote_buffer, slot_size);
+                 similarityMatrix, config.gapInit, config.gapExtend, use_remote_buffer, slot_size, algoconfig.forwardOnly);
 
   createEngine(graph, programs);
 }
@@ -251,31 +246,26 @@ SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig)
 
 BlockAlignmentResults SWAlgorithm::get_result() { return {scores, a_range_result, b_range_result}; }
 
-void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A,
-                                     const std::vector<std::string>& B) {
-  if (A.size() != B.size()) {
-    PLOGW << "Mismatched size A " << A.size() << " != B " << B.size();
-    exit(1);
-  }
-  if (A.size() > algoconfig.maxBatches * algoconfig.tilesUsed) {
-    PLOGW << "A has more elements than the maxBatchsize";
-    PLOGW << "A.size() = " << A.size();
+void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std::vector<int>& SeqSizes) {
+  if (SeqSizes.size() > algoconfig.maxBatches * algoconfig.tilesUsed) {
+    PLOGW << "Sequence has more elements than the maxBatchsize";
+    PLOGW << "Seq.size() = " << SeqSizes.size();
     PLOGW << "max comparisons = " << algoconfig.tilesUsed << " * " << algoconfig.maxBatches;
-    exit(1);
+    throw std::runtime_error("Input sequence (A) is over the max length.");
   }
 
-  for (const auto& a : A) {
-    if (a.size() > algoconfig.maxAB) {
-      PLOGW << "Sequence size in a " << a.size() << " > " << algoconfig.maxAB;
+  for (const auto& s : SeqSizes) {
+    if (s > algoconfig.maxAB) {
+      PLOGW << "Sequence size in seq " << s << " > " << algoconfig.maxAB;
       exit(1);
     }
   }
-  // for (const auto& b : B) {
-  //   if (b.size() > algoconfig.maxAB) {
-  //     PLOGW << "Sequence size in a " << b.size() << " > " << algoconfig.maxAB;
-  //     exit(1);
-  //   }
-  // }
+}
+
+void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const RawSequences& Seqs) {
+  std::vector<int> seqSizes;
+  std::transform(Seqs.begin(), Seqs.end(), std::back_inserter(seqSizes), [](const auto& s) {return s.size();});
+  checkSequenceSizes(algoconfig, seqSizes);
 }
 
 void SWAlgorithm::fillMNBuckets(Algorithm algo, partition::BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int offset) {
@@ -507,14 +497,20 @@ std::string SWAlgorithm::printTensors() {
 }
 
 void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end) {
-  int maxComparisons = scores_end - scores_begin;
-  size_t a_range_offset = maxComparisons;
-  size_t b_range_offset = maxComparisons * 2;
-  auto* results_score = results_begin;
-  auto* results_arange = results_begin + a_range_offset;
-  auto* results_brange = results_begin + b_range_offset;
-
   int numComparisons = mapping_end - mapping_begin;
+  transferResults(results_begin, results_end, mapping_begin, mapping_end, scores_begin, scores_end, arange_begin, arange_end, brange_begin, brange_end, numComparisons);
+}
+void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons) {
+  size_t results_size = results_end - results_begin;
+  size_t result_part_size = results_size / 3;
+  if (results_size % 3 != 0)  {
+    std::cout << results_size << "\n";
+    throw std::runtime_error("Results buffer not 3 aligned.");
+  }
+  auto* results_score = results_begin;
+  auto* results_arange = results_begin + result_part_size;
+  auto* results_brange = results_begin + result_part_size * 2;
+
   for (int i = 0; i < numComparisons; ++i) {
     auto mapped_i = mapping_begin[i];
     scores_begin[i] = results_score[mapped_i];
@@ -580,7 +576,7 @@ void SWAlgorithm::compare_mn_local(const std::vector<std::string>& Seqs, const C
 }
 
 void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatlib::DataType dtype, const IPUAlgoConfig& algoconfig, const RawSequences& Seqs, const Comparisons& Cmps, int32_t* inputs_begin, int32_t* inputs_end, int32_t* mapping) {
-  auto encoder = swatlib::getEncoder(dtype);
+  auto encodeTable = swatlib::getEncoder(dtype).getCodeTable();
   const size_t seqs_offset = getSeqsOffset(algoconfig);
   size_t meta_offset = getMetaOffset(algoconfig);
 
@@ -626,7 +622,7 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
           break;
       }
       for (int j = 0; j < seqSize; ++j) {
-        bucket_seq[sm.offset + j] = encoder.encode(seq[j]);
+        bucket_seq[sm.offset + j] = encodeTable[seq[j]];
       }
     }
     for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
@@ -659,7 +655,11 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
   size_t meta_offset = getMetaOffset(algoconfig);
   PLOGD.printf("Old buffer %d/%d recalculated offsets %d/%d", seq_scaled_size, ibufsize, seq_scaled_size*algoconfig.tilesUsed, meta_offset);
   meta_offset = seq_scaled_size*algoconfig.tilesUsed;
-  auto encoder = swatlib::getEncoder(dtype);
+
+  size_t input_elems = inputs_end - inputs_begin;
+  memset(inputs_begin, 0, input_elems * sizeof(int32_t));
+
+  const auto encodeTable = swatlib::getEncoder(dtype).getCodeTable();
   const size_t seqs_offset = getSeqsOffset(algoconfig);
 
   int8_t* seqs = (int8_t*)inputs_begin + seqs_offset;
@@ -689,7 +689,7 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
           break;
       }
       for (int j = 0; j < seqSize; ++j) {
-        bucket_seq[sm.offset + j] = encoder.encode(seq[j]);
+        bucket_seq[sm.offset + j] = encodeTable[seq[j]];
       }
     }
     for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
@@ -704,40 +704,30 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
   }
 }
 
-int SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A,
-                                 const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, int* seqMapping) {
+int SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, int* seqMapping) {
   swatlib::TickTock preprocessTimer;
-  std::vector<swatlib::TickTock> stageTimers(5);
+  std::vector<swatlib::TickTock> stageTimers(3);
   preprocessTimer.tick();
-  stageTimers[0].tick();
-  checkSequenceSizes(algoconfig, A, B);
-  stageTimers[0].tock();
+  checkSequenceSizes(algoconfig, A);
+  // checkSequenceSizes(algoconfig, B);
 
   stageTimers[1].tick();
-  auto encoder = swatlib::getEncoder(swconfig.datatype);
+  partition::BucketMap map(algoconfig.tilesUsed, algoconfig.maxBatches, algoconfig.bufsize);
+  fillBuckets(algoconfig.fillAlgo, map, A, B, 0);
   stageTimers[1].tock();
 
   stageTimers[2].tick();
-  size_t input_elems = inputs_end - inputs_begin;
-  memset(inputs_begin, 0, input_elems * sizeof(int32_t));
-  stageTimers[2].tock();
-
-  stageTimers[3].tick();
-  partition::BucketMap map(algoconfig.tilesUsed, algoconfig.maxBatches, algoconfig.bufsize);
-  fillBuckets(algoconfig.fillAlgo, map, A, B, 0);
-  stageTimers[3].tock();
-
-  stageTimers[4].tick();
   fill_input_buffer(map, swconfig.datatype, algoconfig, A, B, inputs_begin, inputs_end, seqMapping);
-  stageTimers[4].tock();
-
+  stageTimers[2].tock();
   preprocessTimer.tock();
+
   PLOGD << "Total preprocessing time (in s): "
         << static_cast<double>(preprocessTimer.duration<std::chrono::milliseconds>()) / 1000.0;
 
   PLOGD << "Stage timers:";
   for (int i = 0; i < stageTimers.size(); ++i) {
-    PLOGD << i << ": " << stageTimers[i].duration<std::chrono::milliseconds>();
+    // PLOGD << i << ": " << stageTimers[i].duration<std::chrono::milliseconds>();
+    PLOGD << i << ": " << stageTimers[i].accumulate_microseconds() / 1e3;
   }
 
 int maxBucket = 0;

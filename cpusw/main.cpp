@@ -7,7 +7,7 @@
 #include <plog/Appenders/ColorConsoleAppender.h>
 #include <plog/Formatters/TxtFormatter.h>
 
-#include "ipuswconfig.hpp"
+#include "cpuswconfig.hpp"
 #include "run_comparison.hpp"
 
 using json = nlohmann::json;
@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
 	options.positional_help("[reference_file] [query_file]");
 	options.parse_positional({"reference", "query", ""});
 
-	json configJson = IpuSwConfig();
+	json configJson = CpuSwConfig();
 	for (const auto& [gname, gvalues] : configJson.items()) {
 		for (const auto& [optname, defaultValue] : gvalues.items()) {
 			switch (defaultValue.type()) {
@@ -37,9 +37,6 @@ int main(int argc, char** argv) {
 					break;
 				case json::value_t::string:
 					options.add_option(gname, "", optname, "", cxxopts::value<std::string>(), defaultValue);
-					break;
-				case json::value_t::boolean:
-					options.add_option(gname, "", optname, "", cxxopts::value<bool>(), std::to_string(defaultValue.get<bool>()));
 					break;
 				default:
 					throw std::runtime_error("unsupported type");
@@ -72,9 +69,6 @@ int main(int argc, char** argv) {
 					case json::value_t::string:
 						configJson[gname][optName] = result[optName].as<std::string>();
 						break;
-					case json::value_t::boolean:
-						configJson[gname][optName] = result[optName].as<bool>();
-						break;
 					default:
 						throw std::runtime_error("unsupported type");
 						break;
@@ -83,8 +77,7 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	PLOGI << configJson.dump();
-	IpuSwConfig config = configJson.get<IpuSwConfig>();
+	CpuSwConfig config = configJson.get<CpuSwConfig>();
 
 	std::string refPath = result["reference"].as<std::string>();
 	std::string queryPath = result["query"].as<std::string>();
