@@ -15,6 +15,19 @@ add_gp_library(
 add_subdirectory(swatlib)
 
 add_library(IPUMA_LIBRARY "ipu_batch_affine.cpp" "ipu_base.cpp" "driver.cpp" "partition.cpp" "types.cpp" "ipu_config.cpp")
+
+find_package(OpenMP REQUIRED)
+if(OPENMP_FOUND OR OpenMP_CXX_FOUND)
+    # Set THREADED if OpenMP is found
+    message("Threaded")
+    target_compile_definitions(IPUMA_LIBRARY PUBLIC THREADED)
+    if(TARGET OpenMP::OpenMP_CXX)
+        target_link_libraries(IPUMA_LIBRARY PUBLIC OpenMP::OpenMP_CXX)
+    else()
+        target_compile_options(IPUMA_LIBRARY PUBLIC "${OpenMP_CXX_FLAGS}")
+        target_link_libraries(IPUMA_LIBRARY PUBLIC "${OpenMP_CXX_FLAGS}")
+    endif()
+endif()
 target_include_directories(IPUMA_LIBRARY PUBLIC "${PROJECT_SOURCE_DIR}/extern/include")
-target_link_libraries(IPUMA_LIBRARY poplar popops poputil swatlib)
+target_link_libraries(IPUMA_LIBRARY PUBLIC poplar popops poputil swatlib)
 add_dependencies(IPUMA_LIBRARY  algoipu.gp_codelets)

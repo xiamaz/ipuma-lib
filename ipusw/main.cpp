@@ -30,6 +30,10 @@ int main(int argc, char** argv) {
 
 	json configJson = IpuSwConfig();
 	for (const auto& [gname, gvalues] : configJson.items()) {
+		if (gvalues.type() == json::value_t::number_integer) {
+			options.add_option("", "", gname, "", cxxopts::value<int>()->default_value(std::to_string(gvalues.get<int>())), std::to_string(gvalues.get<int>()));
+			continue;
+		}
 		for (const auto& [optname, defaultValue] : gvalues.items()) {
 			switch (defaultValue.type()) {
 				case json::value_t::number_integer:
@@ -63,6 +67,10 @@ int main(int argc, char** argv) {
 	}
 
 	for (const auto& [gname, gvalues] : configJson.items()) {
+		if (gvalues.type() == json::value_t::number_integer) {
+				configJson[gname] = result[gname].as<int>();
+				continue;
+		}
 		for (const auto& [optName, optValue] : gvalues.items()) {
 			if (result.count(optName)) {
 				switch (optValue.type()) {

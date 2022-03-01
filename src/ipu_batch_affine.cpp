@@ -8,6 +8,7 @@
 #include <popops/Zero.hpp>
 #include <poputil/TileMapping.hpp>
 #include <string>
+#include <omp.h>
 
 #include "swatlib/swatlib.h"
 
@@ -29,9 +30,9 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
                                          const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt,
                                          bool use_remote_buffer, int buf_rows, bool forward_only) {
   int buffers = 10;
-  if (!use_remote_buffer) {
-    buffers = 1;
-  }
+  // if (!use_remote_buffer) {
+  //   buffers = 1;
+  // }
   std::vector<program::Program> progs(buffers);
   for (size_t buffer_share = 0; buffer_share < buffers; buffer_share++) {
     program::Sequence prog;
@@ -184,6 +185,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
       d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat, "Copy Outputs from IPU->Host"));
     } else {
       auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, inputs_tensor.numElements());
+      PLOGW << STREAM_CONCAT_ALL_N(buffer_share);
       auto device_stream_concat =
           graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
       h2d_prog_concat.add(poplar::program::Copy(host_stream_concat, inputs_tensor));
@@ -332,6 +334,7 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   // We have to reconnect the streams to new memory locations as the destination will be in a shared memroy region.
   // engine->connectStream(HOST_STREAM_CONCAT, inputs_begin);
   auto [lot, sid] = unpack_slot(slot_token);
+  PLOGD.printf("Slot is %d, lot is %d", sid, lot);
   engine->connectStream(STREAM_CONCAT_ALL_N(lot), results_begin);
 
   std::vector<int> vv{(int)sid};
@@ -361,6 +364,10 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   auto scale_bufsize = [=](int bufsize, int lot) {
     return static_cast<size_t>((bufsize / buffers + (bufsize % buffers == 0 ? 0 : 1)) * (lot + 1));
   };
+  PLOGW << lot << " " << sid;
+  PLOGW << scale_bufsize(ibufsize, lot);
+  PLOGW << scale_bufsize(getMetaOffset(algoconfig), lot);
+  PLOGW << algoconfig.tilesUsed * scale_bufsize(ibufsize, lot);
   int32_t* meta_input = inputs_begin + scale_bufsize(getMetaOffset(algoconfig), lot);
 
   // GCUPS computation
@@ -371,6 +378,7 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
     auto b_len = meta_input[4 * i + 2];
     cellCount += a_len * b_len;
     dataCount += a_len + b_len;
+    // PLOGW << a_len << " : blen : " << b_len;
   }
 
   double GCUPSOuter = static_cast<double>(cellCount) / timeOuter / 1e9;
@@ -602,7 +610,9 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
   int8_t* seqs = (int8_t*)inputs_begin + seqs_offset;
   int32_t* meta = inputs_begin + meta_offset;
 
-  for (const auto& bucketMapping : map.buckets) {
+  for (int zzz = 0; zzz < map.buckets.size(); ++zzz) {
+    const auto& bucketMapping = map.buckets[zzz];
+    // const auto& bucketMapping : map.buckets) {
     const size_t offsetBuffer = bucketMapping.bucketIndex * scale_bufsize(algoconfig.getBufsize32b() * 4);
     const size_t offsetMeta = bucketMapping.bucketIndex * algoconfig.maxBatches * 4;
     auto* bucket_meta = meta + offsetMeta;
@@ -623,6 +633,7 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
           seqSize = Seqs[sm.index].size();
           break;
       }
+
       for (int j = 0; j < seqSize; ++j) {
         bucket_seq[sm.offset + j] = encodeTable[seq[j]];
       }
@@ -657,6 +668,7 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
   size_t meta_offset = getMetaOffset(algoconfig);
   PLOGD.printf("Old buffer %d/%d recalculated offsets %d/%d", seq_scaled_size, ibufsize, seq_scaled_size * algoconfig.tilesUsed, meta_offset);
   meta_offset = seq_scaled_size * algoconfig.tilesUsed;
+  PLOGW << "meta_offset " << meta_offset << " seq_scaled " << seq_scaled_size << " " << buffer_share;
 
   size_t input_elems = inputs_end - inputs_begin;
   memset(inputs_begin, 0, input_elems * sizeof(int32_t));
@@ -667,7 +679,14 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
   int8_t* seqs = (int8_t*)inputs_begin + seqs_offset;
   int32_t* meta = inputs_begin + meta_offset;
 
-  for (const auto& bucketMapping : map.buckets) {
+  PLOGW << "======";
+  omp_set_num_threads(16);
+  PLOGW << omp_get_num_threads();
+  PLOGW << "======";
+  #pragma omp parallel for num_threads(32)
+  // for (const auto& bucketMapping : map.buckets) {
+  for (int zzz = 0; zzz < map.buckets.size(); ++zzz) {
+    const auto& bucketMapping = map.buckets[zzz];
     const size_t offsetBuffer = bucketMapping.bucketIndex * scale_bufsize(algoconfig.getBufsize32b() * 4);
     const size_t offsetMeta = bucketMapping.bucketIndex * algoconfig.maxBatches * 4;
     auto* bucket_meta = meta + offsetMeta;
@@ -689,6 +708,7 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
           throw std::runtime_error("Using unordered mapping with A/B comparison.");
           break;
       }
+      #pragma omp simd
       for (int j = 0; j < seqSize; ++j) {
         bucket_seq[sm.offset + j] = encodeTable[seq[j]];
       }
