@@ -38,10 +38,9 @@ class SWAlgorithm : public IPUAlgorithm {
 
  public:
   IPUAlgoConfig algoconfig;
-  bool use_remote_buffer;
 
   SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig);
-  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer = true, size_t slotCap = 1);
+  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap = 1);
 
   std::string printTensors();
 

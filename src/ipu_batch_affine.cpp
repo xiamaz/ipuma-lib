@@ -28,11 +28,9 @@ namespace batchaffine {
 std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigned long activeTiles, unsigned long maxAB,
                                          unsigned long bufSize, unsigned long maxBatches,
                                          const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt,
-                                         bool use_remote_buffer, int buf_rows, bool forward_only) {
-  int buffers = 10;
-  // if (!use_remote_buffer) {
-  //   buffers = 1;
-  // }
+                                         bool use_remote_buffer, int transmissionPrograms, int buf_rows, bool forward_only) {
+  int buffers = transmissionPrograms;
+
   std::vector<program::Program> progs(buffers);
   for (size_t buffer_share = 0; buffer_share < buffers; buffer_share++) {
     program::Sequence prog;
@@ -185,7 +183,6 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
       d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat, "Copy Outputs from IPU->Host"));
     } else {
       auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, inputs_tensor.numElements());
-      PLOGW << STREAM_CONCAT_ALL_N(buffer_share);
       auto device_stream_concat =
           graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
       h2d_prog_concat.add(poplar::program::Copy(host_stream_concat, inputs_tensor));
@@ -220,14 +217,14 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
   // return {prog, d2h_prog_concat, print_tensors_prog};
 }
 
-SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, bool useRemoteBuffer, size_t slotCap)
-    : IPUAlgorithm(config), algoconfig(algoconfig), thread_id(thread_id), use_remote_buffer(useRemoteBuffer) {
+SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap)
+    : IPUAlgorithm(config), algoconfig(algoconfig), thread_id(thread_id) {
   const auto totalComparisonsCount = algoconfig.getTotalNumberOfComparisons();
   slot_size = slotCap;
-  slot_avail.resize(10);
+  slot_avail.resize(algoconfig.transmissionPrograms);
   std::fill(slot_avail.begin(), slot_avail.end(), slotCap);
-  slots.resize(10);
-  for (size_t i = 0; i < 10; i++) {
+  slots.resize(algoconfig.transmissionPrograms);
+  for (size_t i = 0; i < algoconfig.transmissionPrograms; i++) {
     slots[i].resize(slot_size);
     std::fill(slots[i].begin(), slots[i].end(), false);
   }
@@ -241,7 +238,7 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
   auto similarityMatrix = swatlib::selectMatrix(config.similarity, config.matchValue, config.mismatchValue, config.ambiguityValue);
   std::vector<program::Program> programs =
       buildGraph(graph, algoconfig.vtype, algoconfig.tilesUsed, algoconfig.maxAB, algoconfig.bufsize, algoconfig.maxBatches,
-                 similarityMatrix, config.gapInit, config.gapExtend, use_remote_buffer, slot_size, algoconfig.forwardOnly);
+                 similarityMatrix, config.gapInit, config.gapExtend, algoconfig.useRemoteBuffer, algoconfig.transmissionPrograms, slot_size, algoconfig.forwardOnly);
                 
   std::hash<std::string> hasher;
   auto s = json{algoconfig, config};
@@ -341,7 +338,7 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   engine->connectStream(STREAM_CONCAT_ALL_N(lot), results_begin);
 
   std::vector<int> vv{(int)sid};
-  if (use_remote_buffer) {
+  if (algoconfig.useRemoteBuffer) {
     PLOGD.printf("Use remote buffer with slot %d on lot", vv[0], lot);
     engine->connectStream(HOST_STREAM_CONCAT_N(lot), vv.data());
   } else {
@@ -362,15 +359,11 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   PLOGD << "Poplar cycle count: " << cyclesInner << "/" << cyclesOuter << " computed time (in s): " << timeInner << "/"
         << timeOuter;
 
-  int buffers = 10;
+  int buffers = algoconfig.transmissionPrograms;
   int ibufsize = (algoconfig.bufsize / 4) + (algoconfig.bufsize % 4 == 0 ? 0 : 1);
   auto scale_bufsize = [=](int bufsize, int lot) {
     return static_cast<size_t>((bufsize / buffers + (bufsize % buffers == 0 ? 0 : 1)) * (lot + 1));
   };
-  PLOGW << lot << " " << sid;
-  PLOGW << scale_bufsize(ibufsize, lot);
-  PLOGW << scale_bufsize(getMetaOffset(algoconfig), lot);
-  PLOGW << algoconfig.tilesUsed * scale_bufsize(ibufsize, lot);
   int32_t* meta_input = inputs_begin + scale_bufsize(getMetaOffset(algoconfig), lot);
 
   // GCUPS computation
@@ -438,7 +431,7 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
   // unord_a_range.data(),
   //                         unord_b_range.data());
   slotToken slot = 0;
-  if (use_remote_buffer) {
+  if (algoconfig.useRemoteBuffer) {
     slot = queue_slot(maxbucket);
     upload(&*inputs.begin() + 2, &*inputs.end() - 2, slot);
   }
@@ -568,17 +561,17 @@ void SWAlgorithm::compare_mn_local(const std::vector<std::string>& Seqs, const C
   ss << "]";
   PLOGD << "Total number of buckets: " << map.numBuckets << " empty buckets: " << emptyBuckets;
   PLOGD << "Bucket size occurence: " << ss.str();
-  int adjusted_bufsize = ((algoconfig.bufsize / 10) * (1 + calculate_slot_region_index(algoconfig, maxBucket)));
+  int adjusted_bufsize = ((algoconfig.bufsize / algoconfig.transmissionPrograms) * (1 + calculate_slot_region_index(algoconfig, maxBucket)));
   double bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(algoconfig.bufsize) * 100.0;
   double adjusted_bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(adjusted_bufsize) * 100.0;
   PLOGD << "Max bucket: " << maxBucket << "/" << algoconfig.bufsize << " (" << bucketPerc << "%), adjusted " << maxBucket << "/" << adjusted_bufsize << " (" << adjusted_bucketPerc << "%)";
-  double totalTransferSize = ((algoconfig.getInputBufferSize32b() * 4) / 10) * (1 + calculate_slot_region_index(algoconfig, maxBucket));
+  double totalTransferSize = ((algoconfig.getInputBufferSize32b() * 4) / algoconfig.transmissionPrograms) * (1 + calculate_slot_region_index(algoconfig, maxBucket));
   auto transferInfoRatio = static_cast<double>(dataCount) / totalTransferSize * 100;
   PLOGD << "Transfer info/total: " << dataCount << "/" << totalTransferSize << " (" << transferInfoRatio << "%)";
 #endif
 
   slotToken slot = 0;
-  if (use_remote_buffer) {
+  if (algoconfig.useRemoteBuffer) {
     slot = queue_slot(maxBucket);
     upload(&*inputs.begin(), &*inputs.end(), slot);
   }
@@ -598,7 +591,7 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
     maxBucket = std::max(maxBucket, bucketMapping.seqSize);
   }
 
-  int buffers = 10;
+  int buffers = algoconfig.transmissionPrograms;
   int buffer_share = calculate_slot_region_index(algoconfig, maxBucket);
   int ibufsize = (algoconfig.bufsize / 4) + (algoconfig.bufsize % 4 == 0 ? 0 : 1);
   auto scale_bufsize = [=](int bufsize) {
@@ -659,7 +652,7 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
     maxBucket = std::max(maxBucket, bucketMapping.seqSize);
   }
 
-  int buffers = 10;
+  int buffers = algoconfig.transmissionPrograms;
   int buffer_share = calculate_slot_region_index(algoconfig, maxBucket);
   int ibufsize = (algoconfig.bufsize / 4) + (algoconfig.bufsize % 4 == 0 ? 0 : 1);
   auto scale_bufsize = [=](int bufsize) {
@@ -671,7 +664,6 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
   size_t meta_offset = getMetaOffset(algoconfig);
   PLOGD.printf("Old buffer %d/%d recalculated offsets %d/%d", seq_scaled_size, ibufsize, seq_scaled_size * algoconfig.tilesUsed, meta_offset);
   meta_offset = seq_scaled_size * algoconfig.tilesUsed;
-  PLOGW << "meta_offset " << meta_offset << " seq_scaled " << seq_scaled_size << " " << buffer_share;
 
   size_t input_elems = inputs_end - inputs_begin;
   memset(inputs_begin, 0, input_elems * sizeof(int32_t));
@@ -682,11 +674,11 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
   int8_t* seqs = (int8_t*)inputs_begin + seqs_offset;
   int32_t* meta = inputs_begin + meta_offset;
 
-  PLOGW << "======";
-  omp_set_num_threads(16);
-  PLOGW << omp_get_num_threads();
-  PLOGW << "======";
-  #pragma omp parallel for num_threads(32)
+  // PLOGW << "======";
+  // omp_set_num_threads(16);
+  // PLOGW << omp_get_num_threads();
+  // PLOGW << "======";
+  // #pragma omp parallel for num_threads(32)
   // for (const auto& bucketMapping : map.buckets) {
   for (int zzz = 0; zzz < map.buckets.size(); ++zzz) {
     const auto& bucketMapping = map.buckets[zzz];
@@ -777,11 +769,11 @@ int SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& a
   ss << "]";
   PLOGD << "Total number of buckets: " << map.numBuckets << " empty buckets: " << emptyBuckets;
   PLOGD << "Bucket size occurence: " << ss.str();
-  int adjusted_bufsize = ((algoconfig.bufsize / 10) * (1 + calculate_slot_region_index(algoconfig, maxBucket)));
+  int adjusted_bufsize = ((algoconfig.bufsize / algoconfig.transmissionPrograms) * (1 + calculate_slot_region_index(algoconfig, maxBucket)));
   double bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(algoconfig.bufsize) * 100.0;
   double adjusted_bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(adjusted_bufsize) * 100.0;
   PLOGD << "Max bucket: " << maxBucket << "/" << algoconfig.bufsize << " (" << bucketPerc << "%), adjusted " << maxBucket << "/" << adjusted_bufsize << " (" << adjusted_bucketPerc << "%)";
-  double totalTransferSize = ((algoconfig.getInputBufferSize32b() * 4) / 10) * (1 + calculate_slot_region_index(algoconfig, maxBucket));
+  double totalTransferSize = ((algoconfig.getInputBufferSize32b() * 4) / algoconfig.transmissionPrograms) * (1 + calculate_slot_region_index(algoconfig, maxBucket));
   auto transferInfoRatio = static_cast<double>(dataCount) / totalTransferSize * 100;
   PLOGD << "Transfer info/total: " << dataCount << "/" << totalTransferSize << " (" << transferInfoRatio << "%)";
 #endif
@@ -818,13 +810,13 @@ bool SWAlgorithm::slot_available(int max_buffer_size) {
 }
 
 int SWAlgorithm::calculate_slot_region_index(const IPUAlgoConfig& algoconfig, int max_buffer_size) {
-  auto ret = (int)ceil((max_buffer_size / (double)algoconfig.bufsize) * 10.0) - 1;
+  auto ret = (int)ceil((max_buffer_size / (double)algoconfig.bufsize) * static_cast<double>(algoconfig.transmissionPrograms)) - 1;
   PLOGD.printf("Calculated slot region %d from maxbuf %d and bufsize %d", ret, max_buffer_size, algoconfig.bufsize);
   return ret;
 }
 
 int SWAlgorithm::calculate_slot_region_index(int max_buffer_size) {
-  auto ret = (int)ceil((max_buffer_size / (double)algoconfig.bufsize) * 10.0) - 1;
+  auto ret = (int)ceil((max_buffer_size / (double)algoconfig.bufsize) * static_cast<double>(algoconfig.transmissionPrograms)) - 1;
   PLOGD.printf("Calculated slot region %d from maxbuf %d and bufsize %d", ret, max_buffer_size, algoconfig.bufsize);
   return ret;
 }

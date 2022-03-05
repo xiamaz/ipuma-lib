@@ -21,7 +21,7 @@ void to_json(json& j, const SWConfig& c) {
 		{"mismatchValue", c.ambiguityValue},
 		{"ambiguityValue", c.ambiguityValue},
 		{"similarity", c.similarity},
-		{"datatype", c.datatype}
+		{"datatype", c.datatype},
 	};
 }
 
@@ -59,7 +59,9 @@ void to_json(json& j, const IPUAlgoConfig& c) {
 		{"bufsize", c.bufsize},
 		{"vtype", c.vtype},
 		{"fillAlgo", c.fillAlgo},
-		{"forwardOnly", c.forwardOnly}
+		{"forwardOnly", c.forwardOnly},
+		{"useRemoteBuffer", c.useRemoteBuffer},
+		{"transmissionPrograms", c.transmissionPrograms}
 	};
 }
 
@@ -71,5 +73,7 @@ void from_json(const json& j, IPUAlgoConfig& c) {
 	j.at("vtype").get_to(c.vtype);
 	j.at("fillAlgo").get_to(c.fillAlgo);
 	j.at("forwardOnly").get_to(c.forwardOnly);
+	j.at("useRemoteBuffer").get_to(c.useRemoteBuffer);
+	j.at("transmissionPrograms").get_to(c.transmissionPrograms);
 }
 }

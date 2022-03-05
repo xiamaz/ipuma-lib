@@ -26,6 +26,8 @@ struct IPUAlgoConfig {
   VertexType vtype = VertexType::cpp;
   Algorithm fillAlgo = Algorithm::fillFirst;
   bool forwardOnly = false; // do not calculate the start position of a match, this should approx 2x performance, as no reverse pass is needed
+  bool useRemoteBuffer = false;
+  int transmissionPrograms = 1;  // number of separate transmission programs, use only with remote!
 
   // this is maxbatches * num_vertices
   int getTotalNumberOfComparisons() const;

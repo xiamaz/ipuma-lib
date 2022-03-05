@@ -359,7 +359,7 @@ namespace partition {
       }
 
       if (tries == map.numBuckets) {
-          return false;
+        return false;
       }
 
       for (auto b : qq) {
