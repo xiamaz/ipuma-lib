@@ -242,8 +242,11 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
   std::vector<program::Program> programs =
       buildGraph(graph, algoconfig.vtype, algoconfig.tilesUsed, algoconfig.maxAB, algoconfig.bufsize, algoconfig.maxBatches,
                  similarityMatrix, config.gapInit, config.gapExtend, use_remote_buffer, slot_size, algoconfig.forwardOnly);
-
-  createEngine(graph, programs);
+                
+  std::hash<std::string> hasher;
+  auto s = json{algoconfig, config};
+  size_t hash = hasher(s.dump());
+  createEngine(graph, programs, std::to_string(hash));
 }
 
 SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig)
