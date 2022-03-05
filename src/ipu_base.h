@@ -30,10 +30,11 @@ class IPUAlgorithm {
     poplar::Target target;
 protected:
 
+    int thread_id;
     std::unique_ptr<Engine> engine;
 public:
     SWConfig config;
-    IPUAlgorithm(SWConfig config);
+    IPUAlgorithm(SWConfig config, int thread_id);
 
     Graph createGraph();
 

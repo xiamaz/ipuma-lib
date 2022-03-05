@@ -125,21 +125,20 @@ inline int extractScoreSW(Engine& engine, const std::string& sA, const std::stri
     return S(x, y);
 }
 
-IPUAlgorithm::IPUAlgorithm(SWConfig config) : config(config) {
+IPUAlgorithm::IPUAlgorithm(SWConfig config, int thread_id) : config(config), thread_id(thread_id) {
     auto manager = poplar::DeviceManager::createDeviceManager();
     // Attempt to attach to a single IPU:
-    auto devices = manager.getDevices(poplar::TargetType::IPU, 1);
-    PLOGD << "Trying to attach to IPU";
-    auto it = std::find_if(devices.begin(), devices.end(), [](poplar::Device &device) {
-       return device.attach();
-    });
 
-    if (it == devices.end()) {
-      PLOGW << "Error attaching to device";
-      exit(1);
+    auto devices = manager.getDevices();
+    PLOGI << "Attaching to device id " << thread_id;
+    auto& d = devices[thread_id];
+    if (d.attach()) {
+        device = std::move(d);
+        PLOGW << device.getTarget().getNumIPUs();
+    } else {
+        throw std::runtime_error("Could not attach to IPU at thread id " + std::to_string(thread_id));
     }
 
-    device = std::move(*it);
     PLOGD << "Attached to IPU ID: " << device.getId();
     target = device.getTarget();
 }
@@ -180,15 +179,15 @@ void IPUAlgorithm::createEngine(Graph& graph, std::vector<program::Program> prog
 }
 
 poplar::Target& IPUAlgorithm::getTarget() {
-          return target;
+    return target;
 }
 
 poplar::Device& IPUAlgorithm::getDevice() {
-                return device;
+    return device;
 }
 
 poplar::Graph IPUAlgorithm::getGraph() {
-          return std::move(poplar::Graph(target));
+    return std::move(poplar::Graph(target));
 }
 
 }

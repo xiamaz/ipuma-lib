@@ -24,7 +24,6 @@ class SWAlgorithm : public IPUAlgorithm {
   std::vector<int32_t> scores;
   std::vector<int32_t> a_range_result;
   std::vector<int32_t> b_range_result;
-  int thread_id;
 
   int slot_size;
   std::vector<int> slot_avail;

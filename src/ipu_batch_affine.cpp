@@ -218,7 +218,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
 }
 
 SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap)
-    : IPUAlgorithm(config), algoconfig(algoconfig), thread_id(thread_id) {
+    : IPUAlgorithm(config, thread_id), algoconfig(algoconfig) {
   const auto totalComparisonsCount = algoconfig.getTotalNumberOfComparisons();
   slot_size = slotCap;
   slot_avail.resize(algoconfig.transmissionPrograms);

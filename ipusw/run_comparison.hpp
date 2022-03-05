@@ -3,6 +3,7 @@
 #include "ipuswconfig.hpp"
 #include <string>
 #include <thread>
+#include <atomic>
 #include <mutex>
 #include <condition_variable>
 #include <omp.h>
@@ -14,6 +15,38 @@
 using json = nlohmann::json;
 
 using Fastas = std::vector<swatlib::Fasta>;
+
+std::atomic<int> totalCmpsProcessed = 0;
+std::atomic<int> totalBatchesProcessed = 0;
+
+class Barrier {
+public:
+    explicit Barrier(std::size_t iCount) : 
+      mThreshold(iCount), 
+      mCount(iCount), 
+      mGeneration(0) {
+    }
+
+    void wait()
+    {
+			  std::unique_lock<std::mutex> lLock{mMutex};
+        auto lGen = mGeneration;
+        if (!--mCount) {
+            mGeneration++;
+            mCount = mThreshold;
+            mCond.notify_all();
+        } else {
+            mCond.wait(lLock, [this, lGen] { return lGen != mGeneration; });
+        }
+    }
+
+ private:
+     std::mutex mMutex;
+    std::condition_variable mCond;
+    std::size_t mThreshold;
+    std::size_t mCount;
+    std::size_t mGeneration;
+};
 
 void loadSequences(const std::string& path, std::vector<std::string>& sequences) {
   std::ifstream seqFile(path);
@@ -51,30 +84,31 @@ void load_data(const std::string& path, std::vector<std::string>& seqs, int coun
 	}
 }
 
-std::mutex ipuMutex;
-std::mutex bufferSelectionMutex;
-std::mutex prepareWorkerMutex;
+void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::RawSequences& B, const int workerId, const int numWorkers, swatlib::TickTock& t, Barrier& barrier, swatlib::TickTock& outer) {
+	const auto& ipuconfig = config.ipuconfig;
+	const auto& swconfig = config.swconfig;
+	auto driver = ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, workerId);
+	PLOGW << "Finished attaching to device";
 
-int submittedBatches = 0;
-int processedBatches = 0;
-std::vector<int> bufferMaxBucket;
+  std::vector<int> mapping_bufs(ipuconfig.getTotalNumberOfComparisons(), 0);
+  std::vector<int32_t> input_bufs(ipuconfig.getInputBufferSize32b());
+  size_t results_size = ipuconfig.getTotalNumberOfComparisons() * 3;
+  std::vector<int32_t> results_buf(results_size);
 
-int startedWorkers = 0;
-int stoppedWorkers = 0;
-std::mutex runningWorkersMutex;
+	std::vector<int32_t> scores(A.size());
+	std::vector<int32_t> arange(A.size());
+	std::vector<int32_t> brange(A.size());
 
-void ipu_init(const IpuSwConfig& config, std::vector<ipu::batchaffine::SWAlgorithm>& drivers) {
-	auto driver = ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, 0, true);
-	ipuMutex.lock();
-	drivers.push_back(std::move(driver));
-	ipuMutex.unlock();
-}
+	int results_offset = 0;
 
-void ipu_prepare(const ipu::SWConfig& swconfig, const ipu::IPUAlgoConfig& ipuconfig, const int startIndex, const int endIndex, const ipu::RawSequences& A, const ipu::RawSequences& B, std::vector<int>& bufferCmps, std::vector<std::vector<int32_t>>& input_bufs, std::vector<std::vector<int>>& mapping_bufs) {
-	runningWorkersMutex.lock();
-	startedWorkers += 1;
-	runningWorkersMutex.unlock();
-	// heuritic slicing for greater speed
+	int seqsPerWorker = (A.size() + numWorkers - 1) / numWorkers;
+	int startIndex = seqsPerWorker * workerId;
+	int endIndex = std::min(seqsPerWorker * (workerId + 1), static_cast<int>(A.size()));
+
+	int workRange = endIndex - startIndex;
+
+	PLOGW.printf("%d: Processing %d seqs of total %d seqs", workerId, workRange, A.size());
+
 	int numCmps = 0;
 	int totalSize = 0;
 
@@ -93,28 +127,29 @@ void ipu_prepare(const ipu::SWConfig& swconfig, const ipu::IPUAlgoConfig& ipucon
 
 		std::vector<std::string> aBatch(aBegin, aEnd);
 		std::vector<std::string> bBatch(bBegin, bEnd);
-		int c;
-		while (true) {
-			bufferSelectionMutex.lock();
-			for (c = 0; c < bufferCmps.size(); ++c) {
-				if (bufferCmps[c] == 0) {
-					bufferCmps[c] = -1;
-					break;
-				}
-			}
-			bufferSelectionMutex.unlock();
-			if (c < bufferCmps.size()) break;
+		auto maxBucket = ipu::batchaffine::SWAlgorithm::prepare_remote(swconfig, ipuconfig, aBatch, bBatch, &*input_bufs.begin(), &*input_bufs.end(), mapping_bufs.data());
+
+		t.tick();
+    auto slot = driver.queue_slot(maxBucket);
+		if (driver.algoconfig.useRemoteBuffer) {
+			driver.upload(&*input_bufs.begin(), &*input_bufs.end(), slot);
 		}
-		auto maxBucket = ipu::batchaffine::SWAlgorithm::prepare_remote(swconfig, ipuconfig, aBatch, bBatch, &*input_bufs[c].begin(), &*input_bufs[c].end(), mapping_bufs[c].data());
-		bufferSelectionMutex.lock();
-		bufferCmps[c] = numCmps;
-		bufferMaxBucket[c] = maxBucket;
-		submittedBatches += 1;
-		bufferSelectionMutex.unlock();
-		PLOGI << "Putting " << numCmps << " into " << c;
+		driver.prepared_remote_compare(&*input_bufs.begin(), &*input_bufs.end(), &*results_buf.begin(), &*results_buf.end(), slot);
+		t.tock();
+		driver.transferResults(
+			&*results_buf.begin(), &*results_buf.end(),
+			&*mapping_bufs.begin(), &*mapping_bufs.end(),
+			&*(scores.begin() + results_offset), &*(scores.begin() + results_offset + numCmps),
+			&*(arange.begin() + results_offset), &*(arange.begin() + results_offset + numCmps),
+			&*(brange.begin() + results_offset), &*(brange.begin() + results_offset + numCmps), numCmps);
+		results_offset += numCmps;
+		totalBatchesProcessed++;
+		totalCmpsProcessed += numCmps;
 	};
 
-	for (int i = startIndex; i < A.size() && i < endIndex; ++i) {
+	barrier.wait();
+	if (workerId) outer.tick();
+	for (int i = startIndex; i < endIndex; ++i) {
 		const auto alen = A[i].size();
 		const auto blen = B[i].size();
 		if ((numCmps + 1 < batchCmpLimit) && (totalSize + alen + blen < batchDataLimit)) {
@@ -132,96 +167,15 @@ void ipu_prepare(const ipu::SWConfig& swconfig, const ipu::IPUAlgoConfig& ipucon
 	if (numCmps > 0) {
 		submitBatch();
 	}
-
-	PLOGW << "Shutting down";
-
-	runningWorkersMutex.lock();
-	stoppedWorkers += 1;
-	runningWorkersMutex.unlock();
-}
-
-void ipu_run(ipu::batchaffine::SWAlgorithm& driver, const ipu::RawSequences& A, const ipu::RawSequences& B, const int workerId, const int numWorkers, swatlib::TickTock& t) {
-	const auto& ipuconfig = driver.algoconfig;
-	const auto& swconfig = driver.config;
-
-	const int numInputBufs = 2;
-	const int numPrepareWorkers = 1;
-
-  std::vector<std::vector<int>> mapping_bufs(numInputBufs, std::vector<int>(ipuconfig.getTotalNumberOfComparisons(), 0));
-  std::vector<std::vector<int32_t>> input_bufs(numInputBufs, std::vector<int32_t>(ipuconfig.getInputBufferSize32b()));
-  size_t results_size = ipuconfig.getTotalNumberOfComparisons() * 3;
-  std::vector<int32_t> results_buf(results_size);
-
-	std::vector<int32_t> scores(A.size());
-	std::vector<int32_t> arange(A.size());
-	std::vector<int32_t> brange(A.size());
-
-	int results_offset = 0;
-
-	std::vector<int> bufferCmps(numInputBufs, 0);
-	bufferMaxBucket.resize(numInputBufs);
-	int seqsPerWorker = (A.size() + numWorkers - 1) / numWorkers;
-	int startIndex = seqsPerWorker * workerId;
-	int endIndex = seqsPerWorker * (workerId + 1);
-
-	int workRange = endIndex - startIndex;
-	int workChunks = (workRange + numPrepareWorkers - 1) / numPrepareWorkers;
-
-	std::deque<std::thread> prepareThreads;
-	for (int i = 0; i < numPrepareWorkers; ++i) {
-		int workerStart = startIndex + workChunks * i;
-		int workerEnd = std::min(startIndex + workChunks * (i + 1), endIndex);
-		prepareThreads.push_back(std::thread(ipu_prepare, std::cref(swconfig), std::cref(ipuconfig), workerStart, workerEnd, std::cref(A), std::cref(B), std::ref(bufferCmps), std::ref(input_bufs), std::ref(mapping_bufs)));
-	}
-	
-	while (true) {
-		int c;
-		bufferSelectionMutex.lock();
-		for (c = 0; c < bufferCmps.size(); ++c) {
-			if (bufferCmps[c] > 0) break;
-		}
-		bufferSelectionMutex.unlock();
-		if (c == bufferCmps.size()) {
-			if (startedWorkers == 0 || startedWorkers > stoppedWorkers) {
-				continue;
-			} else {
-				break;
-			}
-		}
-		int numCmps = bufferCmps[c];
-		PLOGW << "Getting " << numCmps << " from " << c;
-		t.tick();
-    auto slot = driver.queue_slot(bufferMaxBucket[c]);
-		if (driver.algoconfig.useRemoteBuffer) {
-			driver.upload(&*input_bufs[c].begin(), &*input_bufs[c].end(), slot);
-		}
-		driver.prepared_remote_compare(&*input_bufs[c].begin(), &*input_bufs[c].end(), &*results_buf.begin(), &*results_buf.end(), slot);
-		t.tock();
-		driver.transferResults(
-			&*results_buf.begin(), &*results_buf.end(),
-			&*mapping_bufs[c].begin(), &*mapping_bufs[c].end(),
-			&*(scores.begin() + results_offset), &*(scores.begin() + results_offset + numCmps),
-			&*(arange.begin() + results_offset), &*(arange.begin() + results_offset + numCmps),
-			&*(brange.begin() + results_offset), &*(brange.begin() + results_offset + numCmps), numCmps);
-		results_offset += numCmps;
-		bufferSelectionMutex.lock();
-		bufferCmps[c] = 0;
-		processedBatches += 1;
-		bufferSelectionMutex.unlock();
-	}
-
-	PLOGW << "Processed " << results_offset << " comparison from " << A.size() << " submitted";
-
-	for (int i = 0; i < prepareThreads.size(); ++i) {
-		prepareThreads[i].join();
-	}
+	barrier.wait();
+	if (workerId) outer.tock();
 }
 
 void run_comparison(IpuSwConfig config, std::string referencePath, std::string queryPath) {
 	std::vector<std::string> references, queries;
 	swatlib::TickTock outer; 
 	std::vector<swatlib::TickTock> inner(config.numDevices);
-	std::vector<ipu::batchaffine::SWAlgorithm> drivers;
+	// std::vector<ipu::batchaffine::SWAlgorithm> drivers;
 	std::deque<std::thread> creatorThreads;
 
 	json configLog = {
@@ -231,9 +185,6 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
 		{"query_path", queryPath},
 	};
 	PLOGW << IPU_JSON_LOG_TAG << configLog.dump();
-	for (int n = 0; n < config.numDevices; ++n) {
-		creatorThreads.push_back(std::thread(ipu_init, std::cref(config), std::ref(drivers)));
-	}
 
 	load_data(referencePath, references);
 	load_data(queryPath, queries);
@@ -244,17 +195,15 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
 		exit(1);
 	}
 
-	for (int n = 0; n < config.numDevices; ++n) {
-		creatorThreads[n].join();
-	}
-
 	PLOGI << "Starting comparisons";
 
+	Barrier barrier(config.numDevices);
+
 	std::deque<std::thread> ipuThreads;
-	outer.tick();
 	for (int n = 0; n < config.numDevices; ++n) {
-		ipuThreads.push_back(std::thread(ipu_run, std::ref(drivers[n]), std::cref(references), std::cref(queries), n, config.numDevices, std::ref(inner[n])));
+		ipuThreads.push_back(std::thread(ipu_run, std::cref(config), std::cref(references), std::cref(queries), n, config.numDevices, std::ref(inner[n]), std::ref(barrier), std::ref(outer)));
 	}
+
 
 	double innerTime = 0;
 	double maxInnerTime = 0;
@@ -264,9 +213,9 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
 		innerTime += threadSeconds;
 		maxInnerTime = std::max(maxInnerTime, threadSeconds);
 	}
-	outer.tock();
 
-	PLOGW << "Submitted batches " << submittedBatches << " processed " << processedBatches;
+	PLOGW << "Total cmps processed/submitted " << totalCmpsProcessed << "/" << references.size();
+	PLOGW << "Total Batches Processed " << totalBatchesProcessed;
 
 	uint64_t cellCount = 0;
 	for (int i = 0; i < references.size(); ++i) {
@@ -276,9 +225,10 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
 	double outerTime = static_cast<double>(outer.accumulate_microseconds()) / 1e6;
 	double gcupsOuter = static_cast<double>(cellCount) / outerTime / 1e9;
 	double gcupsInner = static_cast<double>(cellCount) / innerTime / 1e9;
-	double gcupsInnerMaxTime = static_cast<double>(cellCount) / maxInnerTime / 1e9;
+	double gcupsInnerMaxTime = static_cast<double>(cellCount) / maxInnerTime / 1e9 / config.numDevices;
 	json logdata = {
 		{"tag", "final_log"},
+		{"cells", cellCount},
 		{"outer_time_s", outerTime},
 		{"inner_time_acc_s", innerTime},
 		{"inner_time_max_s", maxInnerTime},

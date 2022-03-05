@@ -11,6 +11,7 @@ struct IpuSwConfig {
 	ipu::SWConfig swconfig;
 	ipu::IPUAlgoConfig ipuconfig;
 	int numDevices = 1;
+	bool duplicateDatasets = false;
 
 	IpuSwConfig() : swconfig(SW_CONFIGURATION), ipuconfig(ALGO_CONFIGURATION) {}
 
@@ -23,7 +24,8 @@ void to_json(json& j, const IpuSwConfig& c) {
 	j = json{
 		{"sw", c.swconfig},
 		{"ipu", c.ipuconfig},
-		{"numDevices", c.numDevices}
+		{"numDevices", c.numDevices},
+		{"duplicateDatasets", c.duplicateDatasets}
 	};
 }
 
@@ -31,5 +33,6 @@ void from_json(const json& j, IpuSwConfig& c) {
 	j.at("sw").get_to(c.swconfig);
 	j.at("ipu").get_to(c.ipuconfig);
 	j.at("numDevices").get_to(c.numDevices);
+	j.at("duplicateDatasets").get_to(c.duplicateDatasets);
 }
 #endif
