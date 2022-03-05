@@ -91,7 +91,6 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	PLOGI << configJson.dump();
 	IpuSwConfig config = configJson.get<IpuSwConfig>();
 
 	std::string refPath = result["reference"].as<std::string>();
