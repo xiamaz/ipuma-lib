@@ -159,7 +159,23 @@ void IPUAlgorithm::createEngine(Graph& graph, std::vector<program::Program> prog
 
     // engineOptions.set("exchange.streamBufferOverlap", "none");
     // engineOptions.set("exchange.enablePrefetch", "true");
-    engine = std::make_unique<Engine>(graph, programs, engineOptions);
+
+    std::fstream infile; 
+    infile.open("./exec.poplar_exec");
+    if (infile.good()) {
+        PLOGW.printf("Load Executeable.");
+        auto exe = Executable::deserialize(infile);
+        engine = std::make_unique<Engine>(std::move(exe), engineOptions);
+        infile.close();
+    } else {
+        Executable executable = poplar::compileGraph(graph, programs);
+        std::ofstream execFileCbor;
+        PLOGW.printf("Write cache Executeable.");
+        execFileCbor.open("./exec.poplar_exec");
+        executable.serialize(execFileCbor);
+        execFileCbor.close();
+        engine = std::make_unique<Engine>(graph, programs, engineOptions);
+    }
     engine->load(device);
 }
 
