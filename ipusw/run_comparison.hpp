@@ -58,6 +58,7 @@ void loadSequences(const std::string& path, std::vector<std::string>& sequences)
 
 void load_data(const std::string& path, std::vector<std::string>& seqs, int count = 0) {
 	if (std::equal(path.end() - 4, path.end(), ".txt")) {
+		PLOGI << "Loading all entries from " << path;
 		loadSequences(path, seqs);
 	} else {
 		if (count > 0) {
@@ -87,10 +88,9 @@ void load_data(const std::string& path, std::vector<std::string>& seqs, int coun
 void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::RawSequences& B, const int workerId, const int numWorkers, swatlib::TickTock& t, Barrier& barrier, swatlib::TickTock& outer) {
 	const auto& ipuconfig = config.ipuconfig;
 	const auto& swconfig = config.swconfig;
-	auto driver = ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, workerId);
-	PLOGW << "Finished attaching to device";
+	auto driver = ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, workerId + 32);
+	PLOGD << "Finished attaching to device";
 
-  std::vector<int> mapping_bufs(ipuconfig.getTotalNumberOfComparisons(), 0);
   std::vector<int32_t> input_bufs(ipuconfig.getInputBufferSize32b());
   size_t results_size = ipuconfig.getTotalNumberOfComparisons() * 3;
   std::vector<int32_t> results_buf(results_size);
@@ -102,12 +102,8 @@ void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::R
 	int results_offset = 0;
 
 	int seqsPerWorker = (A.size() + numWorkers - 1) / numWorkers;
-	int startIndex = seqsPerWorker * workerId;
+	int startIndex = std::min(seqsPerWorker * workerId, static_cast<int>(A.size()));
 	int endIndex = std::min(seqsPerWorker * (workerId + 1), static_cast<int>(A.size()));
-
-	int workRange = endIndex - startIndex;
-
-	PLOGW.printf("%d: Processing %d seqs of total %d seqs", workerId, workRange, A.size());
 
 	int numCmps = 0;
 	int totalSize = 0;
@@ -115,14 +111,15 @@ void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::R
 	ipu::RawSequences::const_iterator aBegin, bBegin;
 
 	int batchCmpLimit = ipuconfig.getTotalNumberOfComparisons() - ipuconfig.maxBatches;
-	int slack = ipuconfig.getTotalBufsize32b() * 4 / 10; // only fill buffer up to 90%, hack to make sure we don't fail
-	if (ipuconfig.fillAlgo == ipu::Algorithm::greedy) {
-		slack = slack * 2;  // doulbe the amount of empty allowed buffer to ensure filling
-	}
+	int slack = ipuconfig.bufsize * 100; // only fill buffer up to 90%, hack to make sure we don't fail
 	int batchDataLimit = (ipuconfig.getTotalBufsize32b() * 4) - slack;
 
-	aBegin = A.begin() + startIndex;
-	bBegin = B.begin() + startIndex;
+	if (startIndex < A.size()) {
+		aBegin = A.begin() + startIndex;
+		bBegin = B.begin() + startIndex;
+	} else {
+		PLOGE << "This should never happen";
+	}
 
 	auto submitBatch = [&]() {
 		auto aEnd = aBegin + numCmps;
@@ -130,7 +127,9 @@ void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::R
 
 		std::vector<std::string> aBatch(aBegin, aEnd);
 		std::vector<std::string> bBatch(bBegin, bEnd);
-		auto maxBucket = ipu::batchaffine::SWAlgorithm::prepare_remote(swconfig, ipuconfig, aBatch, bBatch, &*input_bufs.begin(), &*input_bufs.end(), mapping_bufs.data());
+
+  	std::vector<int> mappings(ipuconfig.getTotalNumberOfComparisons(), 0);
+		auto maxBucket = ipu::batchaffine::SWAlgorithm::prepare_remote(swconfig, ipuconfig, aBatch, bBatch, &*input_bufs.begin(), &*input_bufs.end(), mappings.data());
 
 		t.tick();
     auto slot = driver.queue_slot(maxBucket);
@@ -141,7 +140,7 @@ void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::R
 		t.tock();
 		driver.transferResults(
 			&*results_buf.begin(), &*results_buf.end(),
-			&*mapping_bufs.begin(), &*mapping_bufs.end(),
+			&*mappings.begin(), &*mappings.end(),
 			&*(scores.begin() + results_offset), &*(scores.begin() + results_offset + numCmps),
 			&*(arange.begin() + results_offset), &*(arange.begin() + results_offset + numCmps),
 			&*(brange.begin() + results_offset), &*(brange.begin() + results_offset + numCmps), numCmps);
@@ -151,7 +150,14 @@ void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::R
 	};
 
 	barrier.wait();
-	if (workerId) outer.tick();
+
+	if (workerId == 0) {
+		outer.tick(); 
+		PLOGW << "All IPUs initialized. Continue";
+	}
+
+	PLOGI.printf("%d: Processing seqs between %d and %d of total %d seqs", workerId, startIndex, endIndex, A.size());
+
 	for (int i = startIndex; i < endIndex; ++i) {
 		const auto alen = A[i].size();
 		const auto blen = B[i].size();
@@ -171,7 +177,10 @@ void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::R
 		submitBatch();
 	}
 	barrier.wait();
-	if (workerId) outer.tock();
+	if (workerId == 0) {
+		PLOGW << "All IPUs finished.";
+		outer.tock();
+	}
 }
 
 void run_comparison(IpuSwConfig config, std::string referencePath, std::string queryPath) {
@@ -193,8 +202,8 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
 	load_data(queryPath, queries);
 
 	if (references.size() != queries.size()) {
-		PLOGW << "refsize " << references.size();
-		PLOGW << "quersize " << queries.size();
+		PLOGE << "refsize " << references.size();
+		PLOGE << "quersize " << queries.size();
 		exit(1);
 	}
 

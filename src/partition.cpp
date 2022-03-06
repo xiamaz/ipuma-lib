@@ -9,6 +9,8 @@
 #include <iostream>
 #include <math.h>
 
+#include <plog/Log.h>
+
 
 #include <iostream>
 
@@ -289,6 +291,7 @@ namespace partition {
         if ((bucket.cmps.size() + 1 > map.cmpCapacity) || (bucket.seqSize + effALen + effBLen > map.sequenceCapacity)) {
           qq.push_back(std::ref(bucket));
           bucket = q.top().get();
+          q.pop();
           tries++;
           continue;
         } else {
@@ -344,6 +347,10 @@ namespace partition {
       const auto aLen = A[seqIndex].size();
       const auto bLen = B[seqIndex].size();
 
+      if (aLen * bLen == 0) {
+        PLOGE << "aLen " << aLen << " bLen " << bLen;
+      }
+
       auto& bucket = q.top().get();
       q.pop();
       std::deque<std::reference_wrapper<BucketMapping>> qq;
@@ -352,6 +359,7 @@ namespace partition {
         if ((bucket.cmps.size() + 1 > map.cmpCapacity) || (bucket.seqSize + aLen + bLen > map.sequenceCapacity)) {
           qq.push_back(std::ref(bucket));
           bucket = q.top().get();
+          q.pop();
           tries++;
           continue;
         } else {
@@ -360,6 +368,11 @@ namespace partition {
       }
 
       if (tries == map.numBuckets) {
+        for (auto& b : map.buckets) {
+          PLOGE << b.bucketIndex << ": " << map.sequenceCapacity - b.seqSize;
+          PLOGE << "\t" << b.cmps.size() << "/" << map.cmpCapacity;
+        }
+        PLOGE << "Alen: " << aLen << " Blen: " << bLen;
         return false;
       }
 
@@ -378,6 +391,7 @@ namespace partition {
       bucket.seqSize += aLen + bLen;
       bucket.weight += aLen * bLen;
       q.push(std::ref(bucket));
+
     }
     return true;
   }

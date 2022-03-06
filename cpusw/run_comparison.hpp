@@ -9,40 +9,44 @@ using json = nlohmann::json;
 
 using Fastas = std::vector<swatlib::Fasta>;
 
-void load_data(const std::string& path, Fastas& seqs, int count = 0) {
-  std::ifstream is;
-  is.open(path);
-  if (is.fail()) {
-      throw std::runtime_error("Opening file at " + path + " failed.");
+void loadSequences(const std::string& path, std::vector<std::string>& sequences) {
+  std::ifstream seqFile(path);
+  std::string line;
+  while (std::getline(seqFile, line)) {
+    sequences.push_back(line);
   }
-  swatlib::Fasta f;
-	int i = 0;
-	while (!(count) || i < count) {
-      if (is >> f) {
-          seqs.push_back(f);
-      } else {
-          seqs.push_back(f);
-          break;
-      }
-			++i;
+}
+
+void load_data(const std::string& path, std::vector<std::string>& seqs, int count = 0) {
+	if (std::equal(path.end() - 4, path.end(), ".txt")) {
+		PLOGI << "Loading all entries from " << path;
+		loadSequences(path, seqs);
+	} else {
+  	std::ifstream is;
+  	is.open(path);
+  	if (is.fail()) {
+  	    throw std::runtime_error("Opening file at " + path + " failed.");
+  	}
+  	swatlib::Fasta f;
+		int i = 0;
+		while (!(count) || i < count) {
+  	    if (is >> f) {
+  	        seqs.push_back(f.sequence);
+  	    } else {
+  	        seqs.push_back(f.sequence);
+  	        break;
+  	    }
+				++i;
+	}
 	}
 }
 
 void run_comparison(CpuSwConfig config, std::string referencePath, std::string queryPath) {
-	Fastas referenceFasta, queryFasta;
-	PLOGI << "Loading data from " << referencePath;
-	load_data(referencePath, referenceFasta);
-	PLOGI << "Loading data from " << queryPath;
-	load_data(queryPath, queryFasta);
-
-	PLOGI << "Casting into strings.";
 	std::vector<std::string> references, queries;
-	for (int i = 0; i < referenceFasta.size(); ++i) {
-		references.push_back(referenceFasta[i].sequence);
-	}
-	for (int i = 0; i < queryFasta.size(); ++i) {
-		queries.push_back(queryFasta[i].sequence);
-	}
+	PLOGI << "Loading data from " << referencePath;
+	load_data(referencePath, references);
+	PLOGI << "Loading data from " << queryPath;
+	load_data(queryPath, queries);
 
 	PLOGI << "Compare using " << static_cast<json>(config.algoconfig.algo).dump();
 	std::unique_ptr<CPUAligner> al(nullptr);

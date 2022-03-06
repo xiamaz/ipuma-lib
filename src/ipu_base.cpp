@@ -134,7 +134,6 @@ IPUAlgorithm::IPUAlgorithm(SWConfig config, int thread_id) : config(config), thr
     auto& d = devices[thread_id];
     if (d.attach()) {
         device = std::move(d);
-        PLOGW << device.getTarget().getNumIPUs();
     } else {
         throw std::runtime_error("Could not attach to IPU at thread id " + std::to_string(thread_id));
     }
