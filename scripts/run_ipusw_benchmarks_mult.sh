@@ -2,15 +2,21 @@
 BIN=./build/bin/ipusw
 OUTPUT=/global/D1/projects/ipumer/datasets/results/ipu_synthetic_benchmarks
 OVERWRITE=
+PRINTOUT=
 
 mkdir -p ${OUTPUT}
 
-THREADS=(1 2 3 4 8 16 32 64)
+# THREADS=(1 2 4 8 16 32 64)
+THREADS=(1)
 
 runIpu() {
-if [ $OVERWRITE ] || [ ! -f ${output_log} ]; then
+if [ ${PRINTOUT} ]; then
+	echo "Print run command for ${name}"
+	echo "${BIN} ${config} -- ${INPUT1} ${INPUT2}"
+else if [ $OVERWRITE ] || [ ! -f ${output_log} ]; then
 	echo "Running ${name}"
 	${BIN} ${config} -- ${INPUT1} ${INPUT2} 2>&1 | tee ${output_log}
+fi
 fi
 }
 

@@ -12,6 +12,54 @@
 
 using json = nlohmann::json;
 
+// recursively parse arguments
+void parseArguments(json& dict, const cxxopts::ParseResult& result) {
+	for (const auto& [k, v] : dict.items()) {
+		switch(v.type()) {
+		case json::value_t::object:
+			parseArguments(v, result);
+			break;
+		case json::value_t::number_integer:
+			dict[k] = result[k].as<int>();
+			break;
+		case json::value_t::string:
+			dict[k] = result[k].as<std::string>();
+			break;
+		case json::value_t::boolean:
+			dict[k] = result[k].as<bool>();
+			break;
+		default:
+			throw std::runtime_error("unsupported type");
+			break;
+		}
+	}
+}
+
+void addArguments(const json& dict, cxxopts::Options& options, std::string gname) {
+	std::string strval;
+	for (const auto& [k, v] : dict.items()) {
+		switch (v.type()) {
+			case json::value_t::number_integer:
+				strval = std::to_string(v.get<int>());
+				options.add_option(gname, "", k, "", cxxopts::value<int>()->default_value(strval), strval);
+				break;
+			case json::value_t::string:
+				options.add_option(gname, "", k, "", cxxopts::value<std::string>()->default_value(v), v);
+				break;
+			case json::value_t::boolean:
+				strval = std::to_string(v.get<bool>());
+				options.add_option(gname, "", k, "", cxxopts::value<bool>()->default_value(strval), strval);
+				break;
+			case json::value_t::object:
+				addArguments(v, options, k);
+				break;
+			default:
+				throw std::runtime_error("unsupported type");
+				break;
+		}
+	}
+}
+
 int main(int argc, char** argv) {
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
   plog::init(plog::debug, &consoleAppender);
@@ -29,28 +77,7 @@ int main(int argc, char** argv) {
 	options.parse_positional({"reference", "query", ""});
 
 	json configJson = IpuSwConfig();
-	for (const auto& [gname, gvalues] : configJson.items()) {
-		if (gvalues.type() == json::value_t::number_integer) {
-			options.add_option("", "", gname, "", cxxopts::value<int>()->default_value(std::to_string(gvalues.get<int>())), std::to_string(gvalues.get<int>()));
-			continue;
-		}
-		for (const auto& [optname, defaultValue] : gvalues.items()) {
-			switch (defaultValue.type()) {
-				case json::value_t::number_integer:
-					options.add_option(gname, "", optname, "", cxxopts::value<int>(), std::to_string(defaultValue.get<int>()));
-					break;
-				case json::value_t::string:
-					options.add_option(gname, "", optname, "", cxxopts::value<std::string>(), defaultValue);
-					break;
-				case json::value_t::boolean:
-					options.add_option(gname, "", optname, "", cxxopts::value<bool>(), std::to_string(defaultValue.get<bool>()));
-					break;
-				default:
-					throw std::runtime_error("unsupported type");
-					break;
-			}
-		}
-	}
+	addArguments(configJson, options, "");
 
 	auto result = options.parse(argc, argv);
 	if (result.count("help")) {
@@ -66,30 +93,7 @@ int main(int argc, char** argv) {
 		configJson = cj;
 	}
 
-	for (const auto& [gname, gvalues] : configJson.items()) {
-		if (gvalues.type() == json::value_t::number_integer) {
-				configJson[gname] = result[gname].as<int>();
-				continue;
-		}
-		for (const auto& [optName, optValue] : gvalues.items()) {
-			if (result.count(optName)) {
-				switch (optValue.type()) {
-					case json::value_t::number_integer:
-						configJson[gname][optName] = result[optName].as<int>();
-						break;
-					case json::value_t::string:
-						configJson[gname][optName] = result[optName].as<std::string>();
-						break;
-					case json::value_t::boolean:
-						configJson[gname][optName] = result[optName].as<bool>();
-						break;
-					default:
-						throw std::runtime_error("unsupported type");
-						break;
-				}
-			}
-		}
-	}
+	parseArguments(configJson, result);
 
 	IpuSwConfig config = configJson.get<IpuSwConfig>();
 

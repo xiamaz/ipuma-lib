@@ -116,6 +116,9 @@ void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::R
 
 	int batchCmpLimit = ipuconfig.getTotalNumberOfComparisons() - ipuconfig.maxBatches;
 	int slack = ipuconfig.getTotalBufsize32b() * 4 / 10; // only fill buffer up to 90%, hack to make sure we don't fail
+	if (ipuconfig.fillAlgo == ipu::Algorithm::greedy) {
+		slack = slack * 2;  // doulbe the amount of empty allowed buffer to ensure filling
+	}
 	int batchDataLimit = (ipuconfig.getTotalBufsize32b() * 4) - slack;
 
 	aBegin = A.begin() + startIndex;

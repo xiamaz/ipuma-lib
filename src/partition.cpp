@@ -23,6 +23,7 @@ namespace partition {
     case SequenceOrigin::unordered:
       return "SequenceOrigin::unordered";
     }
+    throw std::runtime_error("Unhandled sequence type.");
   }
 
   std::string ComparisonMapping::toString() {
