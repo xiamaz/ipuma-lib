@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 
+#define IPU_JSON_LOG_TAG "IPUSWLOG"
+
 namespace ipu {
 typedef std::vector<std::string> RawSequences;
 typedef std::vector<uint8_t> EncSequences;

@@ -1,6 +1,7 @@
 #include "ipu_batch_affine.h"
 
 #include <plog/Log.h>
+#include <nlohmann/json.hpp>
 
 #include <cmath>
 #include <iostream>
@@ -14,6 +15,8 @@
 
 namespace ipu {
 namespace batchaffine {
+
+using json = nlohmann::json;
 
 #define STREAM_CONCAT_ALL_N(n) "concat-read-all" + std::to_string(n)
 #define HOST_STREAM_CONCAT_N(n) "host-stream-concat" + std::to_string(n)
@@ -388,8 +391,9 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   auto transferTime = timeOuter - timeInner;
   auto transferInfoRatio = static_cast<double>(dataCount) / totalTransferSize * 100;
   auto transferBandwidth = totalTransferSize / transferTime / 1e6;
+  auto transferBandwidthPerVertex = transferBandwidth / algoconfig.tilesUsed;
   PLOGD << "Transfer time: " << transferTime << "s estimated bandwidth: " << transferBandwidth
-        << "mb/s, per vertex: " << transferBandwidth / algoconfig.tilesUsed << "mb/s";
+        << "mb/s, per vertex: " << transferBandwidthPerVertex << "mb/s";
 #endif
 }
 

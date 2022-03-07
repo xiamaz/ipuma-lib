@@ -85,10 +85,11 @@ void load_data(const std::string& path, std::vector<std::string>& seqs, int coun
 	}
 }
 
+// void ipu_run(ipu::batchaffine::SWAlgorithm& driver, const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::RawSequences& B, const int workerId, const int numWorkers, swatlib::TickTock& t, Barrier& barrier, swatlib::TickTock& outer) {
 void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::RawSequences& B, const int workerId, const int numWorkers, swatlib::TickTock& t, Barrier& barrier, swatlib::TickTock& outer) {
 	const auto& ipuconfig = config.ipuconfig;
 	const auto& swconfig = config.swconfig;
-	auto driver = ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, workerId + 32);
+	auto driver = ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, workerId);
 	PLOGD << "Finished attaching to device";
 
   std::vector<int32_t> input_bufs(ipuconfig.getInputBufferSize32b());
@@ -108,25 +109,17 @@ void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::R
 	int numCmps = 0;
 	int totalSize = 0;
 
-	ipu::RawSequences::const_iterator aBegin, bBegin;
-
 	int batchCmpLimit = ipuconfig.getTotalNumberOfComparisons() - ipuconfig.maxBatches;
 	int slack = ipuconfig.bufsize * 100; // only fill buffer up to 90%, hack to make sure we don't fail
 	int batchDataLimit = (ipuconfig.getTotalBufsize32b() * 4) - slack;
 
-	if (startIndex < A.size()) {
-		aBegin = A.begin() + startIndex;
-		bBegin = B.begin() + startIndex;
-	} else {
-		PLOGE << "This should never happen";
-	}
-
-	auto submitBatch = [&]() {
-		auto aEnd = aBegin + numCmps;
-		auto bEnd = bBegin + numCmps;
-
-		std::vector<std::string> aBatch(aBegin, aEnd);
-		std::vector<std::string> bBatch(bBegin, bEnd);
+	auto submitBatch = [&](int batchBegin, int numCmps) {
+		std::vector<std::string> aBatch(numCmps);
+		std::vector<std::string> bBatch(numCmps);
+		for (int i = 0; i < numCmps; ++i) {
+			aBatch[i] = A.at(batchBegin + i);
+			bBatch[i] = B.at(batchBegin + i);
+		}
 
   	std::vector<int> mappings(ipuconfig.getTotalNumberOfComparisons(), 0);
 		auto maxBucket = ipu::batchaffine::SWAlgorithm::prepare_remote(swconfig, ipuconfig, aBatch, bBatch, &*input_bufs.begin(), &*input_bufs.end(), mappings.data());
@@ -158,6 +151,7 @@ void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::R
 
 	PLOGI.printf("%d: Processing seqs between %d and %d of total %d seqs", workerId, startIndex, endIndex, A.size());
 
+	int batchBegin = startIndex;
 	for (int i = startIndex; i < endIndex; ++i) {
 		const auto alen = A[i].size();
 		const auto blen = B[i].size();
@@ -165,16 +159,15 @@ void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::R
 			numCmps++;
 			totalSize += alen + blen;
 		} else {
-			submitBatch();
+			submitBatch(batchBegin, numCmps);
 
-			aBegin = aBegin + numCmps + 1;
-			bBegin = bBegin + numCmps + 1;
+			batchBegin += numCmps;
 			numCmps = 1;
 			totalSize = alen + blen;
 		}
 	}
 	if (numCmps > 0) {
-		submitBatch();
+		submitBatch(batchBegin, numCmps);
 	}
 	barrier.wait();
 	if (workerId == 0) {
@@ -188,7 +181,9 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
 	swatlib::TickTock outer; 
 	std::vector<swatlib::TickTock> inner(config.numDevices);
 	// std::vector<ipu::batchaffine::SWAlgorithm> drivers;
-	std::deque<std::thread> creatorThreads;
+	// for (int i = 0; i < config.numDevices; ++i) {
+	// 	drivers.push_back(ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, i));
+	// }
 
 	json configLog = {
 		{"tag", "run_comparison_setup"},
@@ -211,8 +206,9 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
 
 	Barrier barrier(config.numDevices);
 
-	std::deque<std::thread> ipuThreads;
+	std::vector<std::thread> ipuThreads;
 	for (int n = 0; n < config.numDevices; ++n) {
+		// ipuThreads.push_back(std::thread(ipu_run, std::ref(drivers[n]), std::cref(config), std::cref(references), std::cref(queries), n, config.numDevices, std::ref(inner[n]), std::ref(barrier), std::ref(outer)));
 		ipuThreads.push_back(std::thread(ipu_run, std::cref(config), std::cref(references), std::cref(queries), n, config.numDevices, std::ref(inner[n]), std::ref(barrier), std::ref(outer)));
 	}
 

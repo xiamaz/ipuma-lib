@@ -163,7 +163,8 @@ void IPUAlgorithm::createEngine(Graph& graph, std::vector<program::Program> prog
     if (infile.good()) {
         PLOGW.printf("Load Executeable %s.", filename.c_str());
         auto exe = Executable::deserialize(infile);
-        engine = std::make_unique<Engine>(std::move(exe), engineOptions);
+        // engine = std::make_unique<Engine>(std::move(exe), engineOptions);
+        engine = new Engine(std::move(exe), engineOptions);
         infile.close();
     } else {
         Executable executable = poplar::compileGraph(graph, programs);
@@ -172,9 +173,15 @@ void IPUAlgorithm::createEngine(Graph& graph, std::vector<program::Program> prog
         execFileCbor.open(filename);
         executable.serialize(execFileCbor);
         execFileCbor.close();
-        engine = std::make_unique<Engine>(graph, programs, engineOptions);
+        engine = new Engine(graph, programs, engineOptions);
     }
     engine->load(device);
+}
+
+IPUAlgorithm::~IPUAlgorithm() {
+    if (engine != nullptr) {
+        free(engine);
+    }
 }
 
 poplar::Target& IPUAlgorithm::getTarget() {

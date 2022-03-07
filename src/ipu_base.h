@@ -31,7 +31,8 @@ class IPUAlgorithm {
 protected:
 
     int thread_id;
-    std::unique_ptr<Engine> engine;
+    // std::unique_ptr<Engine> engine;
+    Engine* engine;
 public:
     SWConfig config;
     IPUAlgorithm(SWConfig config, int thread_id);
@@ -44,6 +45,8 @@ public:
     poplar::Target& getTarget();
     poplar::Device& getDevice();
     poplar::Graph getGraph();
+
+    ~IPUAlgorithm();
 };
 
 }
