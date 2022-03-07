@@ -2,7 +2,7 @@
 BIN=./build/bin/cpusw
 OUTPUT=/global/D1/projects/ipumer/datasets/results/cpu_synthetic_benchmarks
 OVERWRITE=
-PRINTOUT=y
+PRINTOUT=
 
 mkdir -p ${OUTPUT}
 
