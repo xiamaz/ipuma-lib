@@ -523,6 +523,13 @@ namespace StripedSmithWaterman {
     const int8_t* translation_matrix,
     const int&    translation_matrix_size) {
 
+    score_matrix_size_ = score_matrix_size;
+    match_score_ = 2;
+    mismatch_penalty_ = 2;
+    gap_opening_penalty_ = 3;
+    gap_extending_penalty_ = 1;
+    reference_length_ = 0;
+
     ClearMatrices();
     score_matrix_ = new int8_t[score_matrix_size_ * score_matrix_size_];
     memcpy(score_matrix_, score_matrix, sizeof(int8_t) * score_matrix_size_ * score_matrix_size_);

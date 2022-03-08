@@ -133,7 +133,8 @@ public:
 
 	void compare_thread(int workerId, const std::vector<std::string>& A, const std::vector<std::string>& B, swatlib::TickTock& t) {
 		// calculate comparison
-		StripedSmithWaterman::Aligner ssw_aligner;
+    // int matSize = static_cast<int>(std::sqrt(mat50.size()));
+		StripedSmithWaterman::Aligner ssw_aligner; //(mat50.data(), matSize, aa_table.data(), aa_table.size());
 		
 		if (config.swconfig.datatype == swatlib::DataType::aminoAcid) {
     	int matSize = static_cast<int>(std::sqrt(mat50.size()));
