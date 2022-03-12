@@ -50,6 +50,10 @@ public:
     int64_t accumulate_microseconds() const {
         return accumulate_time.count();
     }
+    
+    void add(const TickTock& t) {
+        accumulate_time += t.accumulate_time;
+    }
 
     template<typename Unit = std::chrono::milliseconds>
     typename Unit::rep duration() const {
