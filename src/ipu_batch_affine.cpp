@@ -66,6 +66,7 @@ public:
 
 private:
   void close(void *__restrict p) {
+      PLOGD.printf("Send teardown message to IPU");
       std::vector<int32_t> aa(size + 1, 0);
       memcpy(p, aa.data(), aa.size()*4);
   }
