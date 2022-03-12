@@ -154,7 +154,10 @@ Graph IPUAlgorithm::createGraph() {
 void IPUAlgorithm::createEngine(Graph& graph, std::vector<program::Program> programs, const std::string hash) {
     auto& device = getDevice();
     poplar::OptionFlags engineOptions;
-
+    engineOptions.set("exchange.streamBufferOverlap", "none");
+    engineOptions.set("exchange.enablePrefetch", "true");
+    engineOptions.set("streamCallbacks.multiThreadMode", "collaborative");
+    engineOptions.set("streamCallbacks.numWorkerThreads", "4");
     // engineOptions.set("exchange.streamBufferOverlap", "none");
     // engineOptions.set("exchange.enablePrefetch", "true");
     std::fstream infile; 
@@ -180,7 +183,9 @@ void IPUAlgorithm::createEngine(Graph& graph, std::vector<program::Program> prog
 
 IPUAlgorithm::~IPUAlgorithm() {
     if (engine != nullptr) {
-        free(engine);
+        delete engine;
+        engine = nullptr;
+        device.detach();
     }
 }
 

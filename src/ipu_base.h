@@ -32,7 +32,7 @@ protected:
 
     int thread_id;
     // std::unique_ptr<Engine> engine;
-    Engine* engine;
+    Engine* engine = nullptr;
 public:
     SWConfig config;
     IPUAlgorithm(SWConfig config, int thread_id);

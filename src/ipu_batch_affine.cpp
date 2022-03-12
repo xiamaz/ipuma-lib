@@ -10,8 +10,13 @@
 #include <poputil/TileMapping.hpp>
 #include <string>
 #include <omp.h>
+#include <thread>
+#include <poplar/SyncType.hpp>
+#include <poplar/CycleCount.hpp>
 
 #include "swatlib/swatlib.h"
+#include "msd/channel.hpp"
+
 
 namespace ipu {
 namespace batchaffine {
@@ -24,6 +29,106 @@ using json = nlohmann::json;
 
 #define CYCLE_COUNT_OUTER_N(n) "cycle-count-outer" + std::to_string(n)
 #define CYCLE_COUNT_INNER_N(n) "cycle-count-inner" + std::to_string(n)
+
+class FillCallback final : public poplar::StreamCallback {
+public:
+  using Result = poplar::StreamCallback::Result;
+
+  FillCallback(msd::channel<SubmittedBatch>& value, std::map<slotToken, SubmittedBatch>& results, size_t size) : ch(value), resultTable(results), size(size) {}
+
+  Result prefetch(void *__restrict p) noexcept override {
+    PLOGE.printf("PreFETCH");
+    // We do this to handle closed streams;
+    for (auto b : ch) {
+      pushBatch(p, b);
+      return Result::Success;
+    }
+    if (ch.closed()) {
+      close(p);
+    }
+    return Result::Success;
+  }
+
+  void fetch(void *__restrict p) noexcept override {
+    PLOGE.printf("FETCH");
+    // We do this to handle closed streams;
+    for (auto b : ch) {
+      pushBatch(p, b);
+      return;
+    }
+    if (ch.closed()) {
+      close(p);
+    }
+    return;
+  }
+
+  void complete() noexcept override {}
+
+private:
+  void close(void *__restrict p) {
+      std::vector<int32_t> aa(size + 1, 0);
+      memcpy(p, aa.data(), aa.size()*4);
+  }
+  inline void pushBatch(void *__restrict p, SubmittedBatch b) {
+    // Wireformat: inputbuffer+slotToken
+    // TODO!!!!!!!!!: Are the offsets correct?????
+    size_t inputsize = abs((char*)b.inputs_end-(char*)b.inputs_begin);
+    memcpy(p, (char*)b.inputs_begin, inputsize);
+    int* ip = reinterpret_cast<int*>(&reinterpret_cast<char*>(p)[inputsize]);
+    ip[0] = b.slot + 1;
+    resultTable.insert({b.slot, b});
+  }
+  size_t size;
+  msd::channel<SubmittedBatch>& ch;
+  // TODO: Add mutex!
+  // TODO: move this out of the hot worker?
+  std::map<slotToken, SubmittedBatch>& resultTable;
+};
+
+class RecvCallback final : public poplar::StreamCallback {
+public:
+  using Result = poplar::StreamCallback::Result;
+
+  RecvCallback(std::map<slotToken, SubmittedBatch>& results) : resultTable(results) {}
+
+  Result prefetch(void *__restrict p) noexcept override {
+    PLOGE.printf("NOOOOOOOOOOOOOOOOOOOOOOOOOO");
+    exit(1);
+    return Result::NotAvailable;
+  }
+
+  void fetch(void *__restrict p) noexcept override {
+    pullBatch(p);
+  }
+
+  void complete() noexcept override {}
+
+private:
+  inline void pullBatch(void *__restrict p) {
+      // Wireformat: slotToken+outbuffer
+      int32_t* ip = reinterpret_cast<int32_t*>(p);
+      slotToken st = ip[0] - 1;
+      if (st == -1) {
+        return;
+      }
+      auto b = resultTable[st];
+      *b.cyclesH2D = readTime(&ip[1]);
+      *b.cyclesInner = readTime(&ip[1+2]);
+      // PLOGE.printf("Cycles: %lu, %lu", *b.cyclesH2D, *b.cyclesInner);
+      resultTable.erase(st);
+      memcpy((char*) b.results_begin, &ip[1+2+2], abs((char*)b.results_end - (char*)b.results_begin));
+      b.signal_done->close();
+  }
+
+  uint64_t readTime(int32_t* mem) {
+      uint32_t cycles[2];
+      memcpy(cycles, mem, 4*2);
+      uint64_t totalCycles = (((uint64_t)cycles[1]) << 32) | cycles[0];
+      return totalCycles;
+  }
+
+  std::map<slotToken, SubmittedBatch>& resultTable;
+};
 
 /**
  * Streamable IPU graph for SW
@@ -126,13 +231,13 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
       auto C_T = graph.addVariable(sType, {maxAB * workerMultiplier}, "C[" + std::to_string(i) + "]");
       graph.setTileMapping(C_T, tileIndex);
       graph.connect(vtx["C"], C_T);
-      undef.add(program::WriteUndef(C_T));
+      // undef.add(program::WriteUndef(C_T));
 
       // graph.setFieldSize(vtx["bG"], maxAB * workerMultiplier);
       auto bG_T = graph.addVariable(sType, {maxAB * workerMultiplier}, "bG[" + std::to_string(i) + "]");
       graph.setTileMapping(bG_T, tileIndex);
       graph.connect(vtx["bG"], bG_T);
-      undef.add(program::WriteUndef(bG_T));
+      // undef.add(program::WriteUndef(bG_T));
 
       // if (vtype == VertexType::stripedasm) {
       //   assert(false && "Not Implemented");
@@ -154,6 +259,10 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
 
     program::Sequence h2d_prog_concat;
     program::Sequence d2h_prog_concat;
+
+    auto slotT = graph.addVariable(INT, {1}, "SlotToken+1");
+    graph.setTileMapping(slotT, 0);
+    DataStream device_stream_concat;
     if (use_remote_buffer) {
       const char* units[] = {"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
       int b_size = inputs_tensor.numElements() * 4;
@@ -178,18 +287,15 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
       h2d_prog_concat.add(poplar::program::Copy(host_stream_offset, offset));
       auto memid = REMOTE_MEMORY_N(buffer_share);
       auto remote_mem = graph.addRemoteBuffer(memid, inputs_tensor.elementType(), inputs_tensor.numElements(), buf_rows, true, true);
-      h2d_prog_concat.add(poplar::program::Copy(remote_mem, inputs_tensor, offset, "Copy Inputs from Remote->IPU"));
+      // h2d_prog_concat.add(poplar::program::Copy(remote_mem, inputs_tensor, offset, "Copy Inputs from Remote->IPU"));
       // d2h_prog_concat.add(program::Execute(cs));
 
-      auto device_stream_concat =
-          graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
+      device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
       d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat, "Copy Outputs from IPU->Host"));
     } else {
-      auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, inputs_tensor.numElements());
-      auto device_stream_concat =
-          graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
-      h2d_prog_concat.add(poplar::program::Copy(host_stream_concat, inputs_tensor));
-      d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat));
+      auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, inputs_tensor.numElements() + 1);
+      device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements() + 1 + 2 + 2);
+      h2d_prog_concat.add(poplar::program::Copy(host_stream_concat, concat({inputs_tensor.flatten(), slotT.flatten()})));
     }
 
     auto print_tensors_prog = program::Sequence({
@@ -198,30 +304,34 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         program::PrintTensor("CompMeta", CompMeta),
         // program::PrintTensor("Scores", Scores),
     });
-#ifdef IPUMA_DEBUG
     program::Sequence main_prog;
     main_prog.add(program::Execute(frontCs));
-    main_prog.add(undef);
-    addCycleCount(graph, main_prog, CYCLE_COUNT_INNER_N(buffer_share));
-#else
-    auto main_prog = program::Execute(frontCs);
-#endif
+// #ifdef IPUMA_DEBUG
+//    addCycleCount(graph, main_prog, CYCLE_COUNT_INNER_N(buffer_share));
+// #endif
+    Tensor cyclesInner = poplar::cycleCount(graph, main_prog, 0, SyncType::EXTERNAL);
+    Tensor cyclesH2D = poplar::cycleCount(graph, h2d_prog_concat, 0, SyncType::EXTERNAL);
     prog.add(h2d_prog_concat);
     prog.add(main_prog);
+    // prog.add(program::PrintTensor(cycles));
+    d2h_prog_concat.add(poplar::program::Copy(concat({slotT.flatten(), cyclesH2D.reinterpret(INT).flatten(), cyclesInner.reinterpret(INT).flatten(), outputs_tensor.flatten()}), device_stream_concat));
     prog.add(d2h_prog_concat);
-
-#ifdef IPUMA_DEBUG
-    addCycleCount(graph, prog, CYCLE_COUNT_OUTER_N(buffer_share));
-#endif
-
-    progs[buffer_share] = prog;
+// #ifdef IPUMA_DEBUG
+//     addCycleCount(graph, prog, CYCLE_COUNT_OUTER_N(buffer_share));
+// #endif
+    program::Sequence reps;
+    program::Sequence test;
+    reps.add(prog);
+    reps.add(program::RepeatWhileTrue(test, slotT[0], prog));
+    // reps.add(program::Repeat(10000, prog));
+    progs[buffer_share] = reps;
   }
   return progs;
   // return {prog, d2h_prog_concat, print_tensors_prog};
 }
 
 SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap)
-    : IPUAlgorithm(config, thread_id), algoconfig(algoconfig) {
+    : IPUAlgorithm(config, thread_id), algoconfig(algoconfig), work_queue({10}), resultTable({}) {
   const auto totalComparisonsCount = algoconfig.getTotalNumberOfComparisons();
   slot_size = slotCap;
   slot_avail.resize(algoconfig.transmissionPrograms);
@@ -245,8 +355,11 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
                 
   std::hash<std::string> hasher;
   auto s = json{algoconfig, config};
-  size_t hash = hasher(s.dump());
+  std::stringstream ss("");
+  graph.outputComputeGraph(ss, programs);
+  size_t hash = hasher(s.dump()+ss.str());
   createEngine(graph, programs, std::to_string(hash));
+  run_executor();
 }
 
 SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig)
@@ -332,31 +445,24 @@ void SWAlgorithm::upload(int32_t* inputs_begin, int32_t* inputs_end, slotToken s
   PLOGI.printf("Transfer rate to remote buffer %.3f mb/s. %ld bytes in %.2fms", transferBandwidth, totalTransferSize, transferTime);
 }
 
+
 void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end,
                                           slotToken slot_token) {
-  // We have to reconnect the streams to new memory locations as the destination will be in a shared memroy region.
-  // engine->connectStream(HOST_STREAM_CONCAT, inputs_begin);
-  auto [lot, sid] = unpack_slot(slot_token);
-  PLOGD.printf("Slot is %d, lot is %d", sid, lot);
-  engine->connectStream(STREAM_CONCAT_ALL_N(lot), results_begin);
-
-  std::vector<int> vv{(int)sid};
-  if (algoconfig.useRemoteBuffer) {
-    PLOGD.printf("Use remote buffer with slot %d on lot", vv[0], lot);
-    engine->connectStream(HOST_STREAM_CONCAT_N(lot), vv.data());
-  } else {
-    engine->connectStream(HOST_STREAM_CONCAT_N(lot), inputs_begin);
-  }
-  swatlib::TickTock t;
-  t.tick();
-  engine->run(lot, "Execute Main-" + std::to_string(lot));
-  t.tock();
-  release_slot(slot_token);
-  PLOGD << "Total engine run time (in s): " << static_cast<double>(t.duration<std::chrono::milliseconds>()) / 1000.0;
+    msd::channel<int> done_signal;
+    uint64_t h2d_cycles, inner_cycles;
+    SubmittedBatch sb{inputs_begin, inputs_end, results_begin, results_end, slot_token, &done_signal, &h2d_cycles, &inner_cycles};
+    swatlib::TickTock t;
+    t.tick();
+    sb >> this->work_queue;
+    for (auto done : done_signal) {throw std::runtime_error("done_signal should be closed");}
+    t.tock();
+    release_slot(slot_token);
+    PLOGD << "Total engine run time (in s): " << static_cast<double>(t.duration<std::chrono::milliseconds>()) / 1000.0;
 
 #ifdef IPUMA_DEBUG
-  auto cyclesOuter = getTotalCycles(*engine, CYCLE_COUNT_OUTER_N(lot));
-  auto cyclesInner = getTotalCycles(*engine, CYCLE_COUNT_INNER_N(lot));
+  auto [lot, sid] = unpack_slot(slot_token);
+  auto cyclesOuter = h2d_cycles+inner_cycles; 
+  auto cyclesInner = inner_cycles;
   auto timeOuter = static_cast<double>(cyclesOuter) / getTarget().getTileClockFrequency();
   auto timeInner = static_cast<double>(cyclesInner) / getTarget().getTileClockFrequency();
   PLOGD << "Poplar cycle count: " << cyclesInner << "/" << cyclesOuter << " computed time (in s): " << timeInner << "/"
@@ -823,6 +929,30 @@ int SWAlgorithm::calculate_slot_region_index(int max_buffer_size) {
   auto ret = (int)ceil((max_buffer_size / (double)algoconfig.bufsize) * static_cast<double>(algoconfig.transmissionPrograms)) - 1;
   PLOGD.printf("Calculated slot region %d from maxbuf %d and bufsize %d", ret, max_buffer_size, algoconfig.bufsize);
   return ret;
+}
+
+void SWAlgorithm::run_executor() {
+  // Connect output
+  std::unique_ptr<RecvCallback> rb{new RecvCallback(resultTable)};
+  engine->connectStreamToCallback(STREAM_CONCAT_ALL_N(0), std::move(rb));
+
+  // Connect input
+  std::unique_ptr<FillCallback> cb{new FillCallback(work_queue, resultTable, algoconfig.getInputBufferSize32b())};
+  engine->connectStreamToCallback(HOST_STREAM_CONCAT_N(0), std::move(cb));
+
+  // Server
+  executor_proc = std::thread([&](){
+    PLOGI.printf("Run Engine");
+    engine->run(0);
+  });
+}
+
+SWAlgorithm::~SWAlgorithm() {
+  PLOGD.printf("Initiaite close");
+  work_queue.close();
+  PLOGD.printf("Initiate done");
+  executor_proc.join();
+  PLOGD.printf("Join done");
 }
 
 }  // namespace batchaffine

@@ -31,3 +31,12 @@ endif()
 target_include_directories(IPUMA_LIBRARY PUBLIC "${PROJECT_SOURCE_DIR}/extern/include")
 target_link_libraries(IPUMA_LIBRARY PUBLIC poplar popops poputil swatlib)
 add_dependencies(IPUMA_LIBRARY  algoipu.gp_codelets)
+
+include(FetchContent)
+if (NOT channel_POPULATED)
+    FetchContent_Declare(channel URL https://github.com/andreiavrammsd/cpp-channel/archive/v0.7.0.zip)
+    FetchContent_Populate(channel)
+    target_include_directories(IPUMA_LIBRARY PUBLIC ${channel_SOURCE_DIR}/include)
+    # OR
+    # add_subdirectory(${channel_SOURCE_DIR}/)
+endif()
