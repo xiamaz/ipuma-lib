@@ -157,7 +157,7 @@ void IPUAlgorithm::createEngine(Graph& graph, std::vector<program::Program> prog
     engineOptions.set("exchange.streamBufferOverlap", "none");
     engineOptions.set("exchange.enablePrefetch", "true");
     engineOptions.set("streamCallbacks.multiThreadMode", "collaborative");
-    engineOptions.set("streamCallbacks.numWorkerThreads", "4");
+    engineOptions.set("streamCallbacks.numWorkerThreads", "2");
     // engineOptions.set("exchange.streamBufferOverlap", "none");
     // engineOptions.set("exchange.enablePrefetch", "true");
     std::fstream infile; 

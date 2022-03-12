@@ -295,7 +295,9 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     } else {
       auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, inputs_tensor.numElements() + 1);
       device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements() + 1 + 2 + 2);
-      h2d_prog_concat.add(poplar::program::Copy(host_stream_concat, concat({inputs_tensor.flatten(), slotT.flatten()})));
+      auto inT = concat({inputs_tensor.flatten(), slotT.flatten()});
+      PLOGE.printf("Input Buffer size = %lu bytes", inT.numElements() * 4);
+      h2d_prog_concat.add(poplar::program::Copy(host_stream_concat, inT));
     }
 
     auto print_tensors_prog = program::Sequence({
@@ -314,7 +316,9 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     prog.add(h2d_prog_concat);
     prog.add(main_prog);
     // prog.add(program::PrintTensor(cycles));
-    d2h_prog_concat.add(poplar::program::Copy(concat({slotT.flatten(), cyclesH2D.reinterpret(INT).flatten(), cyclesInner.reinterpret(INT).flatten(), outputs_tensor.flatten()}), device_stream_concat));
+    auto outT = concat({slotT.flatten(), cyclesH2D.reinterpret(INT).flatten(), cyclesInner.reinterpret(INT).flatten(), outputs_tensor.flatten()});
+    PLOGE.printf("Output Buffer size = %lu bytes", outT.numElements() * 4);
+    d2h_prog_concat.add(poplar::program::Copy(outT, device_stream_concat));
     prog.add(d2h_prog_concat);
 // #ifdef IPUMA_DEBUG
 //     addCycleCount(graph, prog, CYCLE_COUNT_OUTER_N(buffer_share));
@@ -330,8 +334,9 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
   // return {prog, d2h_prog_concat, print_tensors_prog};
 }
 
+// TODO: Better default for work_queue!!!
 SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap)
-    : IPUAlgorithm(config, thread_id), algoconfig(algoconfig), work_queue({10}), resultTable({}) {
+    : IPUAlgorithm(config, thread_id), algoconfig(algoconfig), work_queue({10'000}), resultTable({}) {
   const auto totalComparisonsCount = algoconfig.getTotalNumberOfComparisons();
   slot_size = slotCap;
   slot_avail.resize(algoconfig.transmissionPrograms);
@@ -445,24 +450,32 @@ void SWAlgorithm::upload(int32_t* inputs_begin, int32_t* inputs_end, slotToken s
   PLOGI.printf("Transfer rate to remote buffer %.3f mb/s. %ld bytes in %.2fms", transferBandwidth, totalTransferSize, transferTime);
 }
 
+void Job::join() {
+    for (auto done : *done_signal) {throw std::runtime_error("done_signal should be closed");}
+    tick.tock();
+}
 
-void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end,
-                                          slotToken slot_token) {
-    msd::channel<int> done_signal;
+std::unique_ptr<Job> SWAlgorithm::async_submit_prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end) {
+    auto job = std::make_unique<Job>();
+    job->done_signal = new msd::channel<int>();
+    slotToken sid = (rand() % 100000000) + 1;
     uint64_t h2d_cycles, inner_cycles;
-    SubmittedBatch sb{inputs_begin, inputs_end, results_begin, results_end, slot_token, &done_signal, &h2d_cycles, &inner_cycles};
-    swatlib::TickTock t;
-    t.tick();
+    SubmittedBatch sb{inputs_begin, inputs_end, results_begin, results_end, sid, job->done_signal, &(job->h2dCycles), &(job->innerCycles)};
+    job->sb = sb;
+    job->tick.tick();
     sb >> this->work_queue;
-    for (auto done : done_signal) {throw std::runtime_error("done_signal should be closed");}
-    t.tock();
-    release_slot(slot_token);
-    PLOGD << "Total engine run time (in s): " << static_cast<double>(t.duration<std::chrono::milliseconds>()) / 1000.0;
+    return job;
+}
+
+void SWAlgorithm::blocking_join_prepared_remote_compare(std::unique_ptr<Job> job) {
+  job->join();  
+  // release_slot(slot_token);
+  PLOGD << "Total engine run time (in s): " << static_cast<double>(job->tick.duration<std::chrono::milliseconds>()) / 1000.0;
 
 #ifdef IPUMA_DEBUG
-  auto [lot, sid] = unpack_slot(slot_token);
-  auto cyclesOuter = h2d_cycles+inner_cycles; 
-  auto cyclesInner = inner_cycles;
+  // auto [lot, sid] = unpack_slot(slot_token);
+  auto cyclesOuter = job->h2dCycles+job->innerCycles; 
+  auto cyclesInner = job->innerCycles;
   auto timeOuter = static_cast<double>(cyclesOuter) / getTarget().getTileClockFrequency();
   auto timeInner = static_cast<double>(cyclesInner) / getTarget().getTileClockFrequency();
   PLOGD << "Poplar cycle count: " << cyclesInner << "/" << cyclesOuter << " computed time (in s): " << timeInner << "/"
@@ -473,7 +486,8 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   auto scale_bufsize = [=](int bufsize, int lot) {
     return static_cast<size_t>((bufsize / buffers + (bufsize % buffers == 0 ? 0 : 1)) * (lot + 1));
   };
-  int32_t* meta_input = inputs_begin + scale_bufsize(getMetaOffset(algoconfig), lot);
+  // int32_t* meta_input = inputs_begin + scale_bufsize(getMetaOffset(algoconfig), lot);
+  int32_t* meta_input = job->sb.inputs_begin + getMetaOffset(algoconfig);
 
   // GCUPS computation
   uint64_t cellCount = 0;
@@ -501,6 +515,14 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   PLOGD << "Transfer time: " << transferTime << "s estimated bandwidth: " << transferBandwidth
         << "mb/s, per vertex: " << transferBandwidthPerVertex << "mb/s";
 #endif
+}
+
+
+
+void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token) {
+  release_slot(slot_token);
+  auto job = async_submit_prepared_remote_compare(inputs_begin, inputs_end, results_begin, results_end);
+  blocking_join_prepared_remote_compare(std::move(job));
 }
 
 void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::vector<std::string>& B, bool errcheck) {

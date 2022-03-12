@@ -125,7 +125,7 @@ void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::R
                 auto maxBucket = ipu::batchaffine::SWAlgorithm::prepare_remote(swconfig, ipuconfig, aBatch, bBatch, &*input_bufs.begin(), &*input_bufs.end(), mappings.data());
 
                 t.tick();
-    auto slot = driver.queue_slot(maxBucket);
+                auto slot = driver.queue_slot(maxBucket);
                 if (driver.algoconfig.useRemoteBuffer) {
                         driver.upload(&*input_bufs.begin(), &*input_bufs.end(), slot);
                 }
