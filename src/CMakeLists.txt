@@ -34,7 +34,7 @@ add_dependencies(IPUMA_LIBRARY  algoipu.gp_codelets)
 
 include(FetchContent)
 if (NOT channel_POPULATED)
-    FetchContent_Declare(channel URL https://github.com/andreiavrammsd/cpp-channel/archive/refs/heads/master.zip)
+    FetchContent_Declare(channel URL https://github.com/lbb/cpp-channel/archive/refs/heads/master.zip)
     FetchContent_Populate(channel)
     target_include_directories(IPUMA_LIBRARY PUBLIC ${channel_SOURCE_DIR}/include)
     # OR
