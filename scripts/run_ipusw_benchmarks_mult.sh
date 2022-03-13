@@ -10,7 +10,11 @@ THREADS=(1 2 4 8 16 32 64)
 # THREADS=(1 2 4 8 16 32)
 
 run() {
-name=ipu${NUM_IPU}_${dsname}_${fillAlgo}
+if [ $remoteMemory = "remote" ]; then
+	name=ipu${NUM_IPU}_${dsname}_${fillAlgo}_remote
+else
+	name=ipu${NUM_IPU}_${dsname}_${fillAlgo}
+fi
 output_log=${OUTPUT}/${name}.log
 if [ ${PRINTOUT} ]; then
 	echo "Print run command for ${name}: ${BIN} ${config} -- ${INPUT1} ${INPUT2}"
@@ -24,11 +28,15 @@ fi
 BUFSIZE=400000
 MAX_BATCHES=2000
 
+for remoteMemory in stream remote; do
 for NUM_IPU in ${THREADS[@]}; do
-
 for fillAlgo in roundrobin greedy; do
 # DNA experiments
-config="--numDevices ${NUM_IPU} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo}"
+if [ $remoteMemory = "remote" ]; then
+	config="--numDevices ${NUM_IPU} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} --useRemoteBuffer --transmissionPrograms 10"
+else
+	config="--numDevices ${NUM_IPU} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo}"
+fi
 	INPUT1=/global/D1/projects/ipumer/datasets/compare/base/DNA-big-As.txt
 	INPUT2=/global/D1/projects/ipumer/datasets/compare/base/DNA-big-Bs.txt
 	dsname=dna_large
@@ -53,8 +61,13 @@ config="--numDevices ${NUM_IPU} --tilesUsed 1472 --vtype multiasm --forwardOnly 
 	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/DNA_2_250_qer.fasta
 	dsname=dna_2_250
 	run
+
 # Protein experiments
-config="--numDevices ${NUM_IPU} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxAB 2000 --datatype aa --similarity blosum50 --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo}"
+if [ $remoteMemory = "remote" ]; then
+	config="--numDevices ${NUM_IPU} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxAB 2000 --datatype aa --similarity blosum50 --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} --useRemoteBuffer --transmissionPrograms 10"
+else
+	config="--numDevices ${NUM_IPU} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxAB 2000 --datatype aa --similarity blosum50 --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo}"
+fi
 
 	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_200_ref.txt
 	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_200_que.txt
@@ -76,5 +89,5 @@ config="--numDevices ${NUM_IPU} --tilesUsed 1472 --vtype multiasm --forwardOnly 
 	dsname=protein_unfiltered
 	run
 done
-
+done
 done

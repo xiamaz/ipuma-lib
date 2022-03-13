@@ -182,6 +182,10 @@ void IPUAlgorithm::createEngine(Graph& graph, std::vector<program::Program> prog
     engine->load(device);
 }
 
+double IPUAlgorithm::getTileClockFrequency() {
+    return target.getTileClockFrequency();
+}
+
 IPUAlgorithm::~IPUAlgorithm() {
     if (engine != nullptr) {
         delete engine;

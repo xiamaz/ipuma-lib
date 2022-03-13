@@ -359,8 +359,17 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
 }
 
 // TODO: Better default for work_queue!!!
-SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap)
-    : IPUAlgorithm(config, thread_id), algoconfig(algoconfig), work_queue({10'000}), resultTable({}) {
+SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap, bool use_cache, BatchChannel* channel)
+    : IPUAlgorithm(config, thread_id), algoconfig(algoconfig), resultTable({}) {
+
+  if (channel == nullptr) {
+    work_queue = new BatchChannel(10'000);
+    ownChannel = true;
+  } else {
+    work_queue = channel;
+    ownChannel = false;
+  }
+
   const auto totalComparisonsCount = algoconfig.getTotalNumberOfComparisons();
   slot_size = slotCap;
   slot_avail.resize(algoconfig.transmissionPrograms);
@@ -387,7 +396,7 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
   std::stringstream ss("");
   graph.outputComputeGraph(ss, programs);
   size_t hash = hasher(s.dump() + ss.str());
-  createEngine(graph, programs, std::to_string(hash));
+  createEngine(graph, programs, std::to_string(hash), use_cache);
   run_executor();
 }
 
@@ -481,6 +490,18 @@ void Job::join() {
   tick.tock();
 }
 
+Job* SWAlgorithm::submitJob(BatchChannel& chan, std::vector<int32_t>& inputBuffer, std::vector<int32_t>& resultBuffer) {
+  Job* job = new Job();
+  job->done_signal = new msd::channel<int>();
+
+  slotToken sid = (rand() % 100000000) + 1;
+  uint64_t h2d_cycles, inner_cycles;
+  job->sb = SubmittedBatch{&*inputBuffer.begin(), &*inputBuffer.end(), &*resultBuffer.begin(), &*resultBuffer.end(), sid, job->done_signal, &(job->h2dCycles), &(job->innerCycles), {}};
+  job->tick.tick();
+  &(job->sb) >> chan;
+  return job;
+}
+
 Job* SWAlgorithm::async_submit_prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end) {
   auto job = new Job();
   job->done_signal = new msd::channel<int>();
@@ -488,7 +509,7 @@ Job* SWAlgorithm::async_submit_prepared_remote_compare(int32_t* inputs_begin, in
   uint64_t h2d_cycles, inner_cycles;
   job->sb = SubmittedBatch{inputs_begin, inputs_end, results_begin, results_end, sid, job->done_signal, &(job->h2dCycles), &(job->innerCycles), {}};
   job->tick.tick();
-  &(job->sb) >> this->work_queue;
+  &(job->sb) >> *(this->work_queue);
   return job;
 }
 
@@ -658,11 +679,11 @@ std::string SWAlgorithm::printTensors() {
   return "";
 }
 
-void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end) {
+void SWAlgorithm::transferResults(const int32_t* results_begin, const int32_t* results_end, const int* mapping_begin, const int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end) {
   int numComparisons = mapping_end - mapping_begin;
   transferResults(results_begin, results_end, mapping_begin, mapping_end, scores_begin, scores_end, arange_begin, arange_end, brange_begin, brange_end, numComparisons);
 }
-void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons) {
+void SWAlgorithm::transferResults(const int32_t* results_begin, const int32_t* results_end, const int* mapping_begin, const int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons) {
   size_t results_size = results_end - results_begin;
   size_t result_part_size = results_size / 3;
   if (results_size % 3 != 0) {
@@ -982,7 +1003,7 @@ void SWAlgorithm::run_executor() {
   engine->connectStreamToCallback(STREAM_CONCAT_ALL_N(0), std::move(rb));
 
   // Connect input
-  std::unique_ptr<FillCallback> cb{new FillCallback(work_queue, resultTable, algoconfig.getInputBufferSize32b())};
+  std::unique_ptr<FillCallback> cb{new FillCallback(*work_queue, resultTable, algoconfig.getInputBufferSize32b())};
   engine->connectStreamToCallback(HOST_STREAM_CONCAT_N(0), std::move(cb));
 
   // Server
@@ -993,11 +1014,21 @@ void SWAlgorithm::run_executor() {
 }
 
 SWAlgorithm::~SWAlgorithm() {
-  PLOGD.printf("Initiaite close");
-  work_queue.close();
+  if (ownChannel) {
+    PLOGD.printf("Initiate close");
+    work_queue->close();
+    delete work_queue;
+  }
   PLOGD.printf("Initiate done");
   executor_proc.join();
   PLOGD.printf("Join done");
+}
+
+Job::~Job() {
+  if (done_signal != nullptr) {
+    done_signal->close();
+    delete done_signal;
+  }
 }
 
 }  // namespace batchaffine
