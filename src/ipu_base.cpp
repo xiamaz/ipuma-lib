@@ -130,17 +130,20 @@ IPUAlgorithm::IPUAlgorithm(SWConfig config, int thread_id, int ipu_count) : conf
     auto manager = poplar::DeviceManager::createDeviceManager();
     // Attempt to attach to a single IPU:
 
-    auto devs = manager.getDevices();
-    for (size_t i = 0; i < ipus; i++) {
-        auto& d = devs[thread_id + i];
+    auto devs = manager.getDevices(TargetType::IPU, 1);
+    auto attached = 0;
+    for (size_t i = 0; i < devs.size(); i++) {
+        auto& d = devs.at(thread_id + i);
         PLOGI << "Attaching to device id " << (thread_id +i);
         if (d.attach()) {
-            devices[i] = std::move(d);
-        } else {
-            throw std::runtime_error("Could not attach to IPU at thread id " + std::to_string(thread_id));
-        }
-
-        PLOGD << "Attached to IPU ID: " << devices[i].getId();
+            devices[attached] = std::move(d);
+            attached++;
+            PLOGD << "Attached to IPU ID: " << devices[i].getId();
+        }         
+        if (attached >= ipus) break;
+    }
+    if (attached < ipus) {
+        throw std::runtime_error("Could not aquire enough devices.");
     }
 }
 
