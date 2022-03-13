@@ -46,6 +46,8 @@ public:
     poplar::Device& getDevice();
     poplar::Graph getGraph();
 
+    double getTileClockFrequency();
+
     ~IPUAlgorithm();
 };
 
