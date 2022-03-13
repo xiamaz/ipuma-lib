@@ -15,10 +15,10 @@ public:
 		PLOGD << "Initialize drivers.";
 		for (int i = 0; i < config.numDevices; ++i) {
 			if (i == 0) {
-				drivers.push_back(new ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, i + 32, 1, false, &channel));
+				drivers.push_back(new ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, i, 1, false, &channel));
 				clockFrequency = drivers[0]->getTileClockFrequency();
 			} else {
-				drivers.push_back(new ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, i + 32, 1, true, &channel));
+				drivers.push_back(new ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, i, 1, true, &channel));
 			}
 		}
 	}
