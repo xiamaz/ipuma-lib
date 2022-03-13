@@ -38,27 +38,24 @@ struct SubmittedBatch {
 struct Job {
   Job(): tick({}) {};
   void join();
-  msd::channel<int>* done_signal = nullptr;
+  msd::channel<int>* done_signal;
   uint64_t h2dCycles;
   uint64_t innerCycles;
   swatlib::TickTock tick;
   SubmittedBatch sb;
-
-  ~Job();
 };
 
 using BatchChannel = msd::channel<SubmittedBatch*>;
 
 class SWAlgorithm : public IPUAlgorithm {
  private:
-  BatchChannel* work_queue;
-  bool ownChannel;  // determines if the work queue will be deleted by destructor
+  msd::channel<SubmittedBatch*> work_queue;
   std::map<slotToken, SubmittedBatch*> resultTable;
   // std::vector<int32_t> results;
   std::vector<int32_t> scores;
   std::vector<int32_t> a_range_result;
   std::vector<int32_t> b_range_result;
-  std::thread executor_proc;
+  std::vector<std::thread> executor_procs;
 
   int slot_size;
   std::vector<int> slot_avail;
@@ -74,7 +71,7 @@ class SWAlgorithm : public IPUAlgorithm {
   IPUAlgoConfig algoconfig;
 
   SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig);
-  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap = 1, bool use_cache = false, BatchChannel* channel = nullptr);
+  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap = 1, size_t ipuCount = 1);
 
   std::string printTensors();
 
@@ -104,7 +101,6 @@ class SWAlgorithm : public IPUAlgorithm {
   // Remote bufffer
   void prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token = 0);
 
-  static Job* submitJob(BatchChannel& chan, std::vector<int32_t>& inputBuffer, std::vector<int32_t>& resultBuffer);
   Job* async_submit_prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end);
   void blocking_join_prepared_remote_compare(Job& job);
 
@@ -113,8 +109,8 @@ class SWAlgorithm : public IPUAlgorithm {
 
   void run_executor();
   static int prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, int* deviceMapping);
-  static void transferResults(const int32_t* results_begin, const int32_t* results_end, const int* mapping_begin, const int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end);
-  static void transferResults(const int32_t* results_begin, const int32_t* results_end, const int* mapping_begin, const int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons);
+  static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end);
+  static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons);
   ~SWAlgorithm();
 };
 }  // namespace batchaffine

@@ -26,25 +26,26 @@ inline void addCodelets(Graph& graph);
 inline int extractScoreSW(Engine& engine, const std::string& sA, const std::string& sB);
 
 class IPUAlgorithm {
-    poplar::Device device;
-    poplar::Target target;
+    std::vector<poplar::Device> devices;
 protected:
 
     int thread_id;
+    int ipus;
     // std::unique_ptr<Engine> engine;
-    Engine* engine = nullptr;
+    // Engine* engine = nullptr;
+    std::vector<poplar::Engine*> engines;
 public:
     SWConfig config;
-    IPUAlgorithm(SWConfig config, int thread_id);
+    IPUAlgorithm(SWConfig config, int thread_id, int ipu_count);
 
     Graph createGraph();
 
     // Needs to be called in child class
     void createEngine(Graph& graph, std::vector<program::Program> programs, std::string hash = "", bool use_cache = false);
 
-    poplar::Target& getTarget();
-    poplar::Device& getDevice();
+    std::vector<poplar::Device>& getDevices();
     poplar::Graph getGraph();
+    poplar::Target getTarget();
 
     double getTileClockFrequency();
 

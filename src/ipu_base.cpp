@@ -10,7 +10,6 @@
 #include <poplar/Engine.hpp>
 #include <poplar/SyncType.hpp>
 #include <poplar/CycleCount.hpp>
-// #include <poplar/IPUModel.hpp>
 #include <poplar/Program.hpp>
 #include <poplar/DeviceManager.hpp>
 #include <poplar/IPUModel.hpp>
@@ -125,21 +124,24 @@ inline int extractScoreSW(Engine& engine, const std::string& sA, const std::stri
     return S(x, y);
 }
 
-IPUAlgorithm::IPUAlgorithm(SWConfig config, int thread_id) : config(config), thread_id(thread_id) {
+IPUAlgorithm::IPUAlgorithm(SWConfig config, int thread_id, int ipu_count) : config(config), thread_id(thread_id), ipus(ipu_count) {
+    devices.resize(ipus);
+    engines.resize(ipus, nullptr);
     auto manager = poplar::DeviceManager::createDeviceManager();
     // Attempt to attach to a single IPU:
 
-    auto devices = manager.getDevices();
-    PLOGI << "Attaching to device id " << thread_id;
-    auto& d = devices[thread_id];
-    if (d.attach()) {
-        device = std::move(d);
-    } else {
-        throw std::runtime_error("Could not attach to IPU at thread id " + std::to_string(thread_id));
-    }
+    auto devs = manager.getDevices();
+    for (size_t i = 0; i < ipus; i++) {
+        auto& d = devs[thread_id + i];
+        PLOGI << "Attaching to device id " << (thread_id +i);
+        if (d.attach()) {
+            devices[i] = std::move(d);
+        } else {
+            throw std::runtime_error("Could not attach to IPU at thread id " + std::to_string(thread_id));
+        }
 
-    PLOGD << "Attached to IPU ID: " << device.getId();
-    target = device.getTarget();
+        PLOGD << "Attached to IPU ID: " << devices[i].getId();
+    }
 }
 
 Graph IPUAlgorithm::createGraph() {
@@ -152,11 +154,11 @@ Graph IPUAlgorithm::createGraph() {
 
 // Needs to be called in child class
 void IPUAlgorithm::createEngine(Graph& graph, std::vector<program::Program> programs, const std::string hash, bool use_cache) {
-    auto& device = getDevice();
+    auto& device = getDevices();
     poplar::OptionFlags engineOptions;
     engineOptions.set("exchange.streamBufferOverlap", "none");
     engineOptions.set("exchange.enablePrefetch", "true");
-    engineOptions.set("streamCallbacks.multiThreadMode", "dedicated");
+    engineOptions.set("streamCallbacks.multiThreadMode", "collaborative");
     engineOptions.set("streamCallbacks.numWorkerThreads", "2");
     engineOptions.set("target.hostSyncTimeout", "0");
     // engineOptions.set("exchange.streamBufferOverlap", "none");
@@ -164,46 +166,52 @@ void IPUAlgorithm::createEngine(Graph& graph, std::vector<program::Program> prog
     std::fstream infile; 
     auto filename = "./"+hash+".poplar_exec";
     infile.open(filename);
+    Executable executable;
     if (infile.good() && use_cache) {
         PLOGW.printf("Load Executeable %s.", filename.c_str());
-        auto exe = Executable::deserialize(infile);
-        // engine = std::make_unique<Engine>(std::move(exe), engineOptions);
-        engine = new Engine(std::move(exe), engineOptions);
+        executable = Executable::deserialize(infile);
         infile.close();
     } else {
-        Executable executable = poplar::compileGraph(graph, programs);
+        executable = poplar::compileGraph(graph, programs, engineOptions);
         std::ofstream execFileCbor;
-        PLOGW.printf("Write cache Executeable %s.", filename.c_str());
+        PLOGW.printf("Write Executeable %s.", filename.c_str());
         execFileCbor.open(filename);
         executable.serialize(execFileCbor);
         execFileCbor.close();
-        engine = new Engine(graph, programs, engineOptions);
     }
-    engine->load(device);
+
+    for (size_t i = 0; i < ipus; i++) {
+        std::fstream xinfile; 
+        xinfile.open(filename);
+        PLOGW.printf("Load Executeable %s.", filename.c_str());
+        executable = Executable::deserialize(xinfile);
+        xinfile.close();
+        engines[i] = new Engine(std::move(executable), engineOptions);
+        engines[i]->load(devices[i]);
+    }
 }
 
 double IPUAlgorithm::getTileClockFrequency() {
-    return target.getTileClockFrequency();
+    return getTarget().getTileClockFrequency();
 }
 
 IPUAlgorithm::~IPUAlgorithm() {
-    if (engine != nullptr) {
-        delete engine;
-        engine = nullptr;
-        device.detach();
+    for (size_t i = 0; i < ipus; i++) {
+        delete engines[i];
+        devices[i].detach();
     }
 }
 
-poplar::Target& IPUAlgorithm::getTarget() {
-    return target;
+poplar::Target IPUAlgorithm::getTarget() {
+    return devices[0].getTarget();
 }
 
-poplar::Device& IPUAlgorithm::getDevice() {
-    return device;
+std::vector<poplar::Device>& IPUAlgorithm::getDevices() {
+    return devices;
 }
 
 poplar::Graph IPUAlgorithm::getGraph() {
-    return std::move(poplar::Graph(target));
+    return std::move(poplar::Graph(getTarget()));
 }
 
 }

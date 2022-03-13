@@ -283,7 +283,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     program::Sequence d2h_prog_concat;
 
     auto slotT = graph.addVariable(INT, {1}, "SlotToken+1");
-    graph.setTileMapping(slotT, tileCount-1);
+    graph.setTileMapping(slotT, tileCount - 1);
     DataStream device_stream_concat;
     if (use_remote_buffer) {
       const char* units[] = {"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
@@ -315,9 +315,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
       device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
       d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat, "Copy Outputs from IPU->Host"));
     } else {
-      auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, inputs_tensor.numElements() + 1, ReplicatedStreamMode::REPLICATE,  {
-        {"splitLimit", std::to_string(264*1024*1024)}
-      });
+      auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, inputs_tensor.numElements() + 1, ReplicatedStreamMode::REPLICATE, {{"splitLimit", std::to_string(264 * 1024 * 1024)}});
       device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements() + 1 + 2 + 2);
       auto inT = concat({inputs_tensor.flatten(), slotT.flatten()});
       PLOGE.printf("Input Buffer size = %lu bytes", inT.numElements() * 4);
@@ -351,6 +349,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     program::Sequence test;
     reps.add(prog);
     reps.add(program::RepeatWhileTrue(test, slotT[0], prog));
+    // reps.add( program::PrintTensor("EXIT AS SLOT IS",slotT));
     // reps.add(program::Repeat(10000, prog));
     progs[buffer_share] = reps;
   }
@@ -359,17 +358,8 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
 }
 
 // TODO: Better default for work_queue!!!
-SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap, bool use_cache, BatchChannel* channel)
-    : IPUAlgorithm(config, thread_id), algoconfig(algoconfig), resultTable({}) {
-
-  if (channel == nullptr) {
-    work_queue = new BatchChannel(10'000);
-    ownChannel = true;
-  } else {
-    work_queue = channel;
-    ownChannel = false;
-  }
-
+SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap, size_t ipuCount)
+    : IPUAlgorithm(config, thread_id, ipuCount), algoconfig(algoconfig), work_queue({10'000}), resultTable({}) {
   const auto totalComparisonsCount = algoconfig.getTotalNumberOfComparisons();
   slot_size = slotCap;
   slot_avail.resize(algoconfig.transmissionPrograms);
@@ -396,7 +386,7 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
   std::stringstream ss("");
   graph.outputComputeGraph(ss, programs);
   size_t hash = hasher(s.dump() + ss.str());
-  createEngine(graph, programs, std::to_string(hash), use_cache);
+  createEngine(graph, programs, std::to_string(hash));
   run_executor();
 }
 
@@ -463,7 +453,7 @@ size_t SWAlgorithm::getMetaOffset(const IPUAlgoConfig& config) {
 
 void SWAlgorithm::refetch() {
   assert(false && "Not implemented");
-  engine->run(1);
+  // engine->run(1);
 }
 
 std::tuple<int, slotToken> SWAlgorithm::unpack_slot(slotToken s) {
@@ -475,7 +465,8 @@ void SWAlgorithm::upload(int32_t* inputs_begin, int32_t* inputs_end, slotToken s
   PLOGD.printf("Slot is %d, lot is %d", sid, lot);
   swatlib::TickTock rbt;
   rbt.tick();
-  engine->copyToRemoteBuffer(inputs_begin, REMOTE_MEMORY_N(lot), sid);
+  assert(false && "Not implemented");
+  // engine->copyToRemoteBuffer(inputs_begin, REMOTE_MEMORY_N(lot), sid);
   rbt.tock();
   auto transferTime = rbt.duration<std::chrono::milliseconds>();
   size_t totalTransferSize = algoconfig.getInputBufferSize32b() * 4;
@@ -490,18 +481,6 @@ void Job::join() {
   tick.tock();
 }
 
-Job* SWAlgorithm::submitJob(BatchChannel& chan, std::vector<int32_t>& inputBuffer, std::vector<int32_t>& resultBuffer) {
-  Job* job = new Job();
-  job->done_signal = new msd::channel<int>();
-
-  slotToken sid = (rand() % 100000000) + 1;
-  uint64_t h2d_cycles, inner_cycles;
-  job->sb = SubmittedBatch{&*inputBuffer.begin(), &*inputBuffer.end(), &*resultBuffer.begin(), &*resultBuffer.end(), sid, job->done_signal, &(job->h2dCycles), &(job->innerCycles), {}};
-  job->tick.tick();
-  &(job->sb) >> chan;
-  return job;
-}
-
 Job* SWAlgorithm::async_submit_prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end) {
   auto job = new Job();
   job->done_signal = new msd::channel<int>();
@@ -509,7 +488,7 @@ Job* SWAlgorithm::async_submit_prepared_remote_compare(int32_t* inputs_begin, in
   uint64_t h2d_cycles, inner_cycles;
   job->sb = SubmittedBatch{inputs_begin, inputs_end, results_begin, results_end, sid, job->done_signal, &(job->h2dCycles), &(job->innerCycles), {}};
   job->tick.tick();
-  &(job->sb) >> *(this->work_queue);
+  &(job->sb) >> this->work_queue;
   return job;
 }
 
@@ -679,11 +658,11 @@ std::string SWAlgorithm::printTensors() {
   return "";
 }
 
-void SWAlgorithm::transferResults(const int32_t* results_begin, const int32_t* results_end, const int* mapping_begin, const int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end) {
+void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end) {
   int numComparisons = mapping_end - mapping_begin;
   transferResults(results_begin, results_end, mapping_begin, mapping_end, scores_begin, scores_end, arange_begin, arange_end, brange_begin, brange_end, numComparisons);
 }
-void SWAlgorithm::transferResults(const int32_t* results_begin, const int32_t* results_end, const int* mapping_begin, const int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons) {
+void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons) {
   size_t results_size = results_end - results_begin;
   size_t result_part_size = results_size / 3;
   if (results_size % 3 != 0) {
@@ -999,36 +978,34 @@ int SWAlgorithm::calculate_slot_region_index(int max_buffer_size) {
 
 void SWAlgorithm::run_executor() {
   // Connect output
-  std::unique_ptr<RecvCallback> rb{new RecvCallback(resultTable)};
-  engine->connectStreamToCallback(STREAM_CONCAT_ALL_N(0), std::move(rb));
+  for (size_t i = 0; i < ipus; i++) {
+    std::unique_ptr<RecvCallback> rb{new RecvCallback(resultTable)};
+    engines[i]->connectStreamToCallback(STREAM_CONCAT_ALL_N(0), std::move(rb));
 
-  // Connect input
-  std::unique_ptr<FillCallback> cb{new FillCallback(*work_queue, resultTable, algoconfig.getInputBufferSize32b(), thread_id)};
-  engine->connectStreamToCallback(HOST_STREAM_CONCAT_N(0), std::move(cb));
+    // Connect input
+    std::unique_ptr<FillCallback> cb{new FillCallback(work_queue, resultTable, algoconfig.getInputBufferSize32b(), i)};
+    engines[i]->connectStreamToCallback(HOST_STREAM_CONCAT_N(0), std::move(cb));
 
-  // Server
-  executor_proc = std::thread([&]() {
-    PLOGI.printf("Run Engine");
-    engine->run(0);
-  });
+    // Server
+    executor_procs.push_back(std::thread([](poplar::Engine* engine, int ipu_id) {
+      PLOGI.printf("Run Engine");
+      if (engine == nullptr) {
+        PLOGE.printf("Run Engine is null");
+      }
+      engine->run(0);
+      PLOGW.printf("Engine exited with IPU_ID %d", ipu_id);
+    }, engines[i], i));
+  }
 }
 
 SWAlgorithm::~SWAlgorithm() {
-  if (ownChannel) {
-    PLOGD.printf("Initiate close");
-    work_queue->close();
-    delete work_queue;
-  }
+  PLOGD.printf("Initiaite close");
+  work_queue.close();
   PLOGD.printf("Initiate done");
-  executor_proc.join();
-  PLOGD.printf("Join done");
-}
-
-Job::~Job() {
-  if (done_signal != nullptr) {
-    done_signal->close();
-    delete done_signal;
+  for (auto&& ep : executor_procs) {
+    ep.join();
   }
+  PLOGD.printf("Join done");
 }
 
 }  // namespace batchaffine
