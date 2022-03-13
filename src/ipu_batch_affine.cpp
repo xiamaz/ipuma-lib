@@ -1,22 +1,21 @@
 #include "ipu_batch_affine.h"
 
+#include <omp.h>
 #include <plog/Log.h>
-#include <nlohmann/json.hpp>
 
 #include <cmath>
 #include <iostream>
+#include <nlohmann/json.hpp>
+#include <poplar/CycleCount.hpp>
 #include <poplar/Graph.hpp>
+#include <poplar/SyncType.hpp>
 #include <popops/Zero.hpp>
 #include <poputil/TileMapping.hpp>
 #include <string>
-#include <omp.h>
 #include <thread>
-#include <poplar/SyncType.hpp>
-#include <poplar/CycleCount.hpp>
 
-#include "swatlib/swatlib.h"
 #include "msd/channel.hpp"
-
+#include "swatlib/swatlib.h"
 
 namespace ipu {
 namespace batchaffine {
@@ -31,12 +30,12 @@ using json = nlohmann::json;
 #define CYCLE_COUNT_INNER_N(n) "cycle-count-inner" + std::to_string(n)
 
 class FillCallback final : public poplar::StreamCallback {
-public:
+ public:
   using Result = poplar::StreamCallback::Result;
 
   FillCallback(msd::channel<SubmittedBatch>& value, std::map<slotToken, SubmittedBatch>& results, size_t size) : ch(value), resultTable(results), size(size) {}
 
-  Result prefetch(void *__restrict p) noexcept override {
+  Result prefetch(void* __restrict p) noexcept override {
     PLOGE.printf("PreFETCH");
     // We do this to handle closed streams;
     for (auto b : ch) {
@@ -49,7 +48,7 @@ public:
     return Result::Success;
   }
 
-  void fetch(void *__restrict p) noexcept override {
+  void fetch(void* __restrict p) noexcept override {
     PLOGE.printf("FETCH");
     // We do this to handle closed streams;
     for (auto b : ch) {
@@ -64,16 +63,16 @@ public:
 
   void complete() noexcept override {}
 
-private:
-  void close(void *__restrict p) {
-      PLOGD.printf("Send teardown message to IPU");
-      std::vector<int32_t> aa(size + 1, 0);
-      memcpy(p, aa.data(), aa.size()*4);
+ private:
+  void close(void* __restrict p) {
+    PLOGD.printf("Send teardown message to IPU");
+    std::vector<int32_t> aa(size + 1, 0);
+    memcpy(p, aa.data(), aa.size() * 4);
   }
-  inline void pushBatch(void *__restrict p, SubmittedBatch b) {
+  inline void pushBatch(void* __restrict p, SubmittedBatch b) {
     // Wireformat: inputbuffer+slotToken
     // TODO!!!!!!!!!: Are the offsets correct?????
-    size_t inputsize = abs((char*)b.inputs_end-(char*)b.inputs_begin);
+    size_t inputsize = abs((char*)b.inputs_end - (char*)b.inputs_begin);
     memcpy(p, (char*)b.inputs_begin, inputsize);
     int* ip = reinterpret_cast<int*>(&reinterpret_cast<char*>(p)[inputsize]);
     ip[0] = b.slot + 1;
@@ -87,45 +86,45 @@ private:
 };
 
 class RecvCallback final : public poplar::StreamCallback {
-public:
+ public:
   using Result = poplar::StreamCallback::Result;
 
   RecvCallback(std::map<slotToken, SubmittedBatch>& results) : resultTable(results) {}
 
-  Result prefetch(void *__restrict p) noexcept override {
+  Result prefetch(void* __restrict p) noexcept override {
     PLOGE.printf("NOOOOOOOOOOOOOOOOOOOOOOOOOO");
     exit(1);
     return Result::NotAvailable;
   }
 
-  void fetch(void *__restrict p) noexcept override {
+  void fetch(void* __restrict p) noexcept override {
     pullBatch(p);
   }
 
   void complete() noexcept override {}
 
-private:
-  inline void pullBatch(void *__restrict p) {
-      // Wireformat: slotToken+outbuffer
-      int32_t* ip = reinterpret_cast<int32_t*>(p);
-      slotToken st = ip[0] - 1;
-      if (st == -1) {
-        return;
-      }
-      auto b = resultTable[st];
-      *b.cyclesH2D = readTime(&ip[1]);
-      *b.cyclesInner = readTime(&ip[1+2]);
-      // PLOGE.printf("Cycles: %lu, %lu", *b.cyclesH2D, *b.cyclesInner);
-      resultTable.erase(st);
-      memcpy((char*) b.results_begin, &ip[1+2+2], abs((char*)b.results_end - (char*)b.results_begin));
-      b.signal_done->close();
+ private:
+  inline void pullBatch(void* __restrict p) {
+    // Wireformat: slotToken+outbuffer
+    int32_t* ip = reinterpret_cast<int32_t*>(p);
+    slotToken st = ip[0] - 1;
+    if (st == -1) {
+      return;
+    }
+    auto b = resultTable[st];
+    *b.cyclesH2D = readTime(&ip[1]);
+    *b.cyclesInner = readTime(&ip[1 + 2]);
+    // PLOGE.printf("Cycles: %lu, %lu", *b.cyclesH2D, *b.cyclesInner);
+    resultTable.erase(st);
+    memcpy((char*)b.results_begin, &ip[1 + 2 + 2], abs((char*)b.results_end - (char*)b.results_begin));
+    b.signal_done->close();
   }
 
   uint64_t readTime(int32_t* mem) {
-      uint32_t cycles[2];
-      memcpy(cycles, mem, 4*2);
-      uint64_t totalCycles = (((uint64_t)cycles[1]) << 32) | cycles[0];
-      return totalCycles;
+    uint32_t cycles[2];
+    memcpy(cycles, mem, 4 * 2);
+    uint64_t totalCycles = (((uint64_t)cycles[1]) << 32) | cycles[0];
+    return totalCycles;
   }
 
   std::map<slotToken, SubmittedBatch>& resultTable;
@@ -137,7 +136,7 @@ private:
 std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigned long activeTiles, unsigned long maxAB,
                                          unsigned long bufSize, unsigned long maxBatches,
                                          const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt,
-                                         bool use_remote_buffer, int transmissionPrograms, int buf_rows, bool forward_only) {
+                                         bool use_remote_buffer, int transmissionPrograms, int buf_rows, bool forward_only, int ioTiles) {
   int buffers = transmissionPrograms;
 
   std::vector<program::Program> progs(buffers);
@@ -198,14 +197,28 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     Tensor BRanges = graph.addVariable(INT, {activeTiles, maxBatches}, "BRanges");
 
     graph.setTileMapping(similarity, 0);
-    for (int i = 0; i < activeTiles; ++i) {
-      int tileIndex = i % tileCount;
-      graph.setTileMapping(Seqs[i], tileIndex);
-      graph.setTileMapping(CompMeta[i], tileIndex);
+    if (ioTiles != 0) {
+      PLOGW.printf("Use %d I/O Tiles", ioTiles);
+      for (int i = 0; i < activeTiles; ++i) {
+        int tileIndex = activeTiles + std::max((int)ceil(ioTiles * (double)i / (double)activeTiles) - 1, 0);
+        // PLOGD.printf("I/O Tile %d", tileIndex);
+        graph.setTileMapping(Seqs[i], tileIndex);
+        graph.setTileMapping(CompMeta[i], tileIndex);
 
-      graph.setTileMapping(Scores[i], tileIndex);
-      graph.setTileMapping(ARanges[i], tileIndex);
-      graph.setTileMapping(BRanges[i], tileIndex);
+        graph.setTileMapping(Scores[i], tileIndex);
+        graph.setTileMapping(ARanges[i], tileIndex);
+        graph.setTileMapping(BRanges[i], tileIndex);
+      }
+    } else {
+      for (int i = 0; i < activeTiles; ++i) {
+        int tileIndex = i % tileCount;
+        graph.setTileMapping(Seqs[i], tileIndex);
+        graph.setTileMapping(CompMeta[i], tileIndex);
+
+        graph.setTileMapping(Scores[i], tileIndex);
+        graph.setTileMapping(ARanges[i], tileIndex);
+        graph.setTileMapping(BRanges[i], tileIndex);
+      }
     }
 
     OptionFlags streamOptions({});
@@ -262,7 +275,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     program::Sequence d2h_prog_concat;
 
     auto slotT = graph.addVariable(INT, {1}, "SlotToken+1");
-    graph.setTileMapping(slotT, 0);
+    graph.setTileMapping(slotT, tileCount-1);
     DataStream device_stream_concat;
     if (use_remote_buffer) {
       const char* units[] = {"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
@@ -309,9 +322,9 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     });
     program::Sequence main_prog;
     main_prog.add(program::Execute(frontCs));
-// #ifdef IPUMA_DEBUG
-//    addCycleCount(graph, main_prog, CYCLE_COUNT_INNER_N(buffer_share));
-// #endif
+    // #ifdef IPUMA_DEBUG
+    //    addCycleCount(graph, main_prog, CYCLE_COUNT_INNER_N(buffer_share));
+    // #endif
     Tensor cyclesInner = poplar::cycleCount(graph, main_prog, 0, SyncType::EXTERNAL);
     Tensor cyclesH2D = poplar::cycleCount(graph, h2d_prog_concat, 0, SyncType::EXTERNAL);
     prog.add(h2d_prog_concat);
@@ -321,9 +334,9 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     PLOGE.printf("Output Buffer size = %lu bytes", outT.numElements() * 4);
     d2h_prog_concat.add(poplar::program::Copy(outT, device_stream_concat));
     prog.add(d2h_prog_concat);
-// #ifdef IPUMA_DEBUG
-//     addCycleCount(graph, prog, CYCLE_COUNT_OUTER_N(buffer_share));
-// #endif
+    // #ifdef IPUMA_DEBUG
+    //     addCycleCount(graph, prog, CYCLE_COUNT_OUTER_N(buffer_share));
+    // #endif
     program::Sequence reps;
     program::Sequence test;
     reps.add(prog);
@@ -357,13 +370,13 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
   auto similarityMatrix = swatlib::selectMatrix(config.similarity, config.matchValue, config.mismatchValue, config.ambiguityValue);
   std::vector<program::Program> programs =
       buildGraph(graph, algoconfig.vtype, algoconfig.tilesUsed, algoconfig.maxAB, algoconfig.bufsize, algoconfig.maxBatches,
-                 similarityMatrix, config.gapInit, config.gapExtend, algoconfig.useRemoteBuffer, algoconfig.transmissionPrograms, slot_size, algoconfig.forwardOnly);
-                
+                 similarityMatrix, config.gapInit, config.gapExtend, algoconfig.useRemoteBuffer, algoconfig.transmissionPrograms, slot_size, algoconfig.forwardOnly, algoconfig.ioTiles);
+
   std::hash<std::string> hasher;
   auto s = json{algoconfig, config};
   std::stringstream ss("");
   graph.outputComputeGraph(ss, programs);
-  size_t hash = hasher(s.dump()+ss.str());
+  size_t hash = hasher(s.dump() + ss.str());
   createEngine(graph, programs, std::to_string(hash));
   run_executor();
 }
@@ -452,30 +465,32 @@ void SWAlgorithm::upload(int32_t* inputs_begin, int32_t* inputs_end, slotToken s
 }
 
 void Job::join() {
-    for (auto done : *done_signal) {throw std::runtime_error("done_signal should be closed");}
-    tick.tock();
+  for (auto done : *done_signal) {
+    throw std::runtime_error("done_signal should be closed");
+  }
+  tick.tock();
 }
 
 std::unique_ptr<Job> SWAlgorithm::async_submit_prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end) {
-    auto job = std::make_unique<Job>();
-    job->done_signal = new msd::channel<int>();
-    slotToken sid = (rand() % 100000000) + 1;
-    uint64_t h2d_cycles, inner_cycles;
-    SubmittedBatch sb{inputs_begin, inputs_end, results_begin, results_end, sid, job->done_signal, &(job->h2dCycles), &(job->innerCycles)};
-    job->sb = sb;
-    job->tick.tick();
-    sb >> this->work_queue;
-    return job;
+  auto job = std::make_unique<Job>();
+  job->done_signal = new msd::channel<int>();
+  slotToken sid = (rand() % 100000000) + 1;
+  uint64_t h2d_cycles, inner_cycles;
+  SubmittedBatch sb{inputs_begin, inputs_end, results_begin, results_end, sid, job->done_signal, &(job->h2dCycles), &(job->innerCycles)};
+  job->sb = sb;
+  job->tick.tick();
+  sb >> this->work_queue;
+  return job;
 }
 
 void SWAlgorithm::blocking_join_prepared_remote_compare(std::unique_ptr<Job> job) {
-  job->join();  
+  job->join();
   // release_slot(slot_token);
   PLOGD << "Total engine run time (in s): " << static_cast<double>(job->tick.duration<std::chrono::milliseconds>()) / 1000.0;
 
 #ifdef IPUMA_DEBUG
   // auto [lot, sid] = unpack_slot(slot_token);
-  auto cyclesOuter = job->h2dCycles+job->innerCycles; 
+  auto cyclesOuter = job->h2dCycles + job->innerCycles;
   auto cyclesInner = job->innerCycles;
   auto timeOuter = static_cast<double>(cyclesOuter) / getTarget().getTileClockFrequency();
   auto timeInner = static_cast<double>(cyclesInner) / getTarget().getTileClockFrequency();
@@ -517,8 +532,6 @@ void SWAlgorithm::blocking_join_prepared_remote_compare(std::unique_ptr<Job> job
         << "mb/s, per vertex: " << transferBandwidthPerVertex << "mb/s";
 #endif
 }
-
-
 
 void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token) {
   release_slot(slot_token);
@@ -836,7 +849,7 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
           throw std::runtime_error("Using unordered mapping with A/B comparison.");
           break;
       }
-      #pragma omp simd
+#pragma omp simd
       for (int j = 0; j < seqSize; ++j) {
         bucket_seq[sm.offset + j] = encodeTable[seq[j]];
       }
@@ -964,7 +977,7 @@ void SWAlgorithm::run_executor() {
   engine->connectStreamToCallback(HOST_STREAM_CONCAT_N(0), std::move(cb));
 
   // Server
-  executor_proc = std::thread([&](){
+  executor_proc = std::thread([&]() {
     PLOGI.printf("Run Engine");
     engine->run(0);
   });

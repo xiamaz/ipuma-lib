@@ -40,7 +40,7 @@ public:
     Graph createGraph();
 
     // Needs to be called in child class
-    void createEngine(Graph& graph, std::vector<program::Program> programs, std::string hash = "");
+    void createEngine(Graph& graph, std::vector<program::Program> programs, std::string hash = "", bool use_cache = false);
 
     poplar::Target& getTarget();
     poplar::Device& getDevice();

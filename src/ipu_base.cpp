@@ -151,19 +151,20 @@ Graph IPUAlgorithm::createGraph() {
 }
 
 // Needs to be called in child class
-void IPUAlgorithm::createEngine(Graph& graph, std::vector<program::Program> programs, const std::string hash) {
+void IPUAlgorithm::createEngine(Graph& graph, std::vector<program::Program> programs, const std::string hash, bool use_cache) {
     auto& device = getDevice();
     poplar::OptionFlags engineOptions;
     engineOptions.set("exchange.streamBufferOverlap", "none");
     engineOptions.set("exchange.enablePrefetch", "true");
-    engineOptions.set("streamCallbacks.multiThreadMode", "collaborative");
+    engineOptions.set("streamCallbacks.multiThreadMode", "dedicated");
     engineOptions.set("streamCallbacks.numWorkerThreads", "2");
+    engineOptions.set("target.hostSyncTimeout", "0");
     // engineOptions.set("exchange.streamBufferOverlap", "none");
     // engineOptions.set("exchange.enablePrefetch", "true");
     std::fstream infile; 
     auto filename = "./"+hash+".poplar_exec";
     infile.open(filename);
-    if (infile.good()) {
+    if (infile.good() && use_cache) {
         PLOGW.printf("Load Executeable %s.", filename.c_str());
         auto exe = Executable::deserialize(infile);
         // engine = std::make_unique<Engine>(std::move(exe), engineOptions);

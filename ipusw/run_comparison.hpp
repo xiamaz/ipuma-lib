@@ -86,15 +86,14 @@ void load_data(const std::string& path, std::vector<std::string>& seqs, int coun
 }
 
 // void ipu_run(ipu::batchaffine::SWAlgorithm& driver, const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::RawSequences& B, const int workerId, const int numWorkers, swatlib::TickTock& t, Barrier& barrier, swatlib::TickTock& outer) {
-void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::RawSequences& B, const int workerId, const int numWorkers, swatlib::TickTock& t, Barrier& barrier, swatlib::TickTock& outer) {
+void ipu_run(ipu::batchaffine::SWAlgorithm* driver, const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::RawSequences& B, const int workerId, const int numWorkers, swatlib::TickTock& t, Barrier& barrier, swatlib::TickTock& outer) {
         const auto& ipuconfig = config.ipuconfig;
         const auto& swconfig = config.swconfig;
-        auto driver = ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, workerId);
         PLOGD << "Finished attaching to device";
 
-  std::vector<int32_t> input_bufs(ipuconfig.getInputBufferSize32b());
-  size_t results_size = ipuconfig.getTotalNumberOfComparisons() * 3;
-  std::vector<int32_t> results_buf(results_size);
+        std::vector<int32_t> input_bufs(ipuconfig.getInputBufferSize32b());
+        size_t results_size = ipuconfig.getTotalNumberOfComparisons() * 3;
+        std::vector<int32_t> results_buf(results_size);
 
         std::vector<int32_t> scores(A.size());
         std::vector<int32_t> arange(A.size());
@@ -121,17 +120,19 @@ void ipu_run(const IpuSwConfig& config, const ipu::RawSequences& A, const ipu::R
                         bBatch[i] = B.at(batchBegin + i);
                 }
 
-        std::vector<int> mappings(ipuconfig.getTotalNumberOfComparisons(), 0);
+                std::vector<int> mappings(ipuconfig.getTotalNumberOfComparisons(), 0);
                 auto maxBucket = ipu::batchaffine::SWAlgorithm::prepare_remote(swconfig, ipuconfig, aBatch, bBatch, &*input_bufs.begin(), &*input_bufs.end(), mappings.data());
 
                 t.tick();
-                auto slot = driver.queue_slot(maxBucket);
-                if (driver.algoconfig.useRemoteBuffer) {
-                        driver.upload(&*input_bufs.begin(), &*input_bufs.end(), slot);
-                }
-                driver.prepared_remote_compare(&*input_bufs.begin(), &*input_bufs.end(), &*results_buf.begin(), &*results_buf.end(), slot);
+                // auto slot = driver->queue_slot(maxBucket);
+                // if (driver.algoconfig.useRemoteBuffer) {
+                //         driver.upload(&*input_bufs.begin(), &*input_bufs.end(), slot);
+                // }
+                // driver->prepared_remote_compare(&*input_bufs.begin(), &*input_bufs.end(), &*results_buf.begin(), &*results_buf.end(), slot);
+                auto job = driver->async_submit_prepared_remote_compare(&*input_bufs.begin(), &*input_bufs.end(), &*results_buf.begin(), &*results_buf.end());
+                driver->blocking_join_prepared_remote_compare(std::move(job));
                 t.tock();
-                driver.transferResults(
+                driver->transferResults(
                         &*results_buf.begin(), &*results_buf.end(),
                         &*mappings.begin(), &*mappings.end(),
                         &*(scores.begin() + results_offset), &*(scores.begin() + results_offset + numCmps),
@@ -207,9 +208,10 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
         Barrier barrier(config.numDevices);
 
         std::vector<std::thread> ipuThreads;
+        auto driver = ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, 0);
         for (int n = 0; n < config.numDevices; ++n) {
                 // ipuThreads.push_back(std::thread(ipu_run, std::ref(drivers[n]), std::cref(config), std::cref(references), std::cref(queries), n, config.numDevices, std::ref(inner[n]), std::ref(barrier), std::ref(outer)));
-                ipuThreads.push_back(std::thread(ipu_run, std::cref(config), std::cref(references), std::cref(queries), n, config.numDevices, std::ref(inner[n]), std::ref(barrier), std::ref(outer)));
+                ipuThreads.push_back(std::thread(ipu_run, &driver,std::cref(config), std::cref(references), std::cref(queries), n, config.numDevices, std::ref(inner[n]), std::ref(barrier), std::ref(outer)));
         }
 
 

@@ -28,6 +28,7 @@ struct IPUAlgoConfig {
   bool forwardOnly = false; // do not calculate the start position of a match, this should approx 2x performance, as no reverse pass is needed
   bool useRemoteBuffer = false;
   int transmissionPrograms = 1;  // number of separate transmission programs, use only with remote!
+  int ioTiles = 0;
 
   // this is maxbatches * num_vertices
   int getTotalNumberOfComparisons() const;
