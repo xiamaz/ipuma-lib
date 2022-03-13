@@ -1003,7 +1003,7 @@ void SWAlgorithm::run_executor() {
   engine->connectStreamToCallback(STREAM_CONCAT_ALL_N(0), std::move(rb));
 
   // Connect input
-  std::unique_ptr<FillCallback> cb{new FillCallback(*work_queue, resultTable, algoconfig.getInputBufferSize32b())};
+  std::unique_ptr<FillCallback> cb{new FillCallback(*work_queue, resultTable, algoconfig.getInputBufferSize32b(), thread_id)};
   engine->connectStreamToCallback(HOST_STREAM_CONCAT_N(0), std::move(cb));
 
   // Server
