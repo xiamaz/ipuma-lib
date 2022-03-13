@@ -33,15 +33,17 @@ class FillCallback final : public poplar::StreamCallback {
  public:
   using Result = poplar::StreamCallback::Result;
 
-  FillCallback(msd::channel<SubmittedBatch*>& value, std::map<slotToken, SubmittedBatch*>& results, size_t size) : ch(value), resultTable(results), size(size) {}
+  FillCallback(msd::channel<SubmittedBatch*>& value, std::map<slotToken, SubmittedBatch*>& results, size_t size, size_t ipu_id) : ch(value), resultTable(results), size(size), id(ipu_id) {}
 
   Result prefetch(void* __restrict p) noexcept override {
-    PLOGE.printf("PreFETCH");
+    PLOGE.printf("Enter PreFETCH, id %d", id);
     // We do this to handle closed streams;
     for (auto b : ch) {
+      PLOGE.printf("Do PreFETCH, id %d", id);
       pushBatch(p, b);
       return Result::Success;
     }
+    PLOGE.printf("Exit PreFETCH, id %d", id);
     if (ch.closed()) {
       close(p);
     }
@@ -49,7 +51,7 @@ class FillCallback final : public poplar::StreamCallback {
   }
 
   void fetch(void* __restrict p) noexcept override {
-    PLOGE.printf("FETCH");
+    PLOGE.printf("FETCH, %d", id);
     // We do this to handle closed streams;
     for (auto b : ch) {
       pushBatch(p, b);
@@ -65,7 +67,7 @@ class FillCallback final : public poplar::StreamCallback {
 
  private:
   void close(void* __restrict p) {
-    PLOGD.printf("Send teardown message to IPU");
+    PLOGD.printf("Send teardown message to IPU, id %d", id);
     std::vector<int32_t> aa(size + 1, 0);
     memcpy(p, aa.data(), aa.size() * 4);
   }
@@ -80,6 +82,7 @@ class FillCallback final : public poplar::StreamCallback {
     resultTable.insert({b->slot, b});
   }
   size_t size;
+  size_t id;
   msd::channel<SubmittedBatch*>& ch;
   // TODO: Add mutex!
   // TODO: move this out of the hot worker?
