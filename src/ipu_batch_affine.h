@@ -32,6 +32,7 @@ struct SubmittedBatch {
   msd::channel<int>* signal_done;
   uint64_t* cyclesH2D = nullptr;
   uint64_t* cyclesInner = nullptr;
+  swatlib::TickTock runTick;
 };
 
 struct Job {
@@ -46,8 +47,8 @@ struct Job {
 
 class SWAlgorithm : public IPUAlgorithm {
  private:
-  msd::channel<SubmittedBatch> work_queue;
-  std::map<slotToken, SubmittedBatch> resultTable;
+  msd::channel<SubmittedBatch*> work_queue;
+  std::map<slotToken, SubmittedBatch*> resultTable;
   // std::vector<int32_t> results;
   std::vector<int32_t> scores;
   std::vector<int32_t> a_range_result;
@@ -98,8 +99,8 @@ class SWAlgorithm : public IPUAlgorithm {
   // Remote bufffer
   void prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token = 0);
 
-  std::unique_ptr<Job> async_submit_prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end);
-  void blocking_join_prepared_remote_compare(std::unique_ptr<Job> job);
+  Job* async_submit_prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end);
+  void blocking_join_prepared_remote_compare(Job& job);
 
   void upload(int32_t* inputs_begin, int32_t* inputs_end, slotToken slot);
   // slotToken upload(int32_t* inputs_begin, int32_t* inputs_end);

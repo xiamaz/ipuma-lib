@@ -33,7 +33,7 @@ class FillCallback final : public poplar::StreamCallback {
  public:
   using Result = poplar::StreamCallback::Result;
 
-  FillCallback(msd::channel<SubmittedBatch>& value, std::map<slotToken, SubmittedBatch>& results, size_t size) : ch(value), resultTable(results), size(size) {}
+  FillCallback(msd::channel<SubmittedBatch*>& value, std::map<slotToken, SubmittedBatch*>& results, size_t size) : ch(value), resultTable(results), size(size) {}
 
   Result prefetch(void* __restrict p) noexcept override {
     PLOGE.printf("PreFETCH");
@@ -69,27 +69,28 @@ class FillCallback final : public poplar::StreamCallback {
     std::vector<int32_t> aa(size + 1, 0);
     memcpy(p, aa.data(), aa.size() * 4);
   }
-  inline void pushBatch(void* __restrict p, SubmittedBatch b) {
+  inline void pushBatch(void* __restrict p, SubmittedBatch* b) {
     // Wireformat: inputbuffer+slotToken
     // TODO!!!!!!!!!: Are the offsets correct?????
-    size_t inputsize = abs((char*)b.inputs_end - (char*)b.inputs_begin);
-    memcpy(p, (char*)b.inputs_begin, inputsize);
+    size_t inputsize = abs((char*)b->inputs_end - (char*)b->inputs_begin);
+    memcpy(p, (char*)b->inputs_begin, inputsize);
     int* ip = reinterpret_cast<int*>(&reinterpret_cast<char*>(p)[inputsize]);
-    ip[0] = b.slot + 1;
-    resultTable.insert({b.slot, b});
+    ip[0] = b->slot + 1;
+    b->runTick.tick();
+    resultTable.insert({b->slot, b});
   }
   size_t size;
-  msd::channel<SubmittedBatch>& ch;
+  msd::channel<SubmittedBatch*>& ch;
   // TODO: Add mutex!
   // TODO: move this out of the hot worker?
-  std::map<slotToken, SubmittedBatch>& resultTable;
+  std::map<slotToken, SubmittedBatch*>& resultTable;
 };
 
 class RecvCallback final : public poplar::StreamCallback {
  public:
   using Result = poplar::StreamCallback::Result;
 
-  RecvCallback(std::map<slotToken, SubmittedBatch>& results) : resultTable(results) {}
+  RecvCallback(std::map<slotToken, SubmittedBatch*>& results) : resultTable(results) {}
 
   Result prefetch(void* __restrict p) noexcept override {
     PLOGE.printf("NOOOOOOOOOOOOOOOOOOOOOOOOOO");
@@ -112,12 +113,13 @@ class RecvCallback final : public poplar::StreamCallback {
       return;
     }
     auto b = resultTable[st];
-    *b.cyclesH2D = readTime(&ip[1]);
-    *b.cyclesInner = readTime(&ip[1 + 2]);
+    *b->cyclesH2D = readTime(&ip[1]);
+    *b->cyclesInner = readTime(&ip[1 + 2]);
+    b->runTick.tock();
     // PLOGE.printf("Cycles: %lu, %lu", *b.cyclesH2D, *b.cyclesInner);
     resultTable.erase(st);
-    memcpy((char*)b.results_begin, &ip[1 + 2 + 2], abs((char*)b.results_end - (char*)b.results_begin));
-    b.signal_done->close();
+    memcpy((char*)b->results_begin, &ip[1 + 2 + 2], abs((char*)b->results_end - (char*)b->results_begin));
+    b->signal_done->close();
   }
 
   uint64_t readTime(int32_t* mem) {
@@ -127,7 +129,7 @@ class RecvCallback final : public poplar::StreamCallback {
     return totalCycles;
   }
 
-  std::map<slotToken, SubmittedBatch>& resultTable;
+  std::map<slotToken, SubmittedBatch*>& resultTable;
 };
 
 /**
@@ -204,7 +206,10 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         // PLOGD.printf("I/O Tile %d", tileIndex);
         graph.setTileMapping(Seqs[i], tileIndex);
         graph.setTileMapping(CompMeta[i], tileIndex);
+      }
 
+      for (int i = 0; i < activeTiles; ++i) {
+        int tileIndex = i % tileCount;
         graph.setTileMapping(Scores[i], tileIndex);
         graph.setTileMapping(ARanges[i], tileIndex);
         graph.setTileMapping(BRanges[i], tileIndex);
@@ -307,7 +312,9 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
       device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
       d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat, "Copy Outputs from IPU->Host"));
     } else {
-      auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, inputs_tensor.numElements() + 1);
+      auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, inputs_tensor.numElements() + 1, ReplicatedStreamMode::REPLICATE,  {
+        {"splitLimit", std::to_string(100*1024*1024)}
+      });
       device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements() + 1 + 2 + 2);
       auto inT = concat({inputs_tensor.flatten(), slotT.flatten()});
       PLOGE.printf("Input Buffer size = %lu bytes", inT.numElements() * 4);
@@ -471,27 +478,26 @@ void Job::join() {
   tick.tock();
 }
 
-std::unique_ptr<Job> SWAlgorithm::async_submit_prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end) {
-  auto job = std::make_unique<Job>();
+Job* SWAlgorithm::async_submit_prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end) {
+  auto job = new Job();
   job->done_signal = new msd::channel<int>();
   slotToken sid = (rand() % 100000000) + 1;
   uint64_t h2d_cycles, inner_cycles;
-  SubmittedBatch sb{inputs_begin, inputs_end, results_begin, results_end, sid, job->done_signal, &(job->h2dCycles), &(job->innerCycles)};
-  job->sb = sb;
+  job->sb = SubmittedBatch{inputs_begin, inputs_end, results_begin, results_end, sid, job->done_signal, &(job->h2dCycles), &(job->innerCycles), {}};
   job->tick.tick();
-  sb >> this->work_queue;
+  &(job->sb) >> this->work_queue;
   return job;
 }
 
-void SWAlgorithm::blocking_join_prepared_remote_compare(std::unique_ptr<Job> job) {
-  job->join();
+void SWAlgorithm::blocking_join_prepared_remote_compare(Job& job) {
+  job.join();
   // release_slot(slot_token);
-  PLOGD << "Total engine run time (in s): " << static_cast<double>(job->tick.duration<std::chrono::milliseconds>()) / 1000.0;
+  PLOGD << "Total engine run time (in s): " << static_cast<double>(job.tick.duration<std::chrono::milliseconds>()) / 1000.0;
 
 #ifdef IPUMA_DEBUG
   // auto [lot, sid] = unpack_slot(slot_token);
-  auto cyclesOuter = job->h2dCycles + job->innerCycles;
-  auto cyclesInner = job->innerCycles;
+  auto cyclesOuter = job.h2dCycles + job.innerCycles;
+  auto cyclesInner = job.innerCycles;
   auto timeOuter = static_cast<double>(cyclesOuter) / getTarget().getTileClockFrequency();
   auto timeInner = static_cast<double>(cyclesInner) / getTarget().getTileClockFrequency();
   PLOGD << "Poplar cycle count: " << cyclesInner << "/" << cyclesOuter << " computed time (in s): " << timeInner << "/"
@@ -503,7 +509,7 @@ void SWAlgorithm::blocking_join_prepared_remote_compare(std::unique_ptr<Job> job
     return static_cast<size_t>((bufsize / buffers + (bufsize % buffers == 0 ? 0 : 1)) * (lot + 1));
   };
   // int32_t* meta_input = inputs_begin + scale_bufsize(getMetaOffset(algoconfig), lot);
-  int32_t* meta_input = job->sb.inputs_begin + getMetaOffset(algoconfig);
+  int32_t* meta_input = job.sb.inputs_begin + getMetaOffset(algoconfig);
 
   // GCUPS computation
   uint64_t cellCount = 0;
@@ -536,7 +542,7 @@ void SWAlgorithm::blocking_join_prepared_remote_compare(std::unique_ptr<Job> job
 void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token) {
   release_slot(slot_token);
   auto job = async_submit_prepared_remote_compare(inputs_begin, inputs_end, results_begin, results_end);
-  blocking_join_prepared_remote_compare(std::move(job));
+  blocking_join_prepared_remote_compare(*job);
 }
 
 void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::vector<std::string>& B, bool errcheck) {

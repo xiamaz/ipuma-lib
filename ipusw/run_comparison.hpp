@@ -130,7 +130,7 @@ void ipu_run(ipu::batchaffine::SWAlgorithm* driver, const IpuSwConfig& config, c
                 // }
                 // driver->prepared_remote_compare(&*input_bufs.begin(), &*input_bufs.end(), &*results_buf.begin(), &*results_buf.end(), slot);
                 auto job = driver->async_submit_prepared_remote_compare(&*input_bufs.begin(), &*input_bufs.end(), &*results_buf.begin(), &*results_buf.end());
-                driver->blocking_join_prepared_remote_compare(std::move(job));
+                driver->blocking_join_prepared_remote_compare(*job);
                 t.tock();
                 driver->transferResults(
                         &*results_buf.begin(), &*results_buf.end(),
