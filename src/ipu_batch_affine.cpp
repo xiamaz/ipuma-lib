@@ -313,7 +313,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
       d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat, "Copy Outputs from IPU->Host"));
     } else {
       auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, inputs_tensor.numElements() + 1, ReplicatedStreamMode::REPLICATE,  {
-        {"splitLimit", std::to_string(100*1024*1024)}
+        {"splitLimit", std::to_string(264*1024*1024)}
       });
       device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements() + 1 + 2 + 2);
       auto inT = concat({inputs_tensor.flatten(), slotT.flatten()});
