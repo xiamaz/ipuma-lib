@@ -6,15 +6,11 @@ PRINTOUT=
 
 mkdir -p ${OUTPUT}
 
-THREADS=(1 2 4 8 16 32 64)
-# THREADS=(1 2 4 8 16 32)
+DEVNUM=(1 2 8 32 64)
+TH_FACTORS=(1 5 10)
 
 run() {
-if [ $remoteMemory = "remote" ]; then
-	name=ipu${NUM_IPU}_${dsname}_${fillAlgo}_remote
-else
-	name=ipu${NUM_IPU}_${dsname}_${fillAlgo}
-fi
+name=ipu${NUM_IPU}_th${NUM_THREADS}_${dsname}_${fillAlgo}_${DDUP}
 output_log=${OUTPUT}/${name}.log
 if [ ${PRINTOUT} ]; then
 	echo "Print run command for ${name}: ${BIN} ${config} -- ${INPUT1} ${INPUT2}"
@@ -25,18 +21,24 @@ else if [ $OVERWRITE ] || [ ! -f ${output_log} ]; then
 fi
 fi
 }
-BUFSIZE=400000
-MAX_BATCHES=2000
-
-for remoteMemory in stream remote; do
-for NUM_IPU in ${THREADS[@]}; do
-for fillAlgo in roundrobin greedy; do
-# DNA experiments
-if [ $remoteMemory = "remote" ]; then
-	config="--numDevices ${NUM_IPU} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} --useRemoteBuffer --transmissionPrograms 10"
+remoteMemory=stream
+for NUM_IPU in ${DEVNUM[@]}; do
+for TH_FACTOR in ${TH_FACTORS[@]}; do
+for DDUP in yesdup nodup; do
+if [ $DDUP = "yesdup" ]; then
+	DUPLICATE_DS="--duplicateDatasets"
+	if [ $NUM_IPU -le 2 ]; then
+		continue
+	fi
 else
-	config="--numDevices ${NUM_IPU} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo}"
+	DUPLICATE_DS=""
 fi
+NUM_THREADS=$((NUM_IPU * TH_FACTOR))
+# DNA experiments
+fillAlgo=roundrobin
+BUFSIZE=34000
+MAX_BATCHES=100
+config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
 	INPUT1=/global/D1/projects/ipumer/datasets/compare/base/DNA-big-As.txt
 	INPUT2=/global/D1/projects/ipumer/datasets/compare/base/DNA-big-Bs.txt
 	dsname=dna_large
@@ -63,11 +65,10 @@ fi
 	run
 
 # Protein experiments
-if [ $remoteMemory = "remote" ]; then
-	config="--numDevices ${NUM_IPU} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxAB 2000 --datatype aa --similarity blosum50 --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} --useRemoteBuffer --transmissionPrograms 10"
-else
-	config="--numDevices ${NUM_IPU} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxAB 2000 --datatype aa --similarity blosum50 --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo}"
-fi
+fillAlgo=greedy
+BUFSIZE=140000
+MAX_BATCHES=220
+config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxAB 2000 --datatype aa --similarity blosum50 --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
 
 	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_200_ref.txt
 	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_200_que.txt
