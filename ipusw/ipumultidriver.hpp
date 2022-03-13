@@ -1,7 +1,10 @@
 #ifndef IPU_MULTI_DRIVER_HPP
 #define IPU_MULTI_DRIVER_HPP
 #include "ipuswconfig.hpp"
+#include "nlohmann/json.hpp"
 #include <plog/Log.h>
+
+using json = nlohmann::json;
 
 class IPUMultiDriver {
         ipu::batchaffine::SWAlgorithm* driver;
@@ -30,16 +33,15 @@ public:
                 auto* job = driver->async_submit_prepared_remote_compare(&*inputBuffer.begin(), &*inputBuffer.end(), &*resultBuffer.begin(), &*resultBuffer.end());
                 job->join();
 
-
         PLOGD << "Total engine run time (in s): " << static_cast<double>(job->tick.duration<std::chrono::milliseconds>()) / 1000.0;
 #ifdef IPUMA_DEBUG
                 // auto [lot, sid] = unpack_slot(slot_token);
                 auto cyclesOuter = job->h2dCycles + job->innerCycles;
                 auto cyclesInner = job->innerCycles;
+								auto timeJob = static_cast<double>(job->tick.accumulate_microseconds()) / 1e6;
+								auto timeBatch = static_cast<double>(job->sb.runTick.accumulate_microseconds()) / 1e6;
                 auto timeOuter = static_cast<double>(cyclesOuter) / clockFrequency;
                 auto timeInner = static_cast<double>(cyclesInner) / clockFrequency;
-                PLOGD << "Poplar cycle count: " << cyclesInner << "/" << cyclesOuter << " computed time (in s): " << timeInner << "/"
-                                        << timeOuter;
 
                 int32_t *meta_input = job->sb.inputs_begin + config.ipuconfig.getTotalBufsize32b();
 
@@ -52,23 +54,40 @@ public:
                         auto b_len = meta_input[4 * i + 2];
                         cellCount += a_len * b_len;
                         dataCount += a_len + b_len;
-                        // PLOGW << a_len << " : blen : " << b_len;
                 }
 
                 double GCUPSOuter = static_cast<double>(cellCount) / timeOuter / 1e9;
                 double GCUPSInner = static_cast<double>(cellCount) / timeInner / 1e9;
-                PLOGD << "Poplar estimated cells(" << cellCount << ") GCUPS " << GCUPSInner << "/" << GCUPSOuter;
+                double GCUPSJob = static_cast<double>(cellCount) / timeJob / 1e9;
+                double GCUPSBatch = static_cast<double>(cellCount) / timeBatch / 1e9;
 
-                // dataCount - actual data content transferred
-                // totalTransferSize - size of buffer being transferred
                 double totalTransferSize = config.ipuconfig.getInputBufferSize32b() * 4;
 
                 auto transferTime = timeOuter - timeInner;
                 auto transferInfoRatio = static_cast<double>(dataCount) / totalTransferSize * 100;
                 auto transferBandwidth = totalTransferSize / transferTime / 1e6;
                 auto transferBandwidthPerVertex = transferBandwidth / config.ipuconfig.tilesUsed;
-                PLOGD << "Transfer time: " << transferTime << "s estimated bandwidth: " << transferBandwidth
-                                        << "mb/s, per vertex: " << transferBandwidthPerVertex << "mb/s";
+
+								json log = {
+									{"tag", "batch_perf"},
+									{"cycle_inner", cyclesInner},
+									{"cycle_outer", cyclesOuter},
+									{"time_inner", timeInner},
+									{"time_outer", timeOuter},
+									{"time_job", timeJob},
+									{"cell_count", cellCount},
+									{"gcups_inner", GCUPSInner},
+									{"gcups_outer", GCUPSOuter},
+									{"gcups_job", GCUPSJob},
+									{"gcups_batch", GCUPSBatch},
+									{"transfer_size_total", totalTransferSize},
+									{"time_h2d", transferTime},
+									{"data_count", dataCount},
+									{"transfer_ratio", transferInfoRatio},
+									{"transfer_bandwidth", transferBandwidth},
+									{"transfer_bandwidth_per_vertex", transferBandwidthPerVertex},
+								};
+								PLOGD << IPU_JSON_LOG_TAG << log.dump();
 #endif
                 delete job;
         }

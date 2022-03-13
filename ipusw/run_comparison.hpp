@@ -75,11 +75,14 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
   swatlib::TickTock outer;
   std::vector<swatlib::TickTock> inner(config.numThreads);
 
+  int duplicationFactor = config.duplicateDatasets ? std::max(config.numDevices / 2, 1) : 1;
+
   json configLog = {
       {"tag", "run_comparison_setup"},
       {"config", config},
       {"ref_path", referencePath},
       {"query_path", queryPath},
+      {"duplicationFactor", duplicationFactor}
   };
   PLOGW << IPU_JSON_LOG_TAG << configLog.dump();
 
@@ -89,8 +92,6 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
   const int batchCmpLimit = config.ipuconfig.getTotalNumberOfComparisons() - config.ipuconfig.maxBatches;
   const int batchDataLimit = config.ipuconfig.getTotalBufsize32b() * 4 - config.ipuconfig.bufsize * 100;
   auto batches = createBatches(references, queries, batchCmpLimit, batchDataLimit);
-
-  int duplicationFactor = std::max(config.numDevices / 2, 1);
 
   if (config.duplicateDatasets) {
     int originalSize = batches.size();
