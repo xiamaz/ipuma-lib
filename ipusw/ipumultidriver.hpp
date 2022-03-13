@@ -9,6 +9,8 @@ class IPUMultiDriver {
         double clockFrequency;
 public:
         IpuSwConfig config;
+				std::atomic<int> totalCmpsProcessed = 0;
+				std::atomic<int> totalBatchesProcessed = 0;
 
         IPUMultiDriver(IpuSwConfig config) : config(config) {
                 PLOGD << "Initialize drivers.";
