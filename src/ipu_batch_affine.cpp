@@ -33,7 +33,7 @@ class FillCallback final : public poplar::StreamCallback {
  public:
   using Result = poplar::StreamCallback::Result;
 
-  FillCallback(msd::channel<SubmittedBatch*>& value, std::map<slotToken, SubmittedBatch*>& results, size_t size, size_t ipu_id) : ch(value), resultTable(results), size(size), id(ipu_id) {}
+  FillCallback(msd::channel<SubmittedBatch*>& value, std::map<slotToken, SubmittedBatch*>& results, std::mutex& rmutex, size_t size, size_t ipu_id) : ch(value), resultTable(results), size(size), id(ipu_id), result_mutex(rmutex) {}
 
   Result prefetch(void* __restrict p) noexcept override {
     PLOGE.printf("Enter PreFETCH, id %d", id);
@@ -79,13 +79,16 @@ class FillCallback final : public poplar::StreamCallback {
     int* ip = reinterpret_cast<int*>(&reinterpret_cast<char*>(p)[inputsize]);
     ip[0] = b->slot + 1;
     b->runTick.tick();
+    result_mutex.lock();
     resultTable.insert({b->slot, b});
+    result_mutex.unlock();
   }
   size_t size;
   size_t id;
   msd::channel<SubmittedBatch*>& ch;
   // TODO: Add mutex!
   // TODO: move this out of the hot worker?
+  std::mutex &result_mutex;
   std::map<slotToken, SubmittedBatch*>& resultTable;
 };
 
@@ -93,7 +96,7 @@ class RecvCallback final : public poplar::StreamCallback {
  public:
   using Result = poplar::StreamCallback::Result;
 
-  RecvCallback(std::map<slotToken, SubmittedBatch*>& results) : resultTable(results) {}
+  RecvCallback(std::map<slotToken, SubmittedBatch*>& results, std::mutex& rmutex) : resultTable(results), result_mutex(rmutex) {}
 
   Result prefetch(void* __restrict p) noexcept override {
     PLOGE.printf("NOOOOOOOOOOOOOOOOOOOOOOOOOO");
@@ -115,12 +118,14 @@ class RecvCallback final : public poplar::StreamCallback {
     if (st == -1) {
       return;
     }
+    result_mutex.lock();
     auto b = resultTable[st];
     *b->cyclesH2D = readTime(&ip[1]);
     *b->cyclesInner = readTime(&ip[1 + 2]);
     b->runTick.tock();
     // PLOGE.printf("Cycles: %lu, %lu", *b.cyclesH2D, *b.cyclesInner);
     resultTable.erase(st);
+    result_mutex.unlock();
     memcpy((char*)b->results_begin, &ip[1 + 2 + 2], abs((char*)b->results_end - (char*)b->results_begin));
     b->signal_done->close();
   }
@@ -132,6 +137,7 @@ class RecvCallback final : public poplar::StreamCallback {
     return totalCycles;
   }
 
+  std::mutex &result_mutex;
   std::map<slotToken, SubmittedBatch*>& resultTable;
 };
 
@@ -979,11 +985,11 @@ int SWAlgorithm::calculate_slot_region_index(int max_buffer_size) {
 void SWAlgorithm::run_executor() {
   // Connect output
   for (size_t i = 0; i < ipus; i++) {
-    std::unique_ptr<RecvCallback> rb{new RecvCallback(resultTable)};
+    std::unique_ptr<RecvCallback> rb{new RecvCallback(resultTable, tableMutex)};
     engines[i]->connectStreamToCallback(STREAM_CONCAT_ALL_N(0), std::move(rb));
 
     // Connect input
-    std::unique_ptr<FillCallback> cb{new FillCallback(work_queue, resultTable, algoconfig.getInputBufferSize32b(), i)};
+    std::unique_ptr<FillCallback> cb{new FillCallback(work_queue, resultTable, tableMutex,algoconfig.getInputBufferSize32b(), i)};
     engines[i]->connectStreamToCallback(HOST_STREAM_CONCAT_N(0), std::move(cb));
 
     // Server

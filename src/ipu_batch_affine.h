@@ -50,6 +50,7 @@ using BatchChannel = msd::channel<SubmittedBatch*>;
 class SWAlgorithm : public IPUAlgorithm {
  private:
   msd::channel<SubmittedBatch*> work_queue;
+  std::mutex tableMutex;
   std::map<slotToken, SubmittedBatch*> resultTable;
   // std::vector<int32_t> results;
   std::vector<int32_t> scores;
