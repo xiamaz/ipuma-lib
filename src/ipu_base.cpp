@@ -134,11 +134,11 @@ IPUAlgorithm::IPUAlgorithm(SWConfig config, int thread_id, int ipu_count) : conf
     auto attached = 0;
     for (size_t i = 0; i < devs.size(); i++) {
         auto& d = devs.at(thread_id + i);
-        PLOGI << "Attaching to device id " << (thread_id +i);
+        PLOGD.printf("Trying to aquired IPU ID %d", i); 
         if (d.attach()) {
             devices[attached] = std::move(d);
             attached++;
-            PLOGD << "Attached to IPU ID: " << devices[i].getId();
+            PLOGI.printf("Aquired IPU ID %d", i); 
         }         
         if (attached >= ipus) break;
     }
