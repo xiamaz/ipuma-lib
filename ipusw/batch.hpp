@@ -11,6 +11,19 @@ struct Batch {
 	int endIndex;
 	int numCmps;
 	int totalSize;
+
+	std::vector<int32_t> inputBuffer;
+	std::vector<int32_t> resultBuffer;
+	std::vector<int32_t> mappingBuffer;
+
+	ipu::batchaffine::Job* job = nullptr;
+	bool received = false;
+
+	~Batch() {
+		if (job != nullptr) {
+			delete job;
+		}
+	}
 };
 
 using Batches = std::vector<Batch>;

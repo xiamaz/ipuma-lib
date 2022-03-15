@@ -19,49 +19,35 @@ using json = nlohmann::json;
 
 using Fastas = std::vector<swatlib::Fasta>;
 
-void loadSequences(const std::string &path, std::vector<std::string> &sequences)
-{
+void loadSequences(const std::string &path, std::vector<std::string> &sequences) {
   std::ifstream seqFile(path);
   std::string line;
-  while (std::getline(seqFile, line))
-  {
+  while (std::getline(seqFile, line)) {
     sequences.push_back(line);
   }
 }
 
-void load_data(const std::string &path, std::vector<std::string> &seqs, int count = 0)
-{
-  if (std::equal(path.end() - 4, path.end(), ".txt"))
-  {
+void load_data(const std::string &path, std::vector<std::string> &seqs, int count = 0) {
+  if (std::equal(path.end() - 4, path.end(), ".txt")) {
     PLOGI << "Loading all entries from " << path;
     loadSequences(path, seqs);
-  }
-  else
-  {
-    if (count > 0)
-    {
+  } else {
+    if (count > 0) {
       PLOGI << "Loading " << count << " entries from " << path;
-    }
-    else
-    {
+    } else {
       PLOGI << "Loading all entries from " << path;
     }
     std::ifstream is;
     is.open(path);
-    if (is.fail())
-    {
+    if (is.fail()) {
       throw std::runtime_error("Opening file at " + path + " failed.");
     }
     swatlib::Fasta f;
     int i = 0;
-    while (!(count) || i < count)
-    {
-      if (is >> f)
-      {
+    while (!(count) || i < count) {
+      if (is >> f) {
         seqs.push_back(f.sequence);
-      }
-      else
-      {
+      } else {
         seqs.push_back(f.sequence);
         break;
       }
@@ -70,12 +56,16 @@ void load_data(const std::string &path, std::vector<std::string> &seqs, int coun
   }
 }
 
+void init_driver(IPUMultiDriver& driver) {
+  driver.init();
+}
+
 void run_comparison(IpuSwConfig config, std::string referencePath, std::string queryPath) {
+  auto driver = IPUMultiDriver(config);
   std::vector<std::string> references, queries;
   swatlib::TickTock outer;
-  std::vector<swatlib::TickTock> inner(config.numThreads);
 
-  int duplicationFactor = config.duplicateDatasets ? std::max(config.numDevices / 2, 1) : 1;
+  int duplicationFactor = config.duplicateDatasets ? std::max(config.numDevices, 1) : 1;
 
   json configLog = {
       {"tag", "run_comparison_setup"},
@@ -86,8 +76,15 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
   };
   PLOGW << IPU_JSON_LOG_TAG << configLog.dump();
 
-  load_data(referencePath, references);
-  load_data(queryPath, queries);
+  std::thread refLoader(load_data, std::cref(referencePath), std::ref(references), 0);
+  std::thread queryLoader(load_data, std::cref(queryPath), std::ref(queries), 0);
+  std::thread driverInit(init_driver, std::ref(driver));
+  // load_data(referencePath, references);
+  // load_data(queryPath, queries);
+  // driver.init();
+
+  refLoader.join();
+  queryLoader.join();
 
   const int batchCmpLimit = config.ipuconfig.getTotalNumberOfComparisons() - config.ipuconfig.maxBatches;
   const int batchDataLimit = config.ipuconfig.getTotalBufsize32b() * 4 - config.ipuconfig.bufsize * 100;
@@ -104,20 +101,29 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
     PLOGW.printf("Duplicating dataset %dx from %d to %d", duplicationFactor, originalSize, duplicatedSize);
   }
 
-  auto driver = IPUMultiDriver(config);
   std::vector<std::thread> workerThreads;
-  PLOGI << "Starting comparisons";
-  outer.tick();
   for (int n = 0; n < config.numThreads; ++n) {
-    workerThreads.push_back(std::thread(runIpuWorker, n, config.numThreads, std::ref(driver), std::cref(references), std::cref(queries), std::cref(batches), std::ref(inner[n])));
+    workerThreads.push_back(std::thread(runIpuWorker, n, config.numThreads, std::ref(driver), std::cref(references), std::cref(queries), std::ref(batches)));
   }
-
-  double innerTime = 0;
-  double maxInnerTime = 0;
   for (int n = 0; n < config.numThreads; ++n) {
     workerThreads[n].join();
-    auto threadSeconds = static_cast<double>(inner[n].accumulate_microseconds()) / 1e6;
-    innerTime += threadSeconds;
+  }
+
+  driverInit.join();
+
+  PLOGI << "Starting comparisons";
+  std::vector<std::thread> receiverThreads;
+  const int receiverThreadNum = 12;
+  for (int i = 0; i < receiverThreadNum; ++i) {
+    receiverThreads.push_back(std::thread(workerResult, i, receiverThreadNum, std::ref(driver), std::ref(batches)));
+  }
+  outer.tick();
+  for (int i = 0; i < batches.size(); ++i) {
+    auto& batch = batches[i];
+    batch.job = driver.submit(batch.inputBuffer, batch.resultBuffer);
+  }
+  for (int i = 0; i < receiverThreadNum; ++i) {
+    receiverThreads[i].join();
   }
   outer.tock();
 
@@ -137,15 +143,11 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
 
   double outerTime = static_cast<double>(outer.accumulate_microseconds()) / 1e6;
   double gcupsOuter = static_cast<double>(cellCount) / outerTime / 1e9;
-  double gcupsInner = static_cast<double>(cellCount) / innerTime / 1e9;
   json logdata = {
       {"tag", "final_log"},
       {"cells", cellCount},
       {"outer_time_s", outerTime},
-      {"inner_time_acc_s", innerTime},
-      {"inner_time_max_s", maxInnerTime},
       {"outer_gcups", gcupsOuter},
-      {"inner_gcups_acc", gcupsInner},
   };
   PLOGW << IPU_JSON_LOG_TAG << logdata.dump();
 }
