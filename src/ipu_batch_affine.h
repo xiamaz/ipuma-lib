@@ -1,6 +1,8 @@
 #ifndef IPU_BATCH_AFFINE_HPP
 #define IPU_BATCH_AFFINE_HPP
 
+#define WORK_QUEUE_SIZE 10'000
+
 #include <vector>
 #include <thread>
 #include <map>
@@ -72,7 +74,7 @@ class SWAlgorithm : public IPUAlgorithm {
   IPUAlgoConfig algoconfig;
 
   SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig);
-  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap = 1, size_t ipuCount = 1);
+  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap = 1, size_t ipuCount = 1, bool runExecutor = true);
 
   std::string printTensors();
 

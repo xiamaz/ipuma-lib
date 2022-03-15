@@ -364,8 +364,8 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
 }
 
 // TODO: Better default for work_queue!!!
-SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap, size_t ipuCount)
-    : IPUAlgorithm(config, thread_id, ipuCount), algoconfig(algoconfig), work_queue({10'000}), resultTable({}) {
+SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap, size_t ipuCount, bool runExecutor)
+    : IPUAlgorithm(config, thread_id, ipuCount), algoconfig(algoconfig), work_queue({WORK_QUEUE_SIZE}), resultTable({}) {
   const auto totalComparisonsCount = algoconfig.getTotalNumberOfComparisons();
   slot_size = slotCap;
   slot_avail.resize(algoconfig.transmissionPrograms);
@@ -393,7 +393,8 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
   graph.outputComputeGraph(ss, programs);
   size_t hash = hasher(s.dump() + ss.str());
   createEngine(graph, programs, std::to_string(hash));
-  run_executor();
+
+  if (runExecutor) run_executor();
 }
 
 SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig)

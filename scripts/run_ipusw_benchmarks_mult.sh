@@ -1,13 +1,11 @@
 #!/bin/bash
 BIN=./build/bin/ipusw
-OUTPUT=/global/D1/projects/ipumer/datasets/results/ipu_synthetic_benchmarks
+OUTPUT_STEM=/global/D1/projects/ipumer/datasets/results/ipu_synthetic_benchmarks_prepare_batch
 OVERWRITE=
 PRINTOUT=
 
-mkdir -p ${OUTPUT}
-
-DEVNUM=(1 2 8 32 64)
-TH_FACTORS=(1 5 10)
+DEVNUM=(1 2 4 8 16 32 64)
+REPMAX=5
 
 run() {
 name=ipu${NUM_IPU}_th${NUM_THREADS}_${dsname}_${fillAlgo}_${DDUP}
@@ -21,23 +19,27 @@ else if [ $OVERWRITE ] || [ ! -f ${output_log} ]; then
 fi
 fi
 }
+
+for REPNUM in `seq $REPMAX`; do
+OUTPUT=${OUTPUT_STEM}_rep${REPNUM}
 remoteMemory=stream
+mkdir -p ${OUTPUT}
 for NUM_IPU in ${DEVNUM[@]}; do
-for TH_FACTOR in ${TH_FACTORS[@]}; do
 for DDUP in yesdup nodup; do
 if [ $DDUP = "yesdup" ]; then
 	DUPLICATE_DS="--duplicateDatasets"
-	if [ $NUM_IPU -le 2 ]; then
+	if [ ${NUM_IPU} -lt 2 ]; then
 		continue
 	fi
 else
 	DUPLICATE_DS=""
 fi
-NUM_THREADS=$((NUM_IPU * TH_FACTOR))
+# NUM_THREADS=$((NUM_IPU * TH_FACTOR))
+NUM_THREADS=4
 # DNA experiments
 fillAlgo=roundrobin
 BUFSIZE=34000
-MAX_BATCHES=100
+MAX_BATCHES=130
 config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
 	INPUT1=/global/D1/projects/ipumer/datasets/compare/base/DNA-big-As.txt
 	INPUT2=/global/D1/projects/ipumer/datasets/compare/base/DNA-big-Bs.txt

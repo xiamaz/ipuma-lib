@@ -100,6 +100,9 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
     }
     PLOGW.printf("Duplicating dataset %dx from %d to %d", duplicationFactor, originalSize, duplicatedSize);
   }
+  if (batches.size() > WORK_QUEUE_SIZE) {
+    PLOGF.printf("Batches are larger than work queue size: %d > %d", batches.size(), WORK_QUEUE_SIZE);
+  }
 
   std::vector<std::thread> workerThreads;
   for (int n = 0; n < config.numThreads; ++n) {
@@ -110,6 +113,10 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
   }
 
   driverInit.join();
+  for (int i = 0; i < batches.size(); ++i) {
+    auto& batch = batches[i];
+    batch.job = driver.submit(batch.inputBuffer, batch.resultBuffer);
+  }
 
   PLOGI << "Starting comparisons";
   std::vector<std::thread> receiverThreads;
@@ -118,10 +125,7 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
     receiverThreads.push_back(std::thread(workerResult, i, receiverThreadNum, std::ref(driver), std::ref(batches)));
   }
   outer.tick();
-  for (int i = 0; i < batches.size(); ++i) {
-    auto& batch = batches[i];
-    batch.job = driver.submit(batch.inputBuffer, batch.resultBuffer);
-  }
+  driver.run();
   for (int i = 0; i < receiverThreadNum; ++i) {
     receiverThreads[i].join();
   }
@@ -131,8 +135,7 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
   PLOGW << "Total Batches Processed " << driver.totalBatchesProcessed;
 
   uint64_t cellCount = 0;
-  for (int i = 0; i < references.size(); ++i)
-  {
+  for (int i = 0; i < references.size(); ++i) {
     cellCount += references[i].size() * queries[i].size();
   }
   

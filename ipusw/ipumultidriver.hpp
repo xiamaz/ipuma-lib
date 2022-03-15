@@ -9,7 +9,7 @@ using json = nlohmann::json;
 
 class IPUMultiDriver {
   ipu::batchaffine::SWAlgorithm *driver;
-
+  bool initialized = false;
   double clockFrequency;
 
  public:
@@ -23,8 +23,16 @@ class IPUMultiDriver {
   void init() {
     PLOGD << "Initialize drivers.";
     driver = new ipu::batchaffine::SWAlgorithm(
-        config.swconfig, config.ipuconfig, 0, 0, config.numDevices);
+        config.swconfig, config.ipuconfig, 0, 0, config.numDevices, false);
     clockFrequency = driver->getTileClockFrequency();
+    initialized = true;
+  }
+
+  void run() {
+    if (!initialized) {
+      throw std::runtime_error("Driver not initialized, run init() first");
+    }
+    driver->run_executor();
   }
 
   ~IPUMultiDriver() { delete driver; }
