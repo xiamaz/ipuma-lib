@@ -100,7 +100,7 @@ def extract_cpu_lines(logdata):
         time_inner_s = json_data["time_inner_s"]
         time_outer_s = json_data["time_outer_s"]
         line = [
-                dataset, "cpu-ssw", numa, "", cells, "", gcups_inner, gcups_inner, gcups_outer, "", "", time_inner_s
+                dataset, "cpu-ssw", numa, cpu_threads, cells, "", gcups_inner, gcups_inner, gcups_outer, "", "", time_inner_s
         ]
         table_lines.append(line)
     return table_lines

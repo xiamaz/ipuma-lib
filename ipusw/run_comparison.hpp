@@ -113,19 +113,19 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
   }
 
   driverInit.join();
-  for (int i = 0; i < batches.size(); ++i) {
-    auto& batch = batches[i];
-    batch.job = driver.submit(batch.inputBuffer, batch.resultBuffer);
-  }
+  driver.run();
 
   PLOGI << "Starting comparisons";
   std::vector<std::thread> receiverThreads;
-  const int receiverThreadNum = 12;
+  const int receiverThreadNum = 24;
   for (int i = 0; i < receiverThreadNum; ++i) {
     receiverThreads.push_back(std::thread(workerResult, i, receiverThreadNum, std::ref(driver), std::ref(batches)));
   }
   outer.tick();
-  driver.run();
+  for (int i = 0; i < batches.size(); ++i) {
+    auto& batch = batches[i];
+    batch.job = driver.submit(batch.inputBuffer, batch.resultBuffer);
+  }
   for (int i = 0; i < receiverThreadNum; ++i) {
     receiverThreads[i].join();
   }

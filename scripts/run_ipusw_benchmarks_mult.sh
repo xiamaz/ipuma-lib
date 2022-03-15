@@ -35,7 +35,7 @@ else
 	DUPLICATE_DS=""
 fi
 # NUM_THREADS=$((NUM_IPU * TH_FACTOR))
-NUM_THREADS=4
+NUM_THREADS=`nproc`
 # DNA experiments
 fillAlgo=roundrobin
 BUFSIZE=34000
