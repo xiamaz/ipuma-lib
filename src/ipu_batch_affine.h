@@ -1,7 +1,7 @@
 #ifndef IPU_BATCH_AFFINE_HPP
 #define IPU_BATCH_AFFINE_HPP
 
-#define WORK_QUEUE_SIZE 10'000
+#define WORK_QUEUE_SIZE 100'000
 
 #include <vector>
 #include <thread>

@@ -492,6 +492,7 @@ Job* SWAlgorithm::async_submit_prepared_remote_compare(int32_t* inputs_begin, in
   auto job = new Job();
   job->done_signal = new msd::channel<int>();
   slotToken sid = (rand() % 100000000) + 1;
+
   uint64_t h2d_cycles, inner_cycles;
   job->sb = SubmittedBatch{inputs_begin, inputs_end, results_begin, results_end, sid, job->done_signal, &(job->h2dCycles), &(job->innerCycles), {}};
   job->tick.tick();

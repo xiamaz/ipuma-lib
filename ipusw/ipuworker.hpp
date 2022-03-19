@@ -5,22 +5,28 @@
 #include "batch.hpp"
 
 // worker for getting results
-void workerResult(const int workerId, const int numWorkers, IPUMultiDriver& driver, Batches& batches) {
+void workerResult(const int workerId, const int numWorkers, IPUMultiDriver& driver, Batches& batches, std::vector<BatchResult>& results) {
 	int finished = 0;
 	int workerBatchCount = 0;
-	for (int i = workerId; i < batches.size(); i += numWorkers) {
+	for (int i = workerId; i < results.size(); i += numWorkers) {
 		workerBatchCount++;
 	}
 	while (finished < workerBatchCount) {
-		for (int i = workerId; i < batches.size(); i += numWorkers) {
-			auto& batch = batches[i];
-			if (batch.received) continue;
-			if (batch.job != nullptr) {
-				driver.wait(batch.job);
+		for (int i = workerId; i < results.size(); i += numWorkers) {
+			auto& batch = batches[i % batches.size()];
+			auto& result = results[i];
+			auto* job = result.job;
+			if (result.received) continue;
+			// if (batch.job != nullptr) {
+			if (job != nullptr) {
+				driver.wait(job);
+				// driver.wait(batch.job);
 				ipu::batchaffine::BlockAlignmentResults results;
-		    driver.fillResults(batch.resultBuffer, batch.mappingBuffer, results, batch.numCmps);
-				batch.received = true;
+				driver.fillResults(result.resultBuffer, batch.mappingBuffer, results, batch.numCmps);
+				result.received = true;
 				finished++;
+				driver.totalBatchesProcessed += 1;
+				driver.totalCmpsProcessed += batches[i % batches.size()].numCmps;
 			}
 		}
 	}
@@ -46,14 +52,7 @@ void runIpuWorker(const int workerId, const int numWorkers, IPUMultiDriver& driv
 		}
 		batch.inputBuffer.resize(inputBufferSize);
 		batch.mappingBuffer.resize(mappingBufferSize);
-		batch.resultBuffer.resize(resultBufferSize);
 		driver.fill_input_buffer(aBatch, bBatch, batch.inputBuffer, batch.mappingBuffer);
-		// inner.tick();
-		// driver.submitWait(inputBuffer, resultBuffer);
-		// inner.tock();
-		// driver.fillResults(resultBuffer, mappingBuffer, results, batch.numCmps);
-		driver.totalBatchesProcessed += 1;
-		driver.totalCmpsProcessed += batch.numCmps;
 	};
 
 	int batchesProcessed = 0;

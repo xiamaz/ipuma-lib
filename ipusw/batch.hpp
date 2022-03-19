@@ -13,13 +13,16 @@ struct Batch {
 	int totalSize;
 
 	std::vector<int32_t> inputBuffer;
-	std::vector<int32_t> resultBuffer;
 	std::vector<int32_t> mappingBuffer;
+};
 
+struct BatchResult {
+	std::vector<int32_t> resultBuffer;
 	ipu::batchaffine::Job* job = nullptr;
+
 	bool received = false;
 
-	~Batch() {
+	~BatchResult() {
 		if (job != nullptr) {
 			delete job;
 		}

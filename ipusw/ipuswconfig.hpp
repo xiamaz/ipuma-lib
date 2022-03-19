@@ -13,6 +13,7 @@ struct IpuSwConfig {
 	int numDevices = 1; // number of IPU devices to be used
 	int numThreads = 1; // number of threads for submitting work to the IPU devices
 	bool duplicateDatasets = false;
+	int duplicationFactor = 0;
 	int repeat = 1; // number of repeated runs
 
 	IpuSwConfig() : swconfig(SW_CONFIGURATION), ipuconfig(ALGO_CONFIGURATION) {}
@@ -29,6 +30,7 @@ void to_json(json& j, const IpuSwConfig& c) {
 		{"numDevices", c.numDevices},
 		{"numThreads", c.numThreads},
 		{"duplicateDatasets", c.duplicateDatasets},
+		{"duplicationFactor", c.duplicationFactor},
 		{"repeat", c.repeat}
 	};
 }
@@ -39,6 +41,7 @@ void from_json(const json& j, IpuSwConfig& c) {
 	j.at("numDevices").get_to(c.numDevices);
 	j.at("numThreads").get_to(c.numThreads);
 	j.at("duplicateDatasets").get_to(c.duplicateDatasets);
+	j.at("duplicationFactor").get_to(c.duplicationFactor);
 	j.at("repeat").get_to(c.repeat);
 }
 #endif

@@ -39,7 +39,7 @@ NUM_THREADS=`nproc`
 # DNA experiments
 fillAlgo=roundrobin
 BUFSIZE=34000
-MAX_BATCHES=130
+MAX_BATCHES=150
 config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
 	INPUT1=/global/D1/projects/ipumer/datasets/compare/base/DNA-big-As.txt
 	INPUT2=/global/D1/projects/ipumer/datasets/compare/base/DNA-big-Bs.txt

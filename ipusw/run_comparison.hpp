@@ -66,6 +66,9 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
   swatlib::TickTock outer;
 
   int duplicationFactor = config.duplicateDatasets ? std::max(config.numDevices, 1) : 1;
+  if (config.duplicationFactor > 0) {
+    duplicationFactor = config.duplicationFactor;
+  }
 
   json configLog = {
       {"tag", "run_comparison_setup"},
@@ -79,9 +82,6 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
   std::thread refLoader(load_data, std::cref(referencePath), std::ref(references), 0);
   std::thread queryLoader(load_data, std::cref(queryPath), std::ref(queries), 0);
   std::thread driverInit(init_driver, std::ref(driver));
-  // load_data(referencePath, references);
-  // load_data(queryPath, queries);
-  // driver.init();
 
   refLoader.join();
   queryLoader.join();
@@ -93,11 +93,6 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
   if (config.duplicateDatasets) {
     int originalSize = batches.size();
     int duplicatedSize = duplicationFactor * originalSize;
-    batches.resize(duplicatedSize);
-    for (int i = originalSize; i < duplicatedSize; ++i) {
-      // copy older batch data into new data
-      batches[i] = batches[i % originalSize];
-    }
     PLOGW.printf("Duplicating dataset %dx from %d to %d", duplicationFactor, originalSize, duplicatedSize);
   }
   if (batches.size() > WORK_QUEUE_SIZE) {
@@ -112,27 +107,37 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
     workerThreads[n].join();
   }
 
+  std::vector<BatchResult> results(batches.size() * duplicationFactor);
+	const auto resultBufferSize = driver.config.ipuconfig.getTotalNumberOfComparisons() * 3;
+  for (auto& r : results) {
+    r.resultBuffer.resize(resultBufferSize);
+  }
+
   driverInit.join();
   driver.run();
 
   PLOGI << "Starting comparisons";
   std::vector<std::thread> receiverThreads;
   const int receiverThreadNum = 24;
+  // std::vector<ipu::batchaffine::Job*> jobs(batches.size() * duplicationFactor, nullptr);
   for (int i = 0; i < receiverThreadNum; ++i) {
-    receiverThreads.push_back(std::thread(workerResult, i, receiverThreadNum, std::ref(driver), std::ref(batches)));
+    receiverThreads.push_back(std::thread(workerResult, i, receiverThreadNum, std::ref(driver), std::ref(batches), std::ref(results)));
   }
   outer.tick();
-  for (int i = 0; i < batches.size(); ++i) {
-    auto& batch = batches[i];
-    batch.job = driver.submit(batch.inputBuffer, batch.resultBuffer);
+  for (int i = 0; i < batches.size() * duplicationFactor; ++i) {
+    auto& batch = batches[i % batches.size()];
+    auto& result = results[i];
+    // batch.job = driver.submit(batch.inputBuffer, batch.resultBuffer);
+    auto* job = driver.submit(batch.inputBuffer, result.resultBuffer);
+    results[i].job = job;
+    // jobs[i] = job;
+    driver.totalCmpsSubmitted += batch.numCmps;
+    driver.totalBatchesSubmitted += 1;
   }
   for (int i = 0; i < receiverThreadNum; ++i) {
     receiverThreads[i].join();
   }
   outer.tock();
-
-  PLOGW << "Total cmps processed/submitted " << driver.totalCmpsProcessed << "/" << references.size();
-  PLOGW << "Total Batches Processed " << driver.totalBatchesProcessed;
 
   uint64_t cellCount = 0;
   for (int i = 0; i < references.size(); ++i) {
@@ -151,6 +156,12 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
       {"cells", cellCount},
       {"outer_time_s", outerTime},
       {"outer_gcups", gcupsOuter},
+      {"cmps_processed", driver.totalCmpsProcessed.load()},
+      {"cmps_submitted", driver.totalCmpsSubmitted.load()},
+      {"cmps_orig", references.size()},
+      {"batches_processed", driver.totalBatchesProcessed.load()},
+      {"batches_submitted", driver.totalBatchesSubmitted.load()},
+      {"batches_orig", batches.size()},
   };
   PLOGW << IPU_JSON_LOG_TAG << logdata.dump();
 }
