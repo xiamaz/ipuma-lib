@@ -19,7 +19,9 @@ void workerResult(const int workerId, const int numWorkers, IPUMultiDriver& driv
 			if (result.received) continue;
 			// if (batch.job != nullptr) {
 			if (job != nullptr) {
+				PLOGD << "Waiting for " << job->sb.slot;
 				driver.wait(job);
+				PLOGD << "Got" << job->sb.slot;
 				// driver.wait(batch.job);
 				ipu::batchaffine::BlockAlignmentResults results;
 				driver.fillResults(result.resultBuffer, batch.mappingBuffer, results, batch.numCmps);
