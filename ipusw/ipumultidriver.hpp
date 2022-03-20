@@ -14,10 +14,10 @@ class IPUMultiDriver {
 
  public:
   IpuSwConfig config;
-  std::atomic<int> totalCmpsProcessed = 0;
-  std::atomic<int> totalCmpsSubmitted = 0;
-  std::atomic<int> totalBatchesProcessed = 0;
-  std::atomic<int> totalBatchesSubmitted = 0;
+  std::atomic<int64_t> totalCmpsProcessed = 0;
+  std::atomic<int64_t> totalCmpsSubmitted = 0;
+  std::atomic<int64_t> totalBatchesProcessed = 0;
+  std::atomic<int64_t> totalBatchesSubmitted = 0;
 
   IPUMultiDriver(IpuSwConfig config) : config(config) {
   }
