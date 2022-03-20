@@ -21,6 +21,10 @@ using Fastas = std::vector<swatlib::Fasta>;
 
 void loadSequences(const std::string &path, std::vector<std::string> &sequences) {
   std::ifstream seqFile(path);
+  if (!seqFile.good()) {
+    PLOGF << "File not found: " << path;
+    exit(1);
+  }
   std::string line;
   while (std::getline(seqFile, line)) {
     sequences.push_back(line);
@@ -88,6 +92,7 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
 
   const int batchCmpLimit = config.ipuconfig.getTotalNumberOfComparisons() - config.ipuconfig.maxBatches;
   const int batchDataLimit = config.ipuconfig.getTotalBufsize32b() * 4 - config.ipuconfig.bufsize * 100;
+  PLOGF << references.size();
   auto batches = createBatches(references, queries, batchCmpLimit, batchDataLimit);
 
   if (config.duplicateDatasets) {
