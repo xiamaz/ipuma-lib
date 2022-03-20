@@ -92,3 +92,20 @@ for NUM_THREADS in ${THREADS[@]}; do
 	run
 done
 done
+
+# export the generated data
+logfiles=( $OUTPUT_PATH/*.log )
+sed -n 's/Policy/numa,dataset,&/p' ${logfiles[1]}
+for logfile in $OUTPUT_PATH/*.log; do
+	logname=`basename $logfile`
+	logstem="${logname%.*}"
+	numa=${logstem##*_}
+	dataset=${logstem#*_}
+	dataset=${dataset%_*}
+	if [ $numa = "numa0" ]; then
+		numa=1
+	elif [ $numa = "numa0-1" ]; then
+		numa=2
+	fi
+	sed -n "s/parallel/$numa,$dataset,&/p" $logfile
+done
