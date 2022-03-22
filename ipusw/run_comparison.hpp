@@ -123,7 +123,7 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
 
   PLOGI << "Starting comparisons";
   std::vector<std::thread> receiverThreads;
-  const int receiverThreadNum = 1;
+  const int receiverThreadNum = config.numThreads / 2;
   // std::vector<ipu::batchaffine::Job*> jobs(batches.size() * duplicationFactor, nullptr);
   for (int i = 0; i < receiverThreadNum; ++i) {
     receiverThreads.push_back(std::thread(workerResult, i, receiverThreadNum, std::ref(driver), std::ref(batches), std::ref(results)));
