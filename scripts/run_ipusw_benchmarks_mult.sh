@@ -1,23 +1,24 @@
 #!/bin/bash
 BIN=./build/bin/ipusw
-OUTPUT_STEM=/global/D1/projects/ipumer/datasets/results/ipu_synthetic_benchmarks_prepare_batch
+OUTPUT_STEM=/global/D1/projects/ipumer/datasets/results/ipu_synthetic_benchmarks_paper_final
 OVERWRITE=
 PRINTOUT=
 
+# DEVNUM=(1 2 4 8 16 32 64)
 DEVNUM=(1 2 4 8 16 32 64)
 REPMAX=5
 
 run() {
-name=ipu${NUM_IPU}_th${NUM_THREADS}_${dsname}_${fillAlgo}_${DDUP}
-output_log=${OUTPUT}/${name}.log
-if [ ${PRINTOUT} ]; then
-	echo "Print run command for ${name}: ${BIN} ${config} -- ${INPUT1} ${INPUT2}"
-else if [ $OVERWRITE ] || [ ! -f ${output_log} ]; then
-	echo "Running ${name}"
-	echo "CMD: ${BIN} ${config} -- ${INPUT1} ${INPUT2} 2>&1 | tee ${output_log}"
-	${BIN} ${config} -- ${INPUT1} ${INPUT2} 2>&1 | tee ${output_log}
-fi
-fi
+	name=ipu${NUM_IPU}_th${NUM_THREADS}_${dsname}_${fillAlgo}_${DDUP}
+	output_log=${OUTPUT}/${name}.log
+	if [ ${PRINTOUT} ]; then
+		echo "Print run command for ${name}: ${BIN} ${config} -- ${INPUT1} ${INPUT2}"
+	else if [ $OVERWRITE ] || [ ! -f ${output_log} ]; then
+		echo "Running ${name}"
+		echo "CMD: ${BIN} ${config} -- ${INPUT1} ${INPUT2} 2>&1 | tee ${output_log}"
+		${BIN} ${config} -- ${INPUT1} ${INPUT2} 2>&1 | tee ${output_log}
+	fi
+	fi
 }
 
 for REPNUM in `seq $REPMAX`; do
@@ -46,25 +47,39 @@ config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --v
 	dsname=dna_large
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/DNA_1_200_ref.fasta
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/DNA_1_200_qer.fasta
-	dsname=dna_1_200
+	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/8x/DNA_2_150_ref.fasta.2x.4x.8x.txt
+	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/8x/DNA_2_150_qer.fasta.2x.4x.8x.txt
+	dsname=dna_2_150_8x
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/DNA_2_150_ref.fasta
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/DNA_2_150_qer.fasta
-	dsname=dna_2_150
+	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/128x/DNA_2_200_ref.fasta.2x.4x.8x.16x.32x.64x.128x.txt
+	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/128x/DNA_2_200_qer.fasta.2x.4x.8x.16x.32x.64x.128x.txt
+	dsname=dna_2_200_128x
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/DNA_2_200_ref.fasta
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/DNA_2_200_qer.fasta
-	dsname=dna_2_200
+	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/32x/DNA_2_250_ref.fasta.2x.4x.8x.16x.32x.txt
+	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/32x/DNA_2_250_qer.fasta.2x.4x.8x.16x.32x.txt
+	dsname=dna_2_250_32x
 	run
+	# INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/DNA_1_200_ref.fasta
+	# INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/DNA_1_200_qer.fasta
+	# dsname=dna_1_200
+	# run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/DNA_2_250_ref.fasta
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/DNA_2_250_qer.fasta
-	dsname=dna_2_250
-	run
+	# INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/DNA_2_150_ref.fasta
+	# INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/DNA_2_150_qer.fasta
+	# dsname=dna_2_150
+	# run
+
+	# INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/DNA_2_200_ref.fasta
+	# INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/DNA_2_200_qer.fasta
+	# dsname=dna_2_200
+	# run
+
+	# INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/DNA_2_250_ref.fasta
+	# INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/DNA_2_250_qer.fasta
+	# dsname=dna_2_250
+	# run
 
 # Protein experiments
 fillAlgo=greedy
