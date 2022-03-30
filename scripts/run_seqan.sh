@@ -9,7 +9,7 @@ OUTPUT_PATH="${RUNDIR}/results"
 mkdir -p $OUTPUT_PATH
 
 # THREADS=(1 2 4 8 16 32 64 128)
-THREADS=(24 48 96 128)
+THREADS=(48 96)
 NUMACTL=(0 0-1)
 
 if [ ! -f $BIN ]; then
@@ -54,17 +54,17 @@ for NUMA in ${NUMACTL[@]}; do
 
 	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/8x/DNA_2_150_ref.fasta.2x.4x.8x.txt
 	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/8x/DNA_2_150_qer.fasta.2x.4x.8x.txt
-	dsname=dna_2_150_8x
+	dsname=dna_2_150
 	run
 
 	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/128x/DNA_2_200_ref.fasta.2x.4x.8x.16x.32x.64x.128x.txt
 	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/128x/DNA_2_200_qer.fasta.2x.4x.8x.16x.32x.64x.128x.txt
-	dsname=dna_2_200_128x
+	dsname=dna_2_200
 	run
 
 	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/32x/DNA_2_250_ref.fasta.2x.4x.8x.16x.32x.txt
 	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/32x/DNA_2_250_qer.fasta.2x.4x.8x.16x.32x.txt
-	dsname=dna_2_250_32x
+	dsname=dna_2_250
 	run
 
 # Protein experiments
@@ -85,10 +85,15 @@ for NUMA in ${NUMACTL[@]}; do
 	dsname=protein_600
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/protein/As.fasta
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/protein/Bs.fasta
-	dsname=protein_unfiltered
-	run
+ 	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_que.txt
+ 	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_ref.txt
+ 	dsname=protein_unfiltered
+ 	run
+
+ 	INPUT1=/global/D1/projects/ipumer/As.txt
+ 	INPUT2=/global/D1/projects/ipumer/Bs.txt
+ 	dsname=protein_full
+ 	run
 done
 
 # export the generated data

@@ -40,7 +40,7 @@ NUM_THREADS=`nproc`
 # DNA experiments
 fillAlgo=roundrobin
 BUFSIZE=34000
-MAX_BATCHES=150
+MAX_BATCHES=180
 config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
 	INPUT1=/global/D1/projects/ipumer/datasets/compare/base/DNA-big-As.txt
 	INPUT2=/global/D1/projects/ipumer/datasets/compare/base/DNA-big-Bs.txt
@@ -49,18 +49,19 @@ config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --v
 
 	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/8x/DNA_2_150_ref.fasta.2x.4x.8x.txt
 	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/8x/DNA_2_150_qer.fasta.2x.4x.8x.txt
-	dsname=dna_2_150_8x
+	dsname=dna_2_150
 	run
 
 	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/128x/DNA_2_200_ref.fasta.2x.4x.8x.16x.32x.64x.128x.txt
 	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/128x/DNA_2_200_qer.fasta.2x.4x.8x.16x.32x.64x.128x.txt
-	dsname=dna_2_200_128x
+	dsname=dna_2_200
 	run
 
 	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/32x/DNA_2_250_ref.fasta.2x.4x.8x.16x.32x.txt
 	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/32x/DNA_2_250_qer.fasta.2x.4x.8x.16x.32x.txt
-	dsname=dna_2_250_32x
+	dsname=dna_2_250
 	run
+
 	# INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/DNA_1_200_ref.fasta
 	# INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/DNA_1_200_qer.fasta
 	# dsname=dna_1_200
@@ -81,36 +82,37 @@ config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --v
 	# dsname=dna_2_250
 	# run
 
+
 # Protein experiments
 fillAlgo=greedy
 BUFSIZE=170000
 MAX_BATCHES=300
 config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxAB 1500 --datatype aa --similarity blosum50 --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
 
- 	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_200_ref.txt
- 	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_200_que.txt
+	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_200_ref.txt
+	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_200_que.txt
 	dsname=protein_200
 	run
 
- 	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_400_ref.txt
- 	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_400_que.txt
+	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_400_ref.txt
+	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_400_que.txt
 	dsname=protein_400
 	run
 
- 	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_600_ref.txt
- 	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_600_que.txt
+	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_600_ref.txt
+	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_600_que.txt
 	dsname=protein_600
 	run
 
- 	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_que.txt
- 	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_ref.txt
+	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_que.txt
+	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_ref.txt
 	dsname=protein_unfiltered
 	run
 
- 	INPUT1=/global/D1/projects/ipumer/As.txt
- 	INPUT2=/global/D1/projects/ipumer/Bs.txt
- 	dsname=protein_full
- 	run
+	INPUT1=/global/D1/projects/ipumer/As.txt
+	INPUT2=/global/D1/projects/ipumer/Bs.txt
+	dsname=protein_full
+	run
 done
 done
 done

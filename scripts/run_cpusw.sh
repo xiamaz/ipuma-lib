@@ -7,7 +7,7 @@ PRINTOUT=
 mkdir -p ${OUTPUT}
 
 # THREADS=(1 2 4 8 16 32 64 128)
-THREADS=(24 48 96 128)
+THREADS=(48 96)
 NUMACTL=(0 0-1)
 
 run() {
@@ -73,4 +73,14 @@ for NUMA in ${NUMACTL[@]}; do
 	INPUT2=/global/D1/projects/ipumer/datasets/compare/base/PROTEIN-Bs.txt
 	dsname=protein_unfiltered
 	run
+
+ 	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_que.txt
+ 	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_ref.txt
+ 	dsname=protein_unfiltered
+ 	run
+
+ 	INPUT1=/global/D1/projects/ipumer/As.txt
+ 	INPUT2=/global/D1/projects/ipumer/Bs.txt
+ 	dsname=protein_full
+ 	run
 done
