@@ -83,29 +83,34 @@ config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --v
 
 # Protein experiments
 fillAlgo=greedy
-BUFSIZE=140000
-MAX_BATCHES=220
-config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxAB 2000 --datatype aa --similarity blosum50 --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
+BUFSIZE=170000
+MAX_BATCHES=300
+config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxAB 1500 --datatype aa --similarity blosum50 --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
 
-	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_200_ref.txt
-	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_200_que.txt
+ 	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_200_ref.txt
+ 	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_200_que.txt
 	dsname=protein_200
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_400_ref.txt
-	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_400_que.txt
+ 	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_400_ref.txt
+ 	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_400_que.txt
 	dsname=protein_400
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_600_ref.txt
-	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_600_que.txt
+ 	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_600_ref.txt
+ 	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_600_que.txt
 	dsname=protein_600
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/base/PROTEIN-As.txt
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/base/PROTEIN-Bs.txt
+ 	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_que.txt
+ 	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_ref.txt
 	dsname=protein_unfiltered
 	run
+
+ 	INPUT1=/global/D1/projects/ipumer/As.txt
+ 	INPUT2=/global/D1/projects/ipumer/Bs.txt
+ 	dsname=protein_full
+ 	run
 done
 done
 done
