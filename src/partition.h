@@ -31,7 +31,7 @@ namespace ipu { namespace partition {
     int bucketIndex;
     int maxLen; // length of longest sequence
     int seqSize; // length of current sequences
-    int weight; // custom weight (currently only used in round robin)
+    int weight[6] = {}; // custom weight (currently only used in round robin)
     std::vector<SequenceMapping> seqs;
     std::vector<ComparisonMapping> cmps;
 

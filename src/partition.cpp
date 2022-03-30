@@ -8,11 +8,16 @@
 #include <array>
 #include <iostream>
 #include <math.h>
+#include <limits.h>
 
 #include <plog/Log.h>
 
 
 #include <iostream>
+#include <omp.h>
+
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
 
 namespace ipu {
 namespace partition {
@@ -61,12 +66,31 @@ namespace partition {
     }
   }
 
+  inline int minW(const int z[6]) {
+      return std::min(std::min(z[0], z[1]), std::min(std::min(z[2], z[3]), std::min(z[4], z[5])));
+  } 
+
+  inline int maxW(const int z[6]) {
+      return std::max(std::max(z[0], z[1]), std::max(std::max(z[2], z[3]), std::max(z[4], z[5])));
+  } 
+
+  inline int minI(const int z[6]) {
+    int w = INT_MAX; 
+    int wi = 0; 
+    #pragma omp simd
+    for (size_t i = 0; i < 6; i++) {
+      if (z[i] < w) {
+        wi = i;
+      }
+    }
+  } 
+
   bool operator>(const ipu::partition::BucketMapping& b1, const ipu::partition::BucketMapping& b2) {
-    return b1.weight > b2.weight;
+    return minW(b1.weight) > minW(b2.weight);
   }
 
   bool operator<(const ipu::partition::BucketMapping& b1, const ipu::partition::BucketMapping& b2) {
-    return b1.weight < b2.weight;
+    return minW(b1.weight) < minW(b2.weight);
   }
 
   struct SequenceInfo {
@@ -215,6 +239,7 @@ namespace partition {
   }
 
   bool roundRobin(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, int& curBucket) {
+    int top = 0;
     for (int i = 0; i < A.size(); ++i) {
       const auto& aLen = A[i].size();
       const auto& bLen = B[i].size();
@@ -238,9 +263,28 @@ namespace partition {
       bucket.seqs.push_back({.index=ci, .offset=offsetB, .origin = SequenceOrigin::B});
       bucket.cmps.push_back({.comparisonIndex = ci, .sizeA = static_cast<int>(aLen), .offsetA = offsetA, .sizeB = static_cast<int>(bLen), .offsetB = offsetB});
       bucket.seqSize += aLen + bLen;
-
+      bucket.weight[(bucket.cmps.size() - 1)%6] += aLen * bLen;
+      top = std::max((int) top, (int) (aLen * bLen));
       curBucket++; // increment current bucket for round robin
     }
+
+    std::vector<int> sumB(1472, 0);
+    std::vector<int> minB(1472, 0);
+    std::vector<int> maxB(1472, 0);
+    for (int i = 0; i < map.buckets.size(); i++) {
+      auto& b = map.buckets[i];
+      sumB[i] = b.weight[0] + b.weight[1] + b.weight[2] + b.weight[3] + b.weight[4] + b.weight[5];
+      maxB[i] = maxW(b.weight);
+      minB[i] = minW(b.weight);
+    }
+    json js;
+    js["top"] = top;
+    js["sum_buckets"] = sumB;
+    js["max_buckets"] = maxB;
+    js["min_buckets"] = minB;
+    js["tag"] = "buckets";
+
+    PLOGF << "IPUSWLOG" << js.dump();
     return true;
   }
 
@@ -326,7 +370,7 @@ namespace partition {
 
       bucket.maxLen = std::max(bucket.maxLen, static_cast<int>(aLen > bLen ? aLen : bLen));
       bucket.seqSize += effALen + effBLen;
-      bucket.weight += aLen * bLen;
+      bucket.weight[(bucket.cmps.size() - 1)%6] += aLen * bLen;
       q.push(std::ref(bucket));
     }
   }
@@ -341,6 +385,9 @@ namespace partition {
     std::sort(srts.begin(), srts.end(), [](std::pair<int, int> &a, std::pair<int, int> &b) { 
       return std::get<0>(a) > std::get<0>(b);
     });
+
+    json js;
+    js["top"] = std::get<0>(srts[0]);
 
     for (int i = 0; i < A.size(); ++i) {
       const auto seqIndex = std::get<1>(srts[i]);
@@ -389,10 +436,28 @@ namespace partition {
 
       bucket.maxLen = std::max(bucket.maxLen, static_cast<int>(aLen > bLen ? aLen : bLen));
       bucket.seqSize += aLen + bLen;
-      bucket.weight += aLen * bLen;
+      bucket.weight[(bucket.cmps.size() - 1)%6] += aLen * bLen;
       q.push(std::ref(bucket));
-
     }
+
+    // std::stringstream ss;
+
+    std::vector<int> sumB(1472, 0);
+    std::vector<int> minB(1472, 0);
+    std::vector<int> maxB(1472, 0);
+    for (int i = 0; i < map.buckets.size(); i++) {
+      auto& b = map.buckets[i];
+      sumB[i] = b.weight[0] + b.weight[1] + b.weight[2] + b.weight[3] + b.weight[4] + b.weight[5];
+      maxB[i] = maxW(b.weight);
+      minB[i] = minW(b.weight);
+    }
+    js["sum_buckets"] = sumB;
+    js["max_buckets"] = maxB;
+    js["min_buckets"] = minB;
+    js["tag"] = "buckets";
+
+    PLOGF << "IPUSWLOG" << js.dump();
+
     return true;
   }
 

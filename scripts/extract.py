@@ -40,6 +40,23 @@ def extract_ipu_lines(logdata):
                 new_path = path.parent / f"{path.name}.old"
                 path.rename(new_path)
             continue
+        
+
+        total_work_sums_l = np.int64([np.sum(b["sum_buckets"]) for b in json_logs_by_type.get("buckets", [])])
+        total_work_tops_l = np.int64([b["top"] for b in json_logs_by_type.get("buckets", [])])
+        total_work_maxs_l = np.int64([np.max(b["max_buckets"]) for b in json_logs_by_type.get("buckets", [])])
+        intra_tile_imbalance_l = np.float32([np.average(x) for x in [np.int64(b["min_buckets"])/np.int64(b["max_buckets"]) for b in json_logs_by_type.get("buckets", [])]])
+        buckets_data = {
+           "bucket_global_imbalances": total_work_maxs_l / (total_work_sums_l/1472/6),
+           "bucket_local_imbalances": intra_tile_imbalance_l,
+        }
+
+        # for i in range(len(total_work_sums_l)):
+        #     print(f"gloabl imbalance theory: {total_work_tops_l[i] / (total_work_sums_l[i]/1472/6)}")
+        #     print(f"gloabl imbalance actual: {total_work_maxs_l[i] / (total_work_sums_l[i]/1472/6)}")
+        #     print(f"local imbalance: {intra_tile_imbalance_l[i]}")
+        #     print("======")
+
         batch_perf_logs = json_logs_by_type["batch_perf"]
         setup_log, = json_logs_by_type["run_comparison_setup"]
         final_log, = json_logs_by_type["final_log"]
@@ -56,6 +73,11 @@ def extract_ipu_lines(logdata):
             for k in batch_keys if k not in ["tag"]
             for func in funcs
         }
+        buckets_data_stat_info = {
+            f"{k}_{func}": funcs[func](buckets_data[k])
+            for k in buckets_data.keys()
+            for func in funcs
+        }
         name_parts = list(logname.split("_"))
         dataset_info = {
             **{
@@ -66,6 +88,7 @@ def extract_ipu_lines(logdata):
                 "remote": "remote" if setup_log["config"]["ipu"]["useRemoteBuffer"] else "stream",
                 "fillAlgo": setup_log["config"]["ipu"]["fillAlgo"],
             },
+            **buckets_data_stat_info,
             **batch_stat_info,
             **{f"final_{k}": v for k, v in final_log.items()}
         }
