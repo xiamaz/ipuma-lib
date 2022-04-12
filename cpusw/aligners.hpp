@@ -68,6 +68,20 @@ struct AlignmentResults {
 	}
 };
 
+struct PreprocessedInput {
+	int8_t* translated_query;
+	int8_t* translated_ref;
+	int asize;
+	int bsize;
+	// s_profile* query_profile;
+
+	~PreprocessedInput() {
+		delete[] translated_query;
+		delete[] translated_ref;
+		// init_destroy(query_profile);
+	}
+};
+
 class CPUAligner {
 protected:
 	CpuSwConfig config;
@@ -91,6 +105,52 @@ class SSWAligner : public CPUAligner {
 public:
 	SSWAligner(CpuSwConfig c) : CPUAligner(c) {}
 
+	void ssw_aligner_preprocess(const StripedSmithWaterman::Aligner& ssw_aligner, const char* query, const int query_len, const char* ref, const int ref_len, PreprocessedInput& input) {
+    int8_t* translated_query = new int8_t[query_len];
+    ssw_aligner.TranslateBase(query, query_len, translated_query);
+
+    // calculate the valid length
+    int valid_ref_len = ref_len;
+    int8_t* translated_ref = new int8_t[valid_ref_len];
+    ssw_aligner.TranslateBase(ref, valid_ref_len, translated_ref);
+
+    // const int8_t score_size = 2;
+    // s_profile* profile = ssw_init(translated_query, query_len, ssw_aligner.score_matrix_,
+    //                               ssw_aligner.score_matrix_size_, score_size);
+
+		input.translated_query = translated_query;
+		input.translated_ref = translated_ref;
+		// input.query_profile = profile;
+		input.asize = query_len;
+		input.bsize = ref_len;
+	}
+
+	void ssw_aligner_align(const StripedSmithWaterman::Aligner& ssw_aligner, const PreprocessedInput& input, const StripedSmithWaterman::Filter& filter, StripedSmithWaterman::Alignment& alignment, const int32_t maskLen, swatlib::TickTock& t) {
+    uint8_t flag = 0;
+    if (filter.report_begin_position) flag |= 0x08;
+    if (filter.report_cigar) flag |= 0x0f;
+
+		t.tick();
+    const int8_t score_size = 2;
+    s_profile* profile = ssw_init(input.translated_query, input.asize, ssw_aligner.score_matrix_,
+                                  ssw_aligner.score_matrix_size_, score_size);
+
+    s_align* s_al = ssw_align(profile, input.translated_ref, input.bsize,
+                              static_cast<int>(ssw_aligner.gap_opening_penalty_),
+                              static_cast<int>(ssw_aligner.gap_extending_penalty_),
+                              flag, filter.score_filter, filter.distance_filter, maskLen);
+		t.tock();
+
+    alignment.Clear();
+    alignment.sw_score           = s_al->score1;
+    alignment.ref_begin          = s_al->ref_begin1;
+    alignment.ref_end            = s_al->ref_end1;
+    alignment.query_begin        = s_al->read_begin1;
+    alignment.query_end          = s_al->read_end1;
+
+    init_destroy(profile);
+	}
+
 	void ssw_aligner_align(const StripedSmithWaterman::Aligner& ssw_aligner, const char* query, const int query_len, const char* ref, const int ref_len, const StripedSmithWaterman::Filter& filter, StripedSmithWaterman::Alignment& alignment, const int32_t maskLen, swatlib::TickTock& t) {
     int8_t* translated_query = new int8_t[query_len];
     ssw_aligner.TranslateBase(query, query_len, translated_query);
@@ -101,6 +161,7 @@ public:
     ssw_aligner.TranslateBase(ref, valid_ref_len, translated_ref);
 
 
+		t.tick();
     const int8_t score_size = 2;
     s_profile* profile = ssw_init(translated_query, query_len, ssw_aligner.score_matrix_,
                                   ssw_aligner.score_matrix_size_, score_size);
@@ -109,7 +170,6 @@ public:
     if (filter.report_begin_position) flag |= 0x08;
     if (filter.report_cigar) flag |= 0x0f;
 
-		t.tick();
     s_align* s_al = ssw_align(profile, translated_ref, valid_ref_len,
                               static_cast<int>(ssw_aligner.gap_opening_penalty_),
                               static_cast<int>(ssw_aligner.gap_extending_penalty_),
@@ -131,9 +191,7 @@ public:
     init_destroy(profile);
 	}
 
-	void compare_thread(int workerId, const std::vector<std::string>& A, const std::vector<std::string>& B, swatlib::TickTock& t) {
-		// calculate comparison
-    // int matSize = static_cast<int>(std::sqrt(mat50.size()));
+	StripedSmithWaterman::Aligner createAligner() {
 		StripedSmithWaterman::Aligner ssw_aligner; //(mat50.data(), matSize, aa_table.data(), aa_table.size());
 		
 		if (config.swconfig.datatype == swatlib::DataType::aminoAcid) {
@@ -148,12 +206,21 @@ public:
 				-config.swconfig.ambiguityValue
 			);
 		}
+		return ssw_aligner;
+	}
+
+	void compare_thread(int workerId, const StripedSmithWaterman::Aligner& ssw_aligner, const std::vector<PreprocessedInput>& inputs, swatlib::TickTock& t) {
+		// calculate comparison
+    // int matSize = static_cast<int>(std::sqrt(mat50.size()));
+		// StripedSmithWaterman::Aligner ssw_aligner = createAligner();
+		
 		StripedSmithWaterman::Filter ssw_filter(false, false, 0, 32767);
-		for (int c = workerId; c < A.size(); c += config.algoconfig.threads) {
-			const auto& a = A[c];
-			const auto& b = B[c];
+		for (int c = workerId; c < inputs.size(); c += config.algoconfig.threads) {
+			// const auto& a = A[c];
+			// const auto& b = B[c];
+			const auto& i = inputs[c];
 			// t.tick();
-			ssw_aligner_align(ssw_aligner, a.data(), a.size(), b.data(), b.size(), ssw_filter, alns[c], std::max((int)(b.size() / 2), 15), t);
+			ssw_aligner_align(ssw_aligner, i, ssw_filter, alns[c], std::max((int)(i.bsize / 2), 15), t);
 			// t.tock();
 		}
 	}
@@ -162,10 +229,24 @@ public:
 		swatlib::TickTock outer;
 		std::vector<swatlib::TickTock> innerTimers(config.algoconfig.threads);
 		std::deque<std::thread> threads;
+
 		alns.resize(A.size());
+		std::vector<PreprocessedInput> inputs(A.size());
+
+		// preprocess inputs
+		auto aln = createAligner();
+		#pragma omp parallel for num_threads(96)
+		for (int i = 0; i < A.size(); ++i) {
+			const auto& a = A[i];
+			const auto& b = B[i];
+			ssw_aligner_preprocess(aln, a.data(), a.size(), b.data(), b.size(), inputs[i]);
+		}
+
+		PLOGI << "Finished preprocessing, starting comparisons...";
+
 		outer.tick();
 		for (int n = 0; n < config.algoconfig.threads; ++n) {
-			threads.push_back(std::thread(&SSWAligner::compare_thread, this, n, std::cref(A), std::cref(B), std::ref(innerTimers[n])));
+			threads.push_back(std::thread(&SSWAligner::compare_thread, this, n, std::cref(aln), std::cref(inputs), std::ref(innerTimers[n])));
 		}
 
 		for (int n = 0; n < config.algoconfig.threads; ++n) {

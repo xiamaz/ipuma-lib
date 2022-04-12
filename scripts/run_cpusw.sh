@@ -1,6 +1,6 @@
 #!/bin/bash
 BIN=./build/bin/cpusw
-OUTPUT=/global/D1/projects/ipumer/datasets/results/cpu_synthetic_benchmarks_paper_final
+OUTPUT=/global/D1/projects/ipumer/datasets/results/cpu_synthetic_benchmarks_paper_final_withoutpreprocess_outer_includeprofile
 OVERWRITE=
 PRINTOUT=
 
@@ -69,10 +69,10 @@ for NUMA in ${NUMACTL[@]}; do
 	dsname=protein_600
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/base/PROTEIN-As.txt
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/base/PROTEIN-Bs.txt
-	dsname=protein_unfiltered
-	run
+	# INPUT1=/global/D1/projects/ipumer/datasets/compare/base/PROTEIN-As.txt
+	# INPUT2=/global/D1/projects/ipumer/datasets/compare/base/PROTEIN-Bs.txt
+	# dsname=protein_unfiltered
+	# run
 
  	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_que.txt
  	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_ref.txt

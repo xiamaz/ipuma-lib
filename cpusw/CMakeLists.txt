@@ -4,6 +4,11 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 target_link_libraries(cpusw PRIVATE Threads::Threads)
 
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(cpusw PUBLIC OpenMP::OpenMP_CXX)
+endif()
+
 target_compile_features(cpusw PRIVATE cxx_std_17)
 target_include_directories(cpusw PRIVATE ${IPUMA_BIN_INCLUDES} ${SEQAN3_INCLUDE_DIRS})
 target_link_libraries (cpusw PRIVATE SSW_LIBRARY IPUMA_LIBRARY)
