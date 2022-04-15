@@ -1,6 +1,6 @@
 #!/bin/bash
 BIN=./build/bin/ipusw
-OUTPUT_STEM=/global/D1/projects/ipumer/datasets/results/ipu_synthetic_benchmarks_paper_final
+OUTPUT_STEM=/global/D1/projects/ipumer/datasets/results/ipu_synthetic_benchmarks_paper_final_rebalance
 OVERWRITE=
 PRINTOUT=
 
@@ -42,6 +42,7 @@ fillAlgo=roundrobin
 BUFSIZE=34000
 MAX_BATCHES=180
 config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
+# config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
 	INPUT1=/global/D1/projects/ipumer/datasets/compare/base/DNA-big-As.txt
 	INPUT2=/global/D1/projects/ipumer/datasets/compare/base/DNA-big-Bs.txt
 	dsname=dna_large

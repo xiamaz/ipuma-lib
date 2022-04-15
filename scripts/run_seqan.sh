@@ -85,13 +85,13 @@ for NUMA in ${NUMACTL[@]}; do
 	dsname=protein_600
 	run
 
- 	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_que.txt
- 	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_ref.txt
+ 	INPUT1=/global/D1/projects/ipumer/datasets/compare/protein/PROTEIN-longer_que.fasta
+ 	INPUT2=/global/D1/projects/ipumer/datasets/compare/protein/PROTEIN-longer_ref.fasta
  	dsname=protein_unfiltered
  	run
 
- 	INPUT1=/global/D1/projects/ipumer/As.txt
- 	INPUT2=/global/D1/projects/ipumer/Bs.txt
+ 	INPUT1=/global/D1/projects/ipumer/datasets/compare/protein/As_new.fasta
+ 	INPUT2=/global/D1/projects/ipumer/datasets/compare/protein/Bs_new.fasta
  	dsname=protein_full
  	run
 done
