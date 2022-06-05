@@ -8,7 +8,25 @@ This project contains the `ipuma-library` which implements implementations of th
 
 ### Requirements
 
-poplar-sdk, cmake, gcc
+The following software are required for building and running the alignment
+libraries:
+
+```
+poplar-sdk >=2.3.0
+cmake >= 3.18.4
+gcc >= 7.5.0
+```
+
+#### Python script dependencies
+
+For some python scripts used in extracting log files numpy and pandas are
+required. These are not required for running the alignment binaries themselves!
+
+Preferably execute the following commands in a venv or a conda environment:
+
+```
+$ pip install numpy==1.22.2 pandas==1.4.1
+```
 
 ### Building
 
