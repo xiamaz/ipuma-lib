@@ -4,12 +4,12 @@ set -x
 set -euo pipefail
 
 # Benchmark
-wget https://dataverse.harvard.edu/api/access/datafile/6176325 -O DNA_2_150_qer_8x.fasta.gz
-wget https://dataverse.harvard.edu/api/access/datafile/6176326 -O DNA_2_150_ref_8x.fasta.gz
-wget https://dataverse.harvard.edu/api/access/datafile/6176327 -O DNA_2_200_qer_128x.fasta.gz
-wget https://dataverse.harvard.edu/api/access/datafile/6176328 -O DNA_2_200_ref_128x.fasta.gz
-wget https://dataverse.harvard.edu/api/access/datafile/6176329 -O DNA_2_250_qer_32x.fasta.gz
-wget https://dataverse.harvard.edu/api/access/datafile/6176330 -O DNA_2_250_ref_32x.fasta.gz
+wget https://dataverse.harvard.edu/api/access/datafile/6176325 -O DNA_2_150_qer.fasta.gz
+wget https://dataverse.harvard.edu/api/access/datafile/6176326 -O DNA_2_150_ref.fasta.gz
+wget https://dataverse.harvard.edu/api/access/datafile/6176327 -O DNA_2_200_qer.fasta.gz
+wget https://dataverse.harvard.edu/api/access/datafile/6176328 -O DNA_2_200_ref.fasta.gz
+wget https://dataverse.harvard.edu/api/access/datafile/6176329 -O DNA_2_250_qer.fasta.gz
+wget https://dataverse.harvard.edu/api/access/datafile/6176330 -O DNA_2_250_ref.fasta.gz
 
 wget https://dataverse.harvard.edu/api/access/datafile/6176307 -O DNA-big-As.fasta.gz.part-aa
 wget https://dataverse.harvard.edu/api/access/datafile/6176308 -O DNA-big-As.fasta.gz.part-ab
