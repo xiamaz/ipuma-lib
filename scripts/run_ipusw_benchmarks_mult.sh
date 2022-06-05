@@ -1,31 +1,43 @@
 #!/bin/bash
 BIN=./build/bin/ipusw
-OUTPUT_STEM=/global/D1/projects/ipumer/datasets/results/ipu_synthetic_benchmarks_paper_final_rebalance
+OUTPUT_STEM=/global/D1/projects/ipumer/datasets/results/ipu_synthetic_benchmarks_paper_final_rebalance_container
 OVERWRITE=
 PRINTOUT=
+CONTAINER=y
 
 # DEVNUM=(1 2 4 8 16 32 64)
 DEVNUM=(1 2 4 8 16 32 64)
 REPMAX=5
 
+
+gen_bin() {
+	if [ ! ${CONTAINER} ]; then
+		echo "${BIN}"
+		return
+	fi
+	in1=$(realpath ${INPUT1})
+	in2=$(realpath ${INPUT2})
+	echo "gc-docker -- -e IPUOF_CONFIG_PATH=${IPUOF_CONFIG_PATH} --rm -it -v ${IPUOF_CONFIG_PATH}:${IPUOF_CONFIG_PATH} -v ${in1}:${in1} -v ${in2}:${in2} lukburchard/ipuma-lib:latest  /build/bin/ipusw"
+}
+
 run() {
+	in1=$(realpath ${INPUT1})
+	in2=$(realpath ${INPUT2})
 	name=ipu${NUM_IPU}_th${NUM_THREADS}_${dsname}_${fillAlgo}_${DDUP}
 	output_log=${OUTPUT}/${name}.log
 	if [ ${PRINTOUT} ]; then
-		echo "Print run command for ${name}: ${BIN} ${config} -- ${INPUT1} ${INPUT2}"
-	else if [ $OVERWRITE ] || [ ! -f ${output_log} ]; then
+		echo "Print run command for ${name}: ${BIN} ${config} -- ${in1} ${in2}"
+	elif [ $OVERWRITE ] || [ ! -f ${output_log} ]; then
 		echo "Running ${name}"
-		echo "CMD: ${BIN} ${config} -- ${INPUT1} ${INPUT2} 2>&1 | tee ${output_log}"
-		${BIN} ${config} -- ${INPUT1} ${INPUT2} 2>&1 | tee ${output_log}
-	fi
+		echo "CMD: $(gen_bin) ${config} -- ${in1} ${in2} 2>&1 | tee ${output_log}"
+		$(gen_bin) ${config} -- ${in1} ${in2} 2>&1 | tee ${output_log}
 	fi
 }
 
 for REPNUM in `seq $REPMAX`; do
 OUTPUT=${OUTPUT_STEM}_rep${REPNUM}
-remoteMemory=stream
 mkdir -p ${OUTPUT}
-for NUM_IPU in ${DEVNUM[@]}; do
+for NUM_IPU in "${DEVNUM[@]}"; do
 for DDUP in yesdup nodup; do
 if [ $DDUP = "yesdup" ]; then
 	DUPLICATE_DS="--duplicateDatasets"
