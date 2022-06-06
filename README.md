@@ -56,3 +56,18 @@ $ build/test/ipuma-perf
 The `ipusw` binary can be used to perform benchmark measurements on specified datasets on the IPU.
 
 The `cpusw` binary is a wrapper around [StripedSmithWaterman](https://github.com/mengyao/Complete-Striped-Smith-Waterman-Library).
+
+### Running paper benchmarks
+
+The `./scripts/run_ipusw_benchmarks_mult.sh` script will execute IPU-based
+alignment benchmarks.
+
+The script expects alignment benchmark datasets to be located in `./download`
+and will output log files to `./output`.
+
+The script optionally accepts a name for the execution, otherwise `ipuswrun`
+will be used:
+
+```
+$ ./scripts/run_ipusw_benchmarks_mult.sh <NAME>
+```
