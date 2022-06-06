@@ -86,3 +86,17 @@ following script:
 ```
 $ ./scripts/merge_results_rep.sh ./output/<NAME>
 ```
+
+### Obtaining seqan results
+
+`seqan` uses an existing `align_bench` wrapper. The following commands will
+automatically build and execute the experiments for seqan:
+
+```
+$ ./scripts/run_seqan.sh
+```
+
+This will pull and build seqan inside the `scripts/seqan` folders and output
+result logs into `scripts/seqan/results`.
+
+The benchmark results in a table format will be output to stdout.
