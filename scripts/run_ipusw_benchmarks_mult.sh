@@ -1,14 +1,18 @@
 #!/bin/bash
 BIN=./build/bin/ipusw
-OUTPUT_STEM=/global/D1/projects/ipumer/datasets/results/ipu_synthetic_benchmarks_paper_final_rebalance_container
+
+RUNSET_NAME="${1:-ipuswrun}"
+OUTPUT_STEM="./output/${RUNSET_NAME}"
+
+# overwrite existing output directories
 OVERWRITE=
+# dry run without execution
 PRINTOUT=
+# unset CONTAINER if script should NOT be run in docker
 CONTAINER=y
 
-# DEVNUM=(1 2 4 8 16 32 64)
 DEVNUM=(1 2 4 8 16 32 64)
 REPMAX=5
-
 
 gen_bin() {
 	if [ ! ${CONTAINER} ]; then
@@ -35,76 +39,76 @@ run() {
 }
 
 for REPNUM in `seq $REPMAX`; do
-OUTPUT=${OUTPUT_STEM}_rep${REPNUM}
-mkdir -p ${OUTPUT}
-for NUM_IPU in "${DEVNUM[@]}"; do
-for DDUP in yesdup nodup; do
-if [ $DDUP = "yesdup" ]; then
-	DUPLICATE_DS="--duplicateDatasets"
-	if [ ${NUM_IPU} -lt 2 ]; then
-		continue
-	fi
-else
-	DUPLICATE_DS=""
-fi
-# NUM_THREADS=$((NUM_IPU * TH_FACTOR))
-NUM_THREADS=`nproc`
-# DNA experiments
-fillAlgo=roundrobin
-BUFSIZE=34000
-MAX_BATCHES=180
-config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
-# config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
-	INPUT1=./download/DNA-big-As.txt
-	INPUT2=./download/DNA-big-Bs.txt
-	dsname=dna_large
-	run
+	OUTPUT=${OUTPUT_STEM}_rep${REPNUM}
+	mkdir -p ${OUTPUT}
+	for NUM_IPU in "${DEVNUM[@]}"; do
+		for DDUP in yesdup nodup; do
+			if [ $DDUP = "yesdup" ]; then
+				DUPLICATE_DS="--duplicateDatasets"
+				if [ ${NUM_IPU} -lt 2 ]; then
+					continue
+				fi
+			else
+				DUPLICATE_DS=""
+			fi
+			NUM_THREADS=`nproc`
 
-	INPUT1=./download/DNA_2_150_ref.txt
-	INPUT2=./download/DNA_2_150_qer.txt
-	dsname=dna_2_150
-	run
+			# DNA experiments
+			fillAlgo=roundrobin
+			BUFSIZE=34000
+			MAX_BATCHES=180
+			config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
+			# config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
+			INPUT1=./download/DNA-big-As.txt
+			INPUT2=./download/DNA-big-Bs.txt
+			dsname=dna_large
+			run
 
-	INPUT1=./download/DNA_2_200_ref.txt
-	INPUT2=./download/DNA_2_200_qer.txt
-	dsname=dna_2_200
-	run
+			INPUT1=./download/DNA_2_150_ref.txt
+			INPUT2=./download/DNA_2_150_qer.txt
+			dsname=dna_2_150
+			run
 
-	INPUT1=./download/DNA_2_250_ref.txt
-	INPUT2=./download/DNA_2_250_qer.txt
-	dsname=dna_2_250
-	run
+			INPUT1=./download/DNA_2_200_ref.txt
+			INPUT2=./download/DNA_2_200_qer.txt
+			dsname=dna_2_200
+			run
 
-# Protein experiments
-fillAlgo=greedy
-BUFSIZE=170000
-MAX_BATCHES=300
-config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxAB 1500 --datatype aa --similarity blosum50 --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
+			INPUT1=./download/DNA_2_250_ref.txt
+			INPUT2=./download/DNA_2_250_qer.txt
+			dsname=dna_2_250
+			run
 
-	INPUT2=./download/PROTEIN_200_ref.txt
-	INPUT1=./download/PROTEIN_200_que.txt
-	dsname=protein_200
-	run
+			# Protein experiments
+			fillAlgo=greedy
+			BUFSIZE=170000
+			MAX_BATCHES=300
+			config="--numDevices ${NUM_IPU} --numThreads ${NUM_THREADS} --tilesUsed 1472 --vtype multiasm --forwardOnly --maxAB 1500 --datatype aa --similarity blosum50 --maxBatches ${MAX_BATCHES} --bufsize ${BUFSIZE} --fillAlgo ${fillAlgo} ${DUPLICATE_DS}"
 
-	INPUT2=./download/PROTEIN_400_ref.txt
-	INPUT1=./download/PROTEIN_400_que.txt
-	dsname=protein_400
-	run
+			INPUT2=./download/PROTEIN_200_ref.txt
+			INPUT1=./download/PROTEIN_200_que.txt
+			dsname=protein_200
+			run
 
-	INPUT2=./download/PROTEIN_600_ref.txt
-	INPUT1=./download/PROTEIN_600_que.txt
-	dsname=protein_600
-	run
+			INPUT2=./download/PROTEIN_400_ref.txt
+			INPUT1=./download/PROTEIN_400_que.txt
+			dsname=protein_400
+			run
 
-	INPUT1=./download/PROTEIN-longer_que.txt
-	INPUT2=./download/PROTEIN-longer_ref.txt
-	dsname=protein_unfiltered
-	run
+			INPUT2=./download/PROTEIN_600_ref.txt
+			INPUT1=./download/PROTEIN_600_que.txt
+			dsname=protein_600
+			run
 
-	INPUT1=./download/As_new.txt
-	INPUT2=./download/Bs_new.txt
-	dsname=protein_full
-	run
-done
-done
+			INPUT1=./download/PROTEIN-longer_que.txt
+			INPUT2=./download/PROTEIN-longer_ref.txt
+			dsname=protein_unfiltered
+			run
+
+			INPUT1=./download/As_new.txt
+			INPUT2=./download/Bs_new.txt
+			dsname=protein_full
+			run
+		done
+	done
 done

@@ -7,6 +7,8 @@ nbproject
 install
 .vscode
 contrib/collect_comm_stats
-**/*.poplar_exec 
+**/*.poplar_exec
 /*.csv
 /scripts/seqan
+/download
+/output
