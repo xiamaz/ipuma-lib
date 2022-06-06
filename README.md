@@ -71,3 +71,18 @@ will be used:
 ```
 $ ./scripts/run_ipusw_benchmarks_mult.sh <NAME>
 ```
+
+The *StripedSmithWaterman* CPU benchmark results can be obtained by the
+following command:
+
+```
+$ ./scripts/run_cpusw.sh <NAME>
+```
+
+After executing either script, a folder containing logs will be created inside
+the `./output` directory. These logs can be parsed into csv format using the
+following script:
+
+```
+$ ./scripts/merge_results_rep.sh ./output/<NAME>
+```

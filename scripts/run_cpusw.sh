@@ -1,13 +1,14 @@
 #!/bin/bash
 BIN=./build/bin/cpusw
-OUTPUT=/global/D1/projects/ipumer/datasets/results/cpu_synthetic_benchmarks_paper_final_withoutpreprocess_outer_includeprofile
+RUNSET_NAME="${1:-cpuswrun}"
+OUTPUT="./output/${RUNSET_NAME}"
+# OUTPUT=/global/D1/projects/ipumer/datasets/results/cpu_synthetic_benchmarks_paper_final_withoutpreprocess_outer_includeprofile
 OVERWRITE=
 PRINTOUT=
 
 mkdir -p ${OUTPUT}
 
-# THREADS=(1 2 4 8 16 32 64 128)
-THREADS=(48 96)
+# setting for two socket systems
 NUMACTL=(0 0-1)
 
 run() {
@@ -31,56 +32,51 @@ for NUMA in ${NUMACTL[@]}; do
 
 	config="--threads ${NUM_THREADS}"
 # DNA experiments
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/base/DNA-big-As.txt
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/base/DNA-big-Bs.txt
+	INPUT1=./download/DNA-big-As.txt
+	INPUT2=./download/DNA-big-Bs.txt
 	dsname=dna_large
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/8x/DNA_2_150_ref.fasta.2x.4x.8x.txt
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/8x/DNA_2_150_qer.fasta.2x.4x.8x.txt
-	dsname=dna_2_150_8x
+	INPUT1=./download/DNA_2_150_ref.txt
+	INPUT2=./download/DNA_2_150_qer.txt
+	dsname=dna_2_150
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/128x/DNA_2_200_ref.fasta.2x.4x.8x.16x.32x.64x.128x.txt
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/128x/DNA_2_200_qer.fasta.2x.4x.8x.16x.32x.64x.128x.txt
-	dsname=dna_2_200_128x
+	INPUT1=./download/DNA_2_200_ref.txt
+	INPUT2=./download/DNA_2_200_qer.txt
+	dsname=dna_2_200
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/32x/DNA_2_250_ref.fasta.2x.4x.8x.16x.32x.txt
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/32x/DNA_2_250_qer.fasta.2x.4x.8x.16x.32x.txt
-	dsname=dna_2_250_32x
+	INPUT1=./download/DNA_2_250_ref.txt
+	INPUT2=./download/DNA_2_250_qer.txt
+	dsname=dna_2_250
 	run
 
 # Protein experiments
 	config="--threads ${NUM_THREADS} --datatype aa"
 
-	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_200_ref.txt
-	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_200_que.txt
+	INPUT2=./download/PROTEIN_200_ref.txt
+	INPUT1=./download/PROTEIN_200_que.txt
 	dsname=protein_200
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_400_ref.txt
-	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_400_que.txt
+	INPUT2=./download/PROTEIN_400_ref.txt
+	INPUT1=./download/PROTEIN_400_que.txt
 	dsname=protein_400
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_600_ref.txt
-	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN_600_que.txt
+	INPUT2=./download/PROTEIN_600_ref.txt
+	INPUT1=./download/PROTEIN_600_que.txt
 	dsname=protein_600
 	run
 
-	# INPUT1=/global/D1/projects/ipumer/datasets/compare/base/PROTEIN-As.txt
-	# INPUT2=/global/D1/projects/ipumer/datasets/compare/base/PROTEIN-Bs.txt
-	# dsname=protein_unfiltered
-	# run
+	INPUT1=./download/PROTEIN-longer_que.txt
+	INPUT2=./download/PROTEIN-longer_ref.txt
+	dsname=protein_unfiltered
+	run
 
- 	INPUT1=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_que.txt
- 	INPUT2=/global/D1/projects/ipumer/datasets/protein-txt/PROTEIN-longer_ref.txt
- 	dsname=protein_unfiltered
- 	run
-
- 	INPUT1=/global/D1/projects/ipumer/As.txt
- 	INPUT2=/global/D1/projects/ipumer/Bs.txt
- 	dsname=protein_full
- 	run
+	INPUT1=./download/As_new.txt
+	INPUT2=./download/Bs_new.txt
+	dsname=protein_full
+	run
 done
