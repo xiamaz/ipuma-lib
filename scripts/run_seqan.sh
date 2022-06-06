@@ -47,53 +47,53 @@ for NUMA in ${NUMACTL[@]}; do
 	fi
 	config="--threads ${NUM_THREADS} -v -d local -i 32 -a dna -r 5"
 # DNA experiments
-	INPUT1=/global/D1/projects/ipumer/datasets/DNA-big-As.fasta
-	INPUT2=/global/D1/projects/ipumer/datasets/DNA-big-Bs.fasta
+	INPUT1=./download/DNA-big-As.fasta
+	INPUT2=./download/DNA-big-Bs.fasta
 	dsname=dna_large
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/8x/DNA_2_150_ref.fasta.2x.4x.8x.txt
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/8x/DNA_2_150_qer.fasta.2x.4x.8x.txt
+	INPUT1=./download/DNA_2_150_ref.fasta
+	INPUT2=./download/DNA_2_150_qer.fasta
 	dsname=dna_2_150
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/128x/DNA_2_200_ref.fasta.2x.4x.8x.16x.32x.64x.128x.txt
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/128x/DNA_2_200_qer.fasta.2x.4x.8x.16x.32x.64x.128x.txt
+	INPUT1=./download/DNA_2_200_ref.fasta
+	INPUT2=./download/DNA_2_200_qer.fasta
 	dsname=dna_2_200
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/dna/32x/DNA_2_250_ref.fasta.2x.4x.8x.16x.32x.txt
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/dna/32x/DNA_2_250_qer.fasta.2x.4x.8x.16x.32x.txt
+	INPUT1=./download/DNA_2_250_ref.fasta
+	INPUT2=./download/DNA_2_250_qer.fasta
 	dsname=dna_2_250
 	run
 
 # Protein experiments
 	config="--threads ${NUM_THREADS} -v -d local -i 32 -a aa -r 5"
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/protein/PROTEIN_200_ref.fasta
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/protein/PROTEIN_200_que.fasta
+	INPUT2=./download/PROTEIN_200_ref.fasta
+	INPUT1=./download/PROTEIN_200_que.fasta
 	dsname=protein_200
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/protein/PROTEIN_400_ref.fasta
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/protein/PROTEIN_400_que.fasta
+	INPUT2=./download/PROTEIN_400_ref.fasta
+	INPUT1=./download/PROTEIN_400_que.fasta
 	dsname=protein_400
 	run
 
-	INPUT1=/global/D1/projects/ipumer/datasets/compare/protein/PROTEIN_600_ref.fasta
-	INPUT2=/global/D1/projects/ipumer/datasets/compare/protein/PROTEIN_600_que.fasta
+	INPUT2=./download/PROTEIN_600_ref.fasta
+	INPUT1=./download/PROTEIN_600_que.fasta
 	dsname=protein_600
 	run
 
- 	INPUT1=/global/D1/projects/ipumer/datasets/compare/protein/PROTEIN-longer_que.fasta
- 	INPUT2=/global/D1/projects/ipumer/datasets/compare/protein/PROTEIN-longer_ref.fasta
- 	dsname=protein_unfiltered
- 	run
+	INPUT1=./download/PROTEIN-longer_que.fasta
+	INPUT2=./download/PROTEIN-longer_ref.fasta
+	dsname=protein_unfiltered
+	run
 
- 	INPUT1=/global/D1/projects/ipumer/datasets/compare/protein/As_new.fasta
- 	INPUT2=/global/D1/projects/ipumer/datasets/compare/protein/Bs_new.fasta
- 	dsname=protein_full
- 	run
+	INPUT1=./download/As_new.fasta
+	INPUT2=./download/Bs_new.fasta
+	dsname=protein_full
+	run
 done
 
 # export the generated data
