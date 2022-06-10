@@ -1,8 +1,10 @@
 # IPUMA Library
 
-Multi-purpose alignment library on the Graphcore Intelligent Processing Unit (IPU).
+Multi-purpose alignment library on the Graphcore Intelligent Processing Unit
+(IPU).
 
-This project contains the `ipuma-library` which implements implementations of the Smith-Waterman alignment algorithm for the IPU.
+This project contains the `ipuma-library` which implements implementations of
+the Smith-Waterman alignment algorithm for the IPU.
 
 ## Installation
 
@@ -45,7 +47,9 @@ Correctness tests are contained in `ipuma-tests`.
 $ build/test/ipuma-tests
 ```
 
-Artificial performance test scenarios on generated data are contained in `ipuma-perf`. These do not fail, but should present GCUPS results that can be compared.
+Artificial performance test scenarios on generated data are contained in
+`ipuma-perf`. These do not fail, but should present GCUPS results that can be
+compared.
 
 ```bash
 $ build/test/ipuma-perf
@@ -53,9 +57,11 @@ $ build/test/ipuma-perf
 
 ## Running
 
-The `ipusw` binary can be used to perform benchmark measurements on specified datasets on the IPU.
+The `ipusw` binary can be used to perform benchmark measurements on specified
+datasets on the IPU.
 
-The `cpusw` binary is a wrapper around [StripedSmithWaterman](https://github.com/mengyao/Complete-Striped-Smith-Waterman-Library).
+The `cpusw` binary is a wrapper around
+[StripedSmithWaterman](https://github.com/mengyao/Complete-Striped-Smith-Waterman-Library).
 
 ### Running paper benchmarks
 
@@ -65,8 +71,8 @@ alignment benchmarks.
 The script expects alignment benchmark datasets to be located in `./download`
 and will output log files to `./output`.
 
-The script *optionally* accepts a name for the execution, otherwise **`ipuswrun`**
-will be used:
+The script *optionally* accepts a name for the execution, otherwise
+**`ipuswrun`** will be used:
 
 ```bash
 $ ./scripts/run_ipusw_benchmarks_mult.sh [NAME]
@@ -89,8 +95,9 @@ $ ./scripts/merge_results_rep.sh ./output/<NAME> out.csv
 
 ### Obtaining seqan results
 
-`seqan` uses an existing [align_bench](https://github.com/rrahn/align_bench) wrapper. The following commands will
-automatically build and execute the experiments for seqan:
+`seqan` uses an existing [align_bench](https://github.com/rrahn/align_bench)
+wrapper. The following commands will automatically build and execute the
+experiments for seqan:
 
 ```bash
 $ ./scripts/run_seqan.sh
