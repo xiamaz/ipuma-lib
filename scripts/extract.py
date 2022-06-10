@@ -122,9 +122,18 @@ def extract_cpu_lines(logdata):
         gcups_outer = json_data["gcups_outer"]
         time_inner_s = json_data["time_inner_s"]
         time_outer_s = json_data["time_outer_s"]
-        line = [
-                dataset, "cpu-ssw", numa, cpu_threads, cells, "", gcups_inner, gcups_inner, gcups_outer, "", "", time_inner_s
-        ]
+        line = {
+            "dataset": dataset,
+            "project": "cpu-ssw",
+            "numa": numa,
+            "cpu_threads": cpu_threads,
+            "cells": cells,
+            "gcups_inner": gcups_inner,
+            "gcups_outer": gcups_outer,
+            "timer_inner": time_inner_s,
+            "timer_outer": time_outer_s
+        }
+                
         table_lines.append(line)
     return table_lines
 
@@ -134,7 +143,9 @@ if "ipu" in args.dataset_dir.name:
     table.to_csv(args.output)
 elif "cpu" in args.dataset_dir.name:
     table_lines = extract_cpu_lines(logdata)
-    for l in table_lines:
-        print(";".join(map(str, l)))
+    table = pd.DataFrame(table_lines)
+    table.to_csv(args.output)
+    # for l in table_lines:
+    #     print(";".join(map(str, l)))
 else:
     raise RuntimeError(f"Unsupported dataset {args.dataset_dir}")
