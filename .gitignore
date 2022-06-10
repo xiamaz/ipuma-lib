@@ -10,5 +10,6 @@ contrib/collect_comm_stats
 **/*.poplar_exec
 /*.csv
 /scripts/seqan
-/download
+/download/*
+!/download/download_benchmark_datasets.sh
 /output
