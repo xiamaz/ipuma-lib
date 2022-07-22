@@ -1,4 +1,4 @@
-![IPUMA Library](docs/img/banner.jpg)
+![IPUMA Library](docs/img/banner_round.png)
 # IPUMA Library
 
 
