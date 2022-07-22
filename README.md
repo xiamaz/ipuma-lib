@@ -1,4 +1,6 @@
+![IPUMA Library](docs/img/banner.jpg)
 # IPUMA Library
+
 
 Multi-purpose alignment library on the Graphcore Intelligent Processing Unit
 (IPU).
