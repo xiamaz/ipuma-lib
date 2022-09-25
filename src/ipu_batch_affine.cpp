@@ -950,7 +950,7 @@ int SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& a
 }
 
 slotToken SWAlgorithm::queue_slot(int max_bucket_size) {
-  assert(buf_has_capacity(max_bucket_size));
+  // assert(buf_has_capacity(max_bucket_size));
   auto si = calculate_slot_region_index(max_bucket_size);
   int s = -1;
   for (size_t i = 0; i < slots.size(); i++) {

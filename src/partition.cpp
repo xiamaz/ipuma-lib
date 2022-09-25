@@ -74,16 +74,16 @@ namespace partition {
       return std::max(std::max(z[0], z[1]), std::max(std::max(z[2], z[3]), std::max(z[4], z[5])));
   } 
 
-  inline int minI(const int z[6]) {
-    int w = INT_MAX; 
-    int wi = 0; 
-    #pragma omp simd
-    for (size_t i = 0; i < 6; i++) {
-      if (z[i] < w) {
-        wi = i;
-      }
-    }
-  } 
+  // inline int minI(const int z[6]) {
+  //   int w = INT_MAX; 
+  //   int wi = 0; 
+  //   #pragma omp simd
+  //   for (size_t i = 0; i < 6; i++) {
+  //     if (z[i] < w) {
+  //       wi = i;
+  //     }
+  //   }
+  // } 
 
   bool operator>(const ipu::partition::BucketMapping& b1, const ipu::partition::BucketMapping& b2) {
     return minW(b1.weight) > minW(b2.weight);

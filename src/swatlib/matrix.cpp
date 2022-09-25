@@ -141,5 +141,6 @@ std::vector<std::vector<T>> swatlib::Matrix<T>::toVector() {
 template class swatlib::Matrix<int>;
 template class swatlib::Matrix<short>;
 template class swatlib::Matrix<char>;
+template class swatlib::Matrix<double>;
 template class swatlib::Matrix<int8_t>;
 template class swatlib::Matrix<uint8_t>;

@@ -45,6 +45,7 @@ add_subdirectory(src)
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
   set(PACKAGE_TESTS ON)
   set(PACKAGE_MAIN ON)
+  set(PACKAGE_XDROP ON)
   set(PACKAGE_CPU ON)
 endif()
 
@@ -52,6 +53,10 @@ set(IPUMA_BIN_INCLUDES "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/extern
 
 if(PACKAGE_MAIN)
   add_subdirectory(ipusw)
+endif()
+
+if(PACKAGE_XDROP)
+  add_subdirectory(xdrop)
 endif()
 
 if(PACKAGE_CPU)
