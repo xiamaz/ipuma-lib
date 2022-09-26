@@ -88,6 +88,10 @@ int main(int argc, char** argv) {
   int m = reference.length() + 1;
   int n = query.length() + 1;
 
+  int X = 3;
+  int neginf = -1000;
+  int T_prime = 0, T = 0, L = 0, U = 0;
+
   Matrix<int> H(m, n);
 
   //    0 1 2 3 4 5 6 7 n
@@ -105,7 +109,7 @@ int main(int argc, char** argv) {
     auto [index, score] = maxtuple({
         0,
         k2[z] - GAP_PENALTY,                                     // Left
-        k2[z-1] - GAP_PENALTY,                                   // Top
+        k2[z - 1] - GAP_PENALTY,                                 // Top
         k1[z - 1] + (reference[i - 1] == query[j - 1] ? 1 : -1)  // Diag
     });
     k3[z] = score;
@@ -114,7 +118,7 @@ int main(int argc, char** argv) {
   auto cell_update_bottom = [&](int i, int j, int z) {
     auto [index, score] = maxtuple({
         0,
-        k2[z+1] - GAP_PENALTY,                                   // Left
+        k2[z + 1] - GAP_PENALTY,                                 // Left
         k2[z] - GAP_PENALTY,                                     // Top
         k1[z + 1] + (reference[i - 1] == query[j - 1] ? 1 : -1)  // Diag
     });
@@ -122,8 +126,7 @@ int main(int argc, char** argv) {
     // PLOGD.printf("i=%d, j=%d, z=%d, score=%d, ZTLD=%d, left=%d, top=%d, diag=%d", i, j, z, score, index, k2[z+1], k2[z], k1[z + 1]);
   };
 
-
-  auto rotate = [&](){
+  auto rotate = [&]() {
     // 1->3, 2->1, 3->2
     k1.swap(k3);
     k2.swap(k1);
@@ -140,7 +143,7 @@ int main(int argc, char** argv) {
   }
 
   // Band
-  for (int i = 0; i < n - m ; i++) {
+  for (int i = 0; i < n - m; i++) {
     for (int j = 1; j < m; j++) {
       cell_update_top(j, m + i - j, j);
     }
@@ -152,9 +155,9 @@ int main(int argc, char** argv) {
   // TODO: make bottom pinned can fix this
   k1.insert(k1.begin(), 0);
   // Lower antidiagonal matrix
-  for (int i = 0; i < (m - 1); i++) { 
-    for (int j = 1; j < m-i; j++) {
-      cell_update_bottom(j+i, n - j, j-1);
+  for (int i = 0; i < (m - 1); i++) {
+    for (int j = 1; j < m - i; j++) {
+      cell_update_bottom(j + i, n - j, j - 1);
     }
     PLOGI << printVector(k3);
     rotate();
