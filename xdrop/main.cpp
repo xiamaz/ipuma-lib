@@ -53,49 +53,30 @@ std::vector<std::string> refs = {
     "GCCAGGCAAAATCGGCGTTTCTGGCGGCGATGAGCCATGAGATCCGCACACCGCTGTACGGTATTCTCGGCACTGCTCAACTGCTGGCAGATAACCCCGC",
 };
 
-
 using namespace std;
 using namespace swatlib;
 
-template<typename T>
+template <typename T>
 inline std::tuple<int, T> maxtuple(std::initializer_list<T> l) {
-    T value;
-    int index = -1;
-    for (auto it = l.begin(); it != l.end(); ++it) {
-        if (index == -1 || *it > value) {
-            value = *it;
-            index = std::distance(l.begin(), it);
-        }
+  T value;
+  int index = -1;
+  for (auto it = l.begin(); it != l.end(); ++it) {
+    if (index == -1 || *it > value) {
+      value = *it;
+      index = std::distance(l.begin(), it);
     }
-    return {index, value};
+  }
+  return {index, value};
 }
 
-template<typename T>
+template <typename T>
 inline T maxval(std::initializer_list<T> l) {
-    auto [i, v] = maxtuple(l);
-    return v;
+  auto [i, v] = maxtuple(l);
+  return v;
 }
-
-enum class Operator : char {
-    match = 'M',
-    gap = 'G',
-    del = 'D',
-    ins = 'I',
-    invalid = ' ',
-};
-
-const Operator MATRIX_DIAGONAL = Operator::match;
-const Operator MATRIX_LEFT = Operator::ins;
-const Operator MATRIX_TOP = Operator::del;
-const Operator MATRIX_INVALID = Operator::invalid;
 
 const int GAP_PENALTY = 1;
-const Operator SW_OPERATOR_INDEX[4] = {
-    MATRIX_INVALID,
-    MATRIX_LEFT,
-    MATRIX_TOP,
-    MATRIX_DIAGONAL,
-};
+
 int main(int argc, char** argv) {
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
   plog::init(plog::debug, &consoleAppender);
@@ -108,18 +89,7 @@ int main(int argc, char** argv) {
   int n = query.length() + 1;
 
   Matrix<int> H(m, n);
-  Matrix<char> D(m, n, (char) Operator::invalid);
 
-  auto cell_update = [&](int i, int j){
-          auto [index, score] = maxtuple({
-              0,
-              H(i, j-1) - GAP_PENALTY,
-              H(i-1, j) - GAP_PENALTY,
-              H(i-1, j-1) + simpleSimilarity(reference[i-1], query[j-1])
-          });
-          H(i, j) = score;
-          D(i, j) = (char) SW_OPERATOR_INDEX[index];
-  };
   //    0 1 2 3 4 5 6 7 n
   // 0 [0,0,0,0,0,0,0,0,0]
   // 1 [0,1,1,0,0,1,0,1,1]
@@ -127,35 +97,70 @@ int main(int argc, char** argv) {
   // 3 [0,0,1,3,2,1,0,0,1]
   // 4 [0,0,0,2,4,3,2,1,0]
   // m [0,1,1,1,3,5,4,3,2]
+  auto k1 = std::vector<int>(min(m, n), 0);
+  auto k2 = std::vector<int>(min(m, n), 0);
+  auto k3 = std::vector<int>(min(m, n), 0);
 
+  auto cell_update_top = [&](int i, int j, int z) {
+    auto [index, score] = maxtuple({
+        0,
+        k2[z] - GAP_PENALTY,                                     // Left
+        k2[z-1] - GAP_PENALTY,                                   // Top
+        k1[z - 1] + (reference[i - 1] == query[j - 1] ? 1 : -1)  // Diag
+    });
+    k3[z] = score;
+  };
+
+  auto cell_update_bottom = [&](int i, int j, int z) {
+    auto [index, score] = maxtuple({
+        0,
+        k2[z+1] - GAP_PENALTY,                                   // Left
+        k2[z] - GAP_PENALTY,                                     // Top
+        k1[z + 1] + (reference[i - 1] == query[j - 1] ? 1 : -1)  // Diag
+    });
+    k3[z] = score;
+    // PLOGD.printf("i=%d, j=%d, z=%d, score=%d, ZTLD=%d, left=%d, top=%d, diag=%d", i, j, z, score, index, k2[z+1], k2[z], k1[z + 1]);
+  };
+
+
+  auto rotate = [&](){
+    // 1->3, 2->1, 3->2
+    k1.swap(k3);
+    k2.swap(k1);
+  };
 
   // Split computatioin into: (◸⟋◿) -> (upper antidiag triangle) + (ext. antidiag) + (lower antidiag triangle)
   // Upper antidiagonal matrix
   for (int i = 0; i < m; i++) {
-      for (int j = 1; j < i; j++) {
-        cell_update(j, i-j);
-      }
+    for (int j = 1; j < i; j++) {
+      cell_update_top(j, i - j, j);
+    }
+    PLOGI << printVector(k3);
+    rotate();
   }
 
   // Band
-  for (int i = 0; i < n-m+1; i++) {
-      for (int j = 1; j < m; j++) {
-        cell_update(j, m+i-j);
-      }
+  for (int i = 0; i < n - m ; i++) {
+    for (int j = 1; j < m; j++) {
+      cell_update_top(j, m + i - j, j);
+    }
+    PLOGI << printVector(k3);
+    rotate();
   }
 
+  // We are still top centered, but k1 is not... this is an edge case
+  // TODO: make bottom pinned can fix this
+  k1.insert(k1.begin(), 0);
   // Lower antidiagonal matrix
-  for (int i = 1; i < (m-1); i++) {
-    for (size_t j = 0; j < m-i-1; j++) {
-        cell_update(m-1-j, (n-m+1)+i+j);
-    }  
+  for (int i = 0; i < (m - 1); i++) { 
+    for (int j = 1; j < m-i; j++) {
+      cell_update_bottom(j+i, n - j, j-1);
+    }
+    PLOGI << printVector(k3);
+    rotate();
   }
-
-
-
 
   PLOGI << H.toString();
 
   return 0;
 }
-
