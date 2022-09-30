@@ -114,13 +114,13 @@ std::string swatlib::Matrix<T>::toString() {
     std::stringstream ss;
     ss << "Matrix[\n";
     for (int i = 0; i < m; i++) {
-        ss << "[";
+        ss << "";
         for (int j = 0; j < n; j++) {
             if (j > 0)
                 ss << ",";
             ss << get(i, j);
         }
-        ss << "]\n";
+        ss << "\n";
     }
     ss << "]";
     return ss.str();

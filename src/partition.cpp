@@ -162,7 +162,10 @@ namespace partition {
       SequenceInfo info = {
         .aLen = static_cast<int>(Seqs[cmp.indexA].size()),
         .bLen = static_cast<int>(Seqs[cmp.indexB].size()),
-        0, 0, 0, 0
+        .effALen = 0,
+        .effBLen = 0,
+        .offsetA = 0,
+        .offsetB = 0,
       };
 
       auto& bucket = getNextBucket(map, curBucket, cmp, info, indexOffset);
@@ -229,7 +232,10 @@ namespace partition {
       SequenceInfo info = {
         .aLen = static_cast<int>(Seqs[cmp.indexA].size()),
         .bLen = static_cast<int>(Seqs[cmp.indexB].size()),
-        0, 0, 0, 0
+        .effALen = 0,
+        .effBLen = 0,
+        .offsetA = 0,
+        .offsetB = 0,
       };
 
       auto& bucket = getNextBucket(map, curBucket, cmp, info, indexOffset);

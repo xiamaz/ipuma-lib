@@ -8,6 +8,8 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
+#include <algorithm>
+#include <span>
 
 #include "swatlib/swatlib.h"
 
@@ -75,24 +77,22 @@ inline T maxval(std::initializer_list<T> l) {
   return v;
 }
 
+template<typename T>
+inline T vmax(std::vector<T> vec) {
+  return *std::max_element(vec.begin(), vec.end());
+}
+
+template<typename T>
+inline T vmin(std::vector<T> vec) {
+  return *std::min_element(vec.begin(), vec.end());
+}
+
 const int GAP_PENALTY = 1;
 
 int main(int argc, char** argv) {
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
   plog::init(plog::debug, &consoleAppender);
-
   auto similarityMatrix = swatlib::selectMatrix(swatlib::Similarity::nucleicAcid, 1, -1, -1);
-  const std::string query{"AATGAGAA"};
-  const std::string reference{"AATGA"};
-
-  int m = reference.length() + 1;
-  int n = query.length() + 1;
-
-  int X = 3;
-  int neginf = -1000;
-  int T_prime = 0, T = 0, L = 0, U = 0;
-
-  Matrix<int> H(m, n);
 
   //    0 1 2 3 4 5 6 7 n
   // 0 [0,0,0,0,0,0,0,0,0]
@@ -101,9 +101,48 @@ int main(int argc, char** argv) {
   // 3 [0,0,1,3,2,1,0,0,1]
   // 4 [0,0,0,2,4,3,2,1,0]
   // m [0,1,1,1,3,5,4,3,2]
+  const std::string query{"AATGAGAA"};
+  const std::string reference{"AATGA"};
+  int X = 3;
+  int neginf = -9;
+  int T_prime = 0, T = 0, L = 0, U = reference.length();
+
+  // const auto I = 8;
+  // const std::string query = queries[I];
+  // const std::string reference = refs[I];
+
+  int m = reference.length() + 1;
+  int n = query.length() + 1;
+  Matrix<int> H(m, n);
+  Matrix<int> C(m, n);
+
   auto k1 = std::vector<int>(min(m, n), 0);
   auto k2 = std::vector<int>(min(m, n), 0);
   auto k3 = std::vector<int>(min(m, n), 0);
+
+  // std::span<int> k4{k1.data() + 1, 2};
+  // k4[0] = 99;
+
+  // PLOGD << printVectorD(k1);
+  // return 0;
+
+  auto XDropUpdate = [&](){
+    T_prime = max(T_prime, vmax(k3));
+    for (size_t i = L; i < U; i++) {
+      if (k3[i] > neginf) {
+        L = i;
+        break;
+      }
+    }
+    for (size_t i = U; i < L; i--) {
+      if (k3[i] > neginf) {
+        U = i;
+        break;
+      }
+    }
+    T = T_prime;
+    PLOGD.printf("[L, U](%d, %d), T = %d", L, U, T);
+  };
 
   auto cell_update_top = [&](int i, int j, int z) {
     auto [index, score] = maxtuple({
@@ -112,7 +151,12 @@ int main(int argc, char** argv) {
         k2[z - 1] - GAP_PENALTY,                                 // Top
         k1[z - 1] + (reference[i - 1] == query[j - 1] ? 1 : -1)  // Diag
     });
+    if (score < T - X) {
+      score = neginf;
+      C(i,j) = 1;
+    }
     k3[z] = score;
+    H(i,j) = score;
   };
 
   auto cell_update_bottom = [&](int i, int j, int z) {
@@ -122,8 +166,12 @@ int main(int argc, char** argv) {
         k2[z] - GAP_PENALTY,                                     // Top
         k1[z + 1] + (reference[i - 1] == query[j - 1] ? 1 : -1)  // Diag
     });
+    if (score < T - X) {
+      score = neginf;
+      C(i,j) = 1;
+    }
     k3[z] = score;
-    // PLOGD.printf("i=%d, j=%d, z=%d, score=%d, ZTLD=%d, left=%d, top=%d, diag=%d", i, j, z, score, index, k2[z+1], k2[z], k1[z + 1]);
+    H(i,j) = score;
   };
 
   auto rotate = [&]() {
@@ -138,7 +186,8 @@ int main(int argc, char** argv) {
     for (int j = 1; j < i; j++) {
       cell_update_top(j, i - j, j);
     }
-    PLOGI << printVector(k3);
+    XDropUpdate();
+    PLOGI << printVectorD(k3);
     rotate();
   }
 
@@ -147,7 +196,8 @@ int main(int argc, char** argv) {
     for (int j = 1; j < m; j++) {
       cell_update_top(j, m + i - j, j);
     }
-    PLOGI << printVector(k3);
+    XDropUpdate();
+    PLOGI << printVectorD(k3);
     rotate();
   }
 
@@ -159,11 +209,13 @@ int main(int argc, char** argv) {
     for (int j = 1; j < m - i; j++) {
       cell_update_bottom(j + i, n - j, j - 1);
     }
-    PLOGI << printVector(k3);
+    XDropUpdate();
+    PLOGI << printVectorD(k3);
     rotate();
   }
 
   PLOGI << H.toString();
+  PLOGI << C.toString();
 
   return 0;
 }
