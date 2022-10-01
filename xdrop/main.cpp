@@ -103,116 +103,66 @@ int main(int argc, char** argv) {
   // m [0,1,1,1,3,5,4,3,2]
   const std::string query{"AATGAGAA"};
   const std::string reference{"AATGA"};
-  int X = 3;
+  int X = 1;
   int neginf = -9;
-  int T_prime = 0, T = 0, L = 0, U = reference.length();
-
-  // const auto I = 8;
-  // const std::string query = queries[I];
-  // const std::string reference = refs[I];
+  int T_prime = 0, T = 0, L = 0, U = 0; 
 
   int m = reference.length() + 1;
   int n = query.length() + 1;
-  Matrix<int> H(m, n);
-  Matrix<int> C(m, n);
+  Matrix<int> H(m, n, 0);
+  Matrix<int> C(15, 15, 0);
 
-  auto k1 = std::vector<int>(min(m, n), 0);
-  auto k2 = std::vector<int>(min(m, n), 0);
-  auto k3 = std::vector<int>(min(m, n), 0);
+  int * k1 = &((int*) calloc(min(m, n) + 1, sizeof(int)))[1];
+  int * k2 = &((int*) calloc(min(m, n) + 1, sizeof(int)))[1];
+  int * k3 = &((int*) calloc(min(m, n) + 1, sizeof(int)))[1];
 
-  // std::span<int> k4{k1.data() + 1, 2};
-  // k4[0] = 99;
-
-  // PLOGD << printVectorD(k1);
-  // return 0;
-
-  auto XDropUpdate = [&](){
-    T_prime = max(T_prime, vmax(k3));
-    for (size_t i = L; i < U; i++) {
-      if (k3[i] > neginf) {
-        L = i;
-        break;
-      }
-    }
-    for (size_t i = U; i < L; i--) {
-      if (k3[i] > neginf) {
-        U = i;
-        break;
-      }
-    }
-    T = T_prime;
-    PLOGD.printf("[L, U](%d, %d), T = %d", L, U, T);
-  };
-
-  auto cell_update_top = [&](int i, int j, int z) {
+  auto cell_update = [&](int i, int j){
     auto [index, score] = maxtuple({
-        0,
-        k2[z] - GAP_PENALTY,                                     // Left
-        k2[z - 1] - GAP_PENALTY,                                 // Top
-        k1[z - 1] + (reference[i - 1] == query[j - 1] ? 1 : -1)  // Diag
+      0,
+      H(i, j-1) - GAP_PENALTY,
+      H(i-1, j) - GAP_PENALTY,
+      H(i-1, j-1) + simpleSimilarity(reference[i-1], query[j-1])
     });
     if (score < T - X) {
+      // PLOGW.printf("(%d, %d) DROP", i, j);
       score = neginf;
-      C(i,j) = 1;
     }
-    k3[z] = score;
-    H(i,j) = score;
-  };
-
-  auto cell_update_bottom = [&](int i, int j, int z) {
-    auto [index, score] = maxtuple({
-        0,
-        k2[z + 1] - GAP_PENALTY,                                 // Left
-        k2[z] - GAP_PENALTY,                                     // Top
-        k1[z + 1] + (reference[i - 1] == query[j - 1] ? 1 : -1)  // Diag
-    });
-    if (score < T - X) {
-      score = neginf;
-      C(i,j) = 1;
-    }
-    k3[z] = score;
-    H(i,j) = score;
+    H(i, j) = score;
+    return score;
   };
 
   auto rotate = [&]() {
-    // 1->3, 2->1, 3->2
-    k1.swap(k3);
-    k2.swap(k1);
+    int *t; // 1->3, 2->1, 3->2
+    t = k1;
+    k1 = k2;
+    k2 = k3;
+    k3 = t;
   };
 
-  // Split computatioin into: (◸⟋◿) -> (upper antidiag triangle) + (ext. antidiag) + (lower antidiag triangle)
-  // Upper antidiagonal matrix
-  for (int i = 0; i < m; i++) {
-    for (int j = 1; j < i; j++) {
-      cell_update_top(j, i - j, j);
-    }
-    XDropUpdate();
-    PLOGI << printVectorD(k3);
-    rotate();
-  }
+  int M = reference.length();
+  int N = query.length();
 
-  // Band
-  for (int i = 0; i < n - m; i++) {
-    for (int j = 1; j < m; j++) {
-      cell_update_top(j, m + i - j, j);
+  int k = 0;
+  int c = 0;
+  do {
+    k = k + 1;
+    for (size_t i = L; i < U+1; i++) {
+      auto j = k - i - 1;
+      int _j = j + 1;
+      int _i = i + 1;
+      PLOGE << i;
+      // PLOGI.printf("i=%d, j=%d, k=%d, [L=%d, U=%d]", i, j, k, L, U);
+      int score = cell_update(_i, _j);
+      C(k-1, i) = ++c;
+      T_prime = max(T_prime, score);
     }
-    XDropUpdate();
-    PLOGI << printVectorD(k3);
-    rotate();
-  }
-
-  // We are still top centered, but k1 is not... this is an edge case
-  // TODO: make bottom pinned can fix this
-  k1.insert(k1.begin(), 0);
-  // Lower antidiagonal matrix
-  for (int i = 0; i < (m - 1); i++) {
-    for (int j = 1; j < m - i; j++) {
-      cell_update_bottom(j + i, n - j, j - 1);
-    }
-    XDropUpdate();
-    PLOGI << printVectorD(k3);
-    rotate();
-  }
+    L = 0;
+    U = U+1;
+    L = max(L, k+1-N);
+    U = min(U, M-1);
+    T = T_prime;
+    PLOGD.printf("[L, U](%d, %d), T = %d", L, U, T);
+  } while  (L <= U+1);
 
   PLOGI << H.toString();
   PLOGI << C.toString();
