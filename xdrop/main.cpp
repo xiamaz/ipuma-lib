@@ -109,24 +109,25 @@ int main(int argc, char** argv) {
 
   int m = reference.length() + 1;
   int n = query.length() + 1;
-  Matrix<int> H(m, n, 0);
-  Matrix<int> C(15, 15, 0);
+  // Matrix<int> H(m, n, 0);
+  // Matrix<int> C(15, 15, 0);
 
   int * k1 = &((int*) calloc(min(m, n) + 1, sizeof(int)))[1];
   int * k2 = &((int*) calloc(min(m, n) + 1, sizeof(int)))[1];
   int * k3 = &((int*) calloc(min(m, n) + 1, sizeof(int)))[1];
 
-  auto cell_update = [&](int i, int j){
+  auto cell_update = [&](int i, int j, int*k1, int*k2, int*k3, int z){
     auto [index, score] = maxtuple({
       0,
-      H(i, j-1) - GAP_PENALTY,
-      H(i-1, j) - GAP_PENALTY,
-      H(i-1, j-1) + simpleSimilarity(reference[i-1], query[j-1])
+      k2[z] - GAP_PENALTY,
+      k2[z-1] - GAP_PENALTY,
+      k1[z-1] + simpleSimilarity(reference[i-1], query[j-1])
     });
     if (score < T - X) {
-      // PLOGW.printf("(%d, %d) DROP", i, j);
+      PLOGW.printf("(%d, %d) DROP", i, j);
       score = neginf;
     }
+    k3[z] = score;
     H(i, j) = score;
     return score;
   };
@@ -150,10 +151,8 @@ int main(int argc, char** argv) {
       auto j = k - i - 1;
       int _j = j + 1;
       int _i = i + 1;
-      PLOGE << i;
-      // PLOGI.printf("i=%d, j=%d, k=%d, [L=%d, U=%d]", i, j, k, L, U);
-      int score = cell_update(_i, _j);
-      C(k-1, i) = ++c;
+      int score = cell_update(_i, _j, k1, k2, k3, i);
+      // C(k-1, i) = ++c;
       T_prime = max(T_prime, score);
     }
     L = 0;
@@ -161,11 +160,11 @@ int main(int argc, char** argv) {
     L = max(L, k+1-N);
     U = min(U, M-1);
     T = T_prime;
-    PLOGD.printf("[L, U](%d, %d), T = %d", L, U, T);
+    rotate();
   } while  (L <= U+1);
 
   PLOGI << H.toString();
-  PLOGI << C.toString();
+  // PLOGI << C.toString();
 
   return 0;
 }
