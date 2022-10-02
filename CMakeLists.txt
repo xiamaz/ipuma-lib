@@ -12,7 +12,8 @@ set(POPLIBS_ENABLED_IPU_ARCH_NAMES "cpu;ipu2")
 # endif()
 message("Enabled architectures: ${POPLIBS_ENABLED_IPU_ARCH_NAMES}")
 
-set(DEFAULT_TEST_VARIANTS "cpu;IpuModel2;")
+# set(DEFAULT_TEST_VARIANTS "cpu;IpuModel2;")
+set(DEFAULT_TEST_VARIANTS "cpu;")
 
 set(POPC_EXECUTABLE "popc")
 
@@ -39,6 +40,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 include_directories("plog/include")
 
 add_subdirectory("extern/include/ssw")
+list (APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/extern/seqan3/build_system")
 
 add_subdirectory(src)
 

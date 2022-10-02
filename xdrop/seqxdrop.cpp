@@ -1,19 +1,49 @@
-#include <plog/Appenders/ColorConsoleAppender.h>
-#include <plog/Formatters/TxtFormatter.h>
-#include <plog/Initializers/RollingFileInitializer.h>
-#include <plog/Log.h>
+// Source: https://docs.seqan.de/seqan/3-master-user/tutorial_pairwise_alignment.html
+#include <utility>
+ 
+#include <seqan3/alignment/pairwise/align_pairwise.hpp>
+#include <seqan3/alignment/scoring/nucleotide_scoring_scheme.hpp>
+#include <seqan3/alphabet/nucleotide/dna4.hpp>
+#include <seqan3/core/debug_stream.hpp>
 
-#include <algorithm>
-#include <cxxopts.hpp>
-#include <iostream>
-#include <nlohmann/json.hpp>
-#include <span>
-#include <string>
-#include <vector>
+seqan3::dna4_vector convertSequence(const std::string& string) {
+    seqan3::dna4_vector dna4_str{};
+    for (auto c : string) dna4_str.push_back(seqan3::assign_char_to(c, seqan3::dna4{}));
+    return dna4_str;
+}
 
-#include "swatlib/swatlib.h"
+std::vector<seqan3::dna4_vector> convertSequences(const std::vector<std::string>& strings) {
+    std::vector<seqan3::dna4_vector> seqs{};
+    for (const auto& s : strings) {
+        seqs.push_back(convertSequence(s));
+    }
+    return seqs;
+}
 
-using json = nlohmann::json;
+std::vector<int> seqanAlign(const std::vector<std::string>& queryStrs, const std::vector<std::string>& referenceStrs) {
+    auto queries = convertSequences(queryStrs);
+    auto references = convertSequences(referenceStrs);
+    // seqan3::dna4_vector query = convertSequence(queryStr);
+    // seqan3::dna4_vector reference = convertSequence(referenceStr);
+
+    // Configure the alignment kernel.
+    auto config =
+        seqan3::align_cfg::method_global(
+            seqan3::align_cfg::free_end_gaps_sequence1_leading{false},
+            seqan3::align_cfg::free_end_gaps_sequence2_leading{false},
+            seqan3::align_cfg::free_end_gaps_sequence1_trailing{true},
+            seqan3::align_cfg::free_end_gaps_sequence2_trailing{true}
+        ) | seqan3::align_cfg::scoring_scheme{seqan3::nucleotide_scoring_scheme{seqan3::match_score{1}, seqan3::mismatch_score{-1}}}
+        | seqan3::align_cfg::gap_cost_affine{seqan3::align_cfg::open_score{0}, seqan3::align_cfg::extension_score{-1}};;
+
+    auto results = seqan3::align_pairwise(seqan3::views::zip(queries, references), config);
+    std::vector<int> scores{};
+    for (auto const& res : results) {
+        scores.push_back(res.score());
+    }
+    return scores;
+}
+
 std::vector<std::string> queries = {
     "AATGAGAATGATGTCGTTCGAAATTTGACCAGTCAAACCGCGGGCAATAAGGTCTTCGTTCAGGGCATAGACCTTAATGGGGGCATTACGCAGACTTTCA",
     "ATCTGGCAGGTAAAGATGAGCTCAACAAAGTGATCCAGCATTTTGGCAAAGGAGGCTTTGATGTGATTACTCGCGGTCAGGTGCCACCTAACCCGTCTGA",
@@ -55,138 +85,9 @@ std::vector<std::string> refs = {
     "GCCAGGCAAAATCGGCGTTTCTGGCGGCGATGAGCCATGAGATCCGCACACCGCTGTACGGTATTCTCGGCACTGCTCAACTGCTGGCAGATAACCCCGC",
 };
 
-using namespace std;
-using namespace swatlib;
-
-template <typename T>
-inline std::tuple<int, T> maxtuple(std::initializer_list<T> l) {
-  T value;
-  int index = -1;
-  for (auto it = l.begin(); it != l.end(); ++it) {
-    if (index == -1 || *it > value) {
-      value = *it;
-      index = std::distance(l.begin(), it);
-    }
-  }
-  return {index, value};
-}
-
-const int GAP_PENALTY = 1;
-const int X = 3;
-const int neginf = -99;
-
-int xdrop(const std::string& query, const std::string& reference, bool cut) {
-  auto encoder = getEncoder(DataType::nucleicAcid);
-  auto sim = selectMatrix(Similarity::nucleicAcid, 1, -1, -1);
-  auto ref = encoder.encode(reference);
-  auto quer = encoder.encode(query);
-
-  int T_prime = 0, T = 0, L = 0, U = 0;
-
-  int M = reference.length();
-  int N = query.length();
-  Matrix<int> H(M + 1, N + 1, 0); // DEBUG
-  Matrix<int> C(M + 1, N + 1, 0); // DEBUG
-
-  // Can also be malloc with: k1[0] = 0, k2[0:2] = 0
-  int* k1 = &((int*) calloc(min(M, N) + 2, sizeof(int)))[1];
-  int* k2 = &((int*) calloc(min(M, N) + 2, sizeof(int)))[1];
-  int* k3 = &((int*) calloc(min(M, N) + 2, sizeof(int)))[1];
-
-  auto cell_update = [&](int i, int j, int* k1, int* k2, int* k3, int z) {
-    auto [index, score] = maxtuple({k2[z] - GAP_PENALTY,
-                                    k2[z - 1] - GAP_PENALTY,
-                                    k1[z - 1] + sim(ref[i], quer[j])
-                                    });
-    if (score < T - X) {
-      score = neginf;
-    }
-    k3[z] = score;
-    H(i+1, j+1) = score; // DEBUG
-    return score;
-  };
-
-  auto rotate = [&]() {
-    int* t;  // 1->3, 2->1, 3->2
-    t = k1;
-    k1 = k2;
-    k2 = k3;
-    k3 = t;
-  };
-
-  int k = 0;
-  do {
-    k = k + 1;
-    for (size_t i = L; i < U + 1; i++) {
-      auto j = k - i - 1;
-      int score = cell_update(i, j, k1, k2, k3, i);
-      C(i + 1, j + 1) = 1; // DEBUG
-      T_prime = max(T_prime, score);
-    }
-
-    int minL = INT_MAX;
-    for (size_t i = L; i < U + 1; i++) {
-      int s = k3[i];
-      if (s > neginf) {
-        minL = i;
-        break;
-      }
-    }
-
-    int maxU = 0;
-    for (size_t i = L; i < U + 1; i++) {
-      int s = k3[i];
-      if (s > neginf) {
-        maxU = i;
-      }
-    }
-
-    if (cut) {
-      L = minL;
-      U = maxU + 1;
-    } else {
-      L = 0;
-      U = U + 1;
-    }
-
-    L = max(L, k + 1 - N);
-    U = min(U, M - 1);
-    T = T_prime;
-    rotate();
-  } while (L <= U + 1);
-
-  PLOGD << H.toString(); // DEBUG
-  PLOGD << C.toString(); // DEBUG
-
-  free(&k3[-1]);
-  free(&k2[-1]);
-  free(&k1[-1]);
-  return T;
-}
-
-int main(int argc, char** argv) {
-  static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
-  plog::init(plog::info, &consoleAppender);
-  auto similarityMatrix = swatlib::selectMatrix(swatlib::Similarity::nucleicAcid, 1, -1, -1);
-
-  //    0 1 2 3 4 5 6 7 n
-  // 0 [0,0,0,0,0,0,0,0,0]
-  // 1 [0,1,1,0,0,1,0,1,1]
-  // 2 [0,1,2,1,0,1,0,1,2]
-  // 3 [0,0,1,3,2,1,0,0,1]
-  // 4 [0,0,0,2,4,3,2,1,0]
-  // m [0,1,1,1,3,5,4,3,2]
-  // const std::string query{"AATGAGAA"};
-  // const std::string reference{"AATGA"};
-  // const std::string query{"AATGAGAATTTTTTTTTTTTTTTTT"};
-  // const std::string reference{"AATGAAAAAAAAAAAAAAAAAA"};
-  // int score = xdrop(query, reference, true);
-  for (size_t i = 0; i < queries.size(); i++) {
-    const std::string query = queries[i];
-    const std::string reference = refs[i];
-    int score = xdrop(query, reference, true);
-    PLOGI.printf("The score is %d", score);
-  }
-
-  return 0;
+int main()
+{
+    // Invoke the pairwise alignment which returns a lazy range over alignment results.
+    auto score = seqanAlign(refs, queries);
+    seqan3::debug_stream << "Score: " << score << '\n';
 }
