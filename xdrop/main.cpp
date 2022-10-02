@@ -72,16 +72,16 @@ inline std::tuple<int, T> maxtuple(std::initializer_list<T> l) {
 }
 
 const int GAP_PENALTY = 1;
+const int X = 3;
+const int neginf = -99;
 
 int xdrop(const std::string& query, const std::string& reference, bool cut) {
-  int X = 3;
-  int neginf = -99;
   int T_prime = 0, T = 0, L = 0, U = 0;
 
   int M = reference.length();
   int N = query.length();
-  Matrix<int> H(M + 1, N + 1, 0);
-  Matrix<int> C(M + 1, N + 1, 0);
+  Matrix<int> H(M + 1, N + 1, 0); // DEBUG
+  Matrix<int> C(M + 1, N + 1, 0); // DEBUG
 
   // Can also be malloc with: k1[0] = 0, k2[0:2] = 0
   int* k1 = &((int*) calloc(min(M, N) + 2, sizeof(int)))[1];
@@ -109,7 +109,6 @@ int xdrop(const std::string& query, const std::string& reference, bool cut) {
   };
 
   int k = 0;
-  int c = 0;
   do {
     k = k + 1;
     for (size_t i = L; i < U + 1; i++) {
@@ -150,10 +149,7 @@ int xdrop(const std::string& query, const std::string& reference, bool cut) {
     U = min(U, M - 1);
     T = T_prime;
     rotate();
-    if (L > U + 1) {
-      break;
-    }
-  } while (true);
+  } while (L <= U + 1);
 
   PLOGD << H.toString(); // DEBUG
   PLOGD << C.toString(); // DEBUG
@@ -178,15 +174,15 @@ int main(int argc, char** argv) {
   // m [0,1,1,1,3,5,4,3,2]
   // const std::string query{"AATGAGAA"};
   // const std::string reference{"AATGA"};
-  const std::string query{"AATGAGAATTTTTTTTTTTTTTTTT"};
-  const std::string reference{"AATGAAAAAAAAAAAAAAAAAA"};
-  int score = xdrop(query, reference, true);
-  // for (size_t i = 0; i < queries.size(); i++) {
-  //   const std::string query = queries[i];
-  //   const std::string reference = refs[i];
-  //   int score = xdrop(query, reference, true);
-  //   PLOGI.printf("The score is %d", score);
-  // }
+  // const std::string query{"AATGAGAATTTTTTTTTTTTTTTTT"};
+  // const std::string reference{"AATGAAAAAAAAAAAAAAAAAA"};
+  // int score = xdrop(query, reference, true);
+  for (size_t i = 0; i < queries.size(); i++) {
+    const std::string query = queries[i];
+    const std::string reference = refs[i];
+    int score = xdrop(query, reference, true);
+    PLOGI.printf("The score is %d", score);
+  }
 
   return 0;
 }
