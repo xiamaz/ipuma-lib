@@ -76,6 +76,11 @@ const int X = 3;
 const int neginf = -99;
 
 int xdrop(const std::string& query, const std::string& reference, bool cut) {
+  auto encoder = getEncoder(DataType::nucleicAcid);
+  auto sim = selectMatrix(Similarity::nucleicAcid, 1, -1, -1);
+  auto ref = encoder.encode(reference);
+  auto quer = encoder.encode(query);
+
   int T_prime = 0, T = 0, L = 0, U = 0;
 
   int M = reference.length();
@@ -91,7 +96,8 @@ int xdrop(const std::string& query, const std::string& reference, bool cut) {
   auto cell_update = [&](int i, int j, int* k1, int* k2, int* k3, int z) {
     auto [index, score] = maxtuple({k2[z] - GAP_PENALTY,
                                     k2[z - 1] - GAP_PENALTY,
-                                    k1[z - 1] + simpleSimilarity(reference[i - 1], query[j - 1])});
+                                    k1[z - 1] + sim(ref[i - 1], quer[j - 1])
+                                    });
     if (score < T - X) {
       score = neginf;
     }
