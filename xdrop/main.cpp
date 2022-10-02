@@ -83,9 +83,10 @@ int xdrop(const std::string& query, const std::string& reference, bool cut) {
   Matrix<int> H(M + 1, N + 1, 0);
   Matrix<int> C(M + 1, N + 1, 0);
 
-  int* k1 = &((int*)calloc(min(M, N) + 2, sizeof(int)))[1];
-  int* k2 = &((int*)calloc(min(M, N) + 2, sizeof(int)))[1];
-  int* k3 = &((int*)calloc(min(M, N) + 2, sizeof(int)))[1];
+  // Can also be malloc with: k1[0] = 0, k2[0:2] = 0
+  int* k1 = &((int*) calloc(min(M, N) + 2, sizeof(int)))[1];
+  int* k2 = &((int*) calloc(min(M, N) + 2, sizeof(int)))[1];
+  int* k3 = &((int*) calloc(min(M, N) + 2, sizeof(int)))[1];
 
   auto cell_update = [&](int i, int j, int* k1, int* k2, int* k3, int z) {
     auto [index, score] = maxtuple({k2[z] - GAP_PENALTY,
@@ -120,7 +121,7 @@ int xdrop(const std::string& query, const std::string& reference, bool cut) {
       T_prime = max(T_prime, score);
     }
 
-    int minL = -1;
+    int minL = INT_MAX;
     for (size_t i = L; i < U + 1; i++) {
       int s = k3[i];
       if (s > neginf) {
@@ -129,7 +130,7 @@ int xdrop(const std::string& query, const std::string& reference, bool cut) {
       }
     }
 
-    int maxU = -1;
+    int maxU = 0;
     for (size_t i = L; i < U + 1; i++) {
       int s = k3[i];
       if (s > neginf) {
@@ -149,15 +150,18 @@ int xdrop(const std::string& query, const std::string& reference, bool cut) {
     U = min(U, M - 1);
     T = T_prime;
     rotate();
-  } while (L <= U + 1);
+    if (L > U + 1) {
+      break;
+    }
+  } while (true);
 
-  PLOGI << H.toString(); // DEBUG
-  PLOGI << C.toString(); // DEBUG
+  PLOGD << H.toString(); // DEBUG
+  PLOGD << C.toString(); // DEBUG
 
   free(&k3[-1]);
   free(&k2[-1]);
   free(&k1[-1]);
-  return 0;
+  return T;
 }
 
 int main(int argc, char** argv) {
@@ -174,13 +178,15 @@ int main(int argc, char** argv) {
   // m [0,1,1,1,3,5,4,3,2]
   // const std::string query{"AATGAGAA"};
   // const std::string reference{"AATGA"};
-  // const std::string query{"AATGAGAATTTTTTTTTTTTTTTTT"};
-  // const std::string reference{"AATGAAAAAAAAAAAAAAAAAA"};
-  for (size_t i = 0; i < queries.size(); i++) {
-    const std::string query = queries[i];
-    const std::string reference = refs[i];
-    xdrop(query, reference, true);
-  }
+  const std::string query{"AATGAGAATTTTTTTTTTTTTTTTT"};
+  const std::string reference{"AATGAAAAAAAAAAAAAAAAAA"};
+  int score = xdrop(query, reference, true);
+  // for (size_t i = 0; i < queries.size(); i++) {
+  //   const std::string query = queries[i];
+  //   const std::string reference = refs[i];
+  //   int score = xdrop(query, reference, true);
+  //   PLOGI.printf("The score is %d", score);
+  // }
 
   return 0;
 }
