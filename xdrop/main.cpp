@@ -96,13 +96,13 @@ int xdrop(const std::string& query, const std::string& reference, bool cut) {
   auto cell_update = [&](int i, int j, int* k1, int* k2, int* k3, int z) {
     auto [index, score] = maxtuple({k2[z] - GAP_PENALTY,
                                     k2[z - 1] - GAP_PENALTY,
-                                    k1[z - 1] + sim(ref[i - 1], quer[j - 1])
+                                    k1[z - 1] + sim(ref[i], quer[j])
                                     });
     if (score < T - X) {
       score = neginf;
     }
     k3[z] = score;
-    H(i, j) = score; // DEBUG
+    H(i+1, j+1) = score; // DEBUG
     return score;
   };
 
@@ -119,10 +119,8 @@ int xdrop(const std::string& query, const std::string& reference, bool cut) {
     k = k + 1;
     for (size_t i = L; i < U + 1; i++) {
       auto j = k - i - 1;
-      int _j = j + 1;
-      int _i = i + 1;
-      int score = cell_update(_i, _j, k1, k2, k3, i);
-      C(_i, _j) = 1; // DEBUG
+      int score = cell_update(i, j, k1, k2, k3, i);
+      C(i + 1, j + 1) = 1; // DEBUG
       T_prime = max(T_prime, score);
     }
 
