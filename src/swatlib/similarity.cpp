@@ -76,7 +76,7 @@ std::string swatlib::similarityToStr(swatlib::Similarity s) {
 
 template <typename T>
 swatlib::Matrix<T> convertMatrix(swatlib::Matrix<int8_t> om) {
-    auto [m, n] = m.shape();
+    auto [m, n] = om.shape();
     swatlib::Matrix<T> cm(m, n);
     T* cmp = cm.data();
     int8_t* omp = om.data();
