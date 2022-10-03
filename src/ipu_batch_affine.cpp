@@ -185,6 +185,12 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         sType = FLOAT;
         workerMultiplier = target.getNumWorkerContexts();
         break;
+      case VertexType::xdrop:
+        sType = INT; 
+        break;
+      default:
+        PLOGF.printf("Unknown vtype $d", vtype);
+        throw "Unknown vtype" 
     }
 
     TypeTraits traits = typeToTrait(sType);
@@ -253,21 +259,31 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
                                           {"Meta", CompMeta[i]},
                                           {"simMatrix", similarity},
                                           {"score", Scores[i]},
-                                          {"ARange", ARanges[i]},
-                                          {"BRange", BRanges[i]},
-                                          {"forwardOnly", forward_only},
                                       });
-      // graph.setFieldSize(vtx["C"], maxAB * workerMultiplier);
-      auto C_T = graph.addVariable(sType, {maxAB * workerMultiplier}, "C[" + std::to_string(i) + "]");
-      graph.setTileMapping(C_T, tileIndex);
-      graph.connect(vtx["C"], C_T);
-      // undef.add(program::WriteUndef(C_T));
 
-      // graph.setFieldSize(vtx["bG"], maxAB * workerMultiplier);
-      auto bG_T = graph.addVariable(sType, {maxAB * workerMultiplier}, "bG[" + std::to_string(i) + "]");
-      graph.setTileMapping(bG_T, tileIndex);
-      graph.connect(vtx["bG"], bG_T);
-      // undef.add(program::WriteUndef(bG_T));
+      if (vtype != VertexType::xdrop) {
+        graph.connect(vtx["ARange"], ARanges[i]);
+        graph.connect(vtx["BRange"], BRanges[i]);
+        graph.connect(vtx["forwardOnly"], forward_only);
+        // graph.setFieldSize(vtx["C"], maxAB * workerMultiplier);
+        auto C_T = graph.addVariable(sType, {maxAB * workerMultiplier}, "C[" + std::to_string(i) + "]");
+        graph.setTileMapping(C_T, tileIndex);
+        graph.connect(vtx["C"], C_T);
+        // undef.add(program::WriteUndef(C_T));
+
+        // graph.setFieldSize(vtx["bG"], maxAB * workerMultiplier);
+        auto bG_T = graph.addVariable(sType, {maxAB * workerMultiplier}, "bG[" + std::to_string(i) + "]");
+        graph.setTileMapping(bG_T, tileIndex);
+        graph.connect(vtx["bG"], bG_T);
+        // undef.add(program::WriteUndef(bG_T));
+      } else {
+        auto k_T = graph.addVariable(sType, {3, maxAB * workerMultiplier}, "K1[" + std::to_string(i) + "]");
+        graph.connect(vtx["K1"], k_T[0]);
+        graph.connect(vtx["K2"], k_T[1]);
+        graph.connect(vtx["K3"], k_T[2]);
+      }
+
+
 
       // if (vtype == VertexType::stripedasm) {
       //   assert(false && "Not Implemented");
