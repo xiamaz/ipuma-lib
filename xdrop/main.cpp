@@ -26,6 +26,8 @@
 #include <string>
 #include <vector>
 #include <tuple>
+#include "../src/ipuma.h"
+#include "../src/driver.hpp"
 
 
 using std::max;
@@ -119,13 +121,44 @@ int main(int argc, char** argv) {
   // int score = xdrop(query, reference, true);
   // std::cout <<  score << std::endl;
 
-  std::cout <<  "We" << "\t" << "Seq" << "\t" << "Equal" << endl;
-  auto scores_seqan = seqanAlign(TEST_refs, TEST_queries);
-  for (size_t i = 0; i < TEST_queries.size(); i++) {
-    const std::string query = TEST_queries[i];
-    const std::string reference = TEST_refs[i];
+  // Tests  
+  // std::vector<std::string> refs{TEST_refs};
+  // std::vector<std::string> qers{TEST_qers};
+
+  std::vector<std::string> refs{};
+  std::vector<std::string> qers{};
+
+  for (int j =0 ; j<10;j++) {
+    refs.emplace_back(TEST_refs[10]);
+    qers.emplace_back(TEST_queries[10]);
+  }
+
+
+
+
+  auto driver = ipu::batchaffine::SWAlgorithm({
+    .gapInit = -1,
+    .gapExtend = -1,
+    .matchValue = 1,
+    .mismatchValue = -1,
+    .ambiguityValue = -1,
+    .similarity = swatlib::Similarity::nucleicAcid,
+    .datatype = swatlib::DataType::nucleicAcid,
+  }, {1, 200, 40, 200 * 20, ipu::VertexType::xdrop, ipu::Algorithm::fillFirst});
+  driver.compare_local(refs, qers);
+  auto aln_results = driver.get_result();
+
+  // driver.compare_local(queries, refs);
+  // auto aln_results = driver.get_result();
+  // checkResults(aln_results);
+
+  std::cout <<  "We\t" << "IPU\t" << "Equal" << endl;
+  auto scores_seqan = seqanAlign(refs, qers);
+  for (size_t i = 0; i < qers.size(); i++) {
+    const std::string query = qers[i];
+    const std::string reference = refs[i];
     int score = xdrop(query, reference, true);
-    std::cout << score << "\t" << scores_seqan[i] << "\t" << (score == scores_seqan[i]) << endl;
+    std::cout << score  << "\t" << aln_results.scores[i] << "\t" <<  (score == aln_results.scores[i]) << endl;
   }
 
   // for (auto& [path_a, path_b] : INPUT_BATCHS) {

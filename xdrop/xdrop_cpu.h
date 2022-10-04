@@ -4,17 +4,11 @@
 
 #include <algorithm>
 #include <iostream>
-#include <nlohmann/json.hpp>
 #include <span>
 #include <string>
 #include <vector>
 #include <limits>
-
-#include "./data.h"
-
-#include "swatlib/swatlib.h"
-
-using json = nlohmann::json;
+#include "../src/swatlib/swatlib.h"
 
 using namespace std;
 using namespace swatlib;

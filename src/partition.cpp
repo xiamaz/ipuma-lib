@@ -274,23 +274,25 @@ namespace partition {
       curBucket++; // increment current bucket for round robin
     }
 
-    std::vector<int> sumB(1472, 0);
-    std::vector<int> minB(1472, 0);
-    std::vector<int> maxB(1472, 0);
-    for (int i = 0; i < map.buckets.size(); i++) {
-      auto& b = map.buckets[i];
-      sumB[i] = b.weight[0] + b.weight[1] + b.weight[2] + b.weight[3] + b.weight[4] + b.weight[5];
-      maxB[i] = maxW(b.weight);
-      minB[i] = minW(b.weight);
-    }
-    json js;
-    js["top"] = top;
-    js["sum_buckets"] = sumB;
-    js["max_buckets"] = maxB;
-    js["min_buckets"] = minB;
-    js["tag"] = "buckets";
+    // TODO: BUG: This segfaults
+    // std::vector<int> sumB(1472, 0);
+    // std::vector<int> minB(1472, 0);
+    // std::vector<int> maxB(1472, 0);
+    // for (int i = 0; i < map.buckets.size(); i++) {
+    //   auto& b = map.buckets[i];
+    //   sumB[i] = b.weight[0] + b.weight[1] + b.weight[2] + b.weight[3] + b.weight[4] + b.weight[5];
+    //   maxB[i] = maxW(b.weight);
+    //   minB[i] = minW(b.weight);
+    // }
+    // json js;
+    // js["top"] = top;
+    // js["sum_buckets"] = sumB;
+    // js["max_buckets"] = maxB;
+    // js["min_buckets"] = minB;
+    // js["tag"] = "buckets";
 
-    PLOGF << "IPUSWLOG" << js.dump();
+    // PLOGF << "IPUSWLOG" << js.dump();
+
     return true;
   }
 
@@ -448,21 +450,21 @@ namespace partition {
 
     // std::stringstream ss;
 
-    std::vector<int> sumB(1472, 0);
-    std::vector<int> minB(1472, 0);
-    std::vector<int> maxB(1472, 0);
-    for (int i = 0; i < map.buckets.size(); i++) {
-      auto& b = map.buckets[i];
-      sumB[i] = b.weight[0] + b.weight[1] + b.weight[2] + b.weight[3] + b.weight[4] + b.weight[5];
-      maxB[i] = maxW(b.weight);
-      minB[i] = minW(b.weight);
-    }
-    js["sum_buckets"] = sumB;
-    js["max_buckets"] = maxB;
-    js["min_buckets"] = minB;
-    js["tag"] = "buckets";
+    // std::vector<int> sumB(1472, 0);
+    // std::vector<int> minB(1472, 0);
+    // std::vector<int> maxB(1472, 0);
+    // for (int i = 0; i < map.buckets.size(); i++) {
+    //   auto& b = map.buckets[i];
+    //   sumB[i] = b.weight[0] + b.weight[1] + b.weight[2] + b.weight[3] + b.weight[4] + b.weight[5];
+    //   maxB[i] = maxW(b.weight);
+    //   minB[i] = minW(b.weight);
+    // }
+    // js["sum_buckets"] = sumB;
+    // js["max_buckets"] = maxB;
+    // js["min_buckets"] = minB;
+    // js["tag"] = "buckets";
 
-    PLOGF << "IPUSWLOG" << js.dump();
+    // PLOGF << "IPUSWLOG" << js.dump();
 
     return true;
   }

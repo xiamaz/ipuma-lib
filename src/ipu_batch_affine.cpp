@@ -67,7 +67,7 @@ class FillCallback final : public poplar::StreamCallback {
 
  private:
   void close(void* __restrict p) {
-    PLOGD.printf("Send teardown message to IPU, id %d", id);
+    PLOGW.printf("Send teardown message to IPU, id %d", id);
     std::vector<int32_t> aa(size + 1, 0);
     memcpy(p, aa.data(), aa.size() * 4);
   }
@@ -190,7 +190,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         break;
       default:
         PLOGF.printf("Unknown vtype $d", vtype);
-        throw "Unknown vtype" 
+        throw "Unknown vtype";
     }
 
     TypeTraits traits = typeToTrait(sType);
@@ -277,13 +277,12 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         graph.connect(vtx["bG"], bG_T);
         // undef.add(program::WriteUndef(bG_T));
       } else {
-        auto k_T = graph.addVariable(sType, {3, maxAB * workerMultiplier}, "K1[" + std::to_string(i) + "]");
+        auto k_T = graph.addVariable(sType, {3, (maxAB+2) * workerMultiplier}, "K1[" + std::to_string(i) + "]");
+        graph.setTileMapping(k_T, tileIndex);
         graph.connect(vtx["K1"], k_T[0]);
         graph.connect(vtx["K2"], k_T[1]);
         graph.connect(vtx["K3"], k_T[2]);
       }
-
-
 
       // if (vtype == VertexType::stripedasm) {
       //   assert(false && "Not Implemented");
@@ -577,6 +576,11 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   blocking_join_prepared_remote_compare(*job);
 }
 
+void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end) {
+  auto job = async_submit_prepared_remote_compare(inputs_begin, inputs_end, results_begin, results_end);
+  blocking_join_prepared_remote_compare(*job);
+}
+
 void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::vector<std::string>& B, bool errcheck) {
   swatlib::TickTock tPrepare, tCompare;
   std::vector<int> mapping(A.size(), 0);
@@ -615,8 +619,8 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
   // unord_a_range.data(),
   //                         unord_b_range.data());
   slotToken slot = 0;
+  slot = queue_slot(maxbucket);
   if (algoconfig.useRemoteBuffer) {
-    slot = queue_slot(maxbucket);
     upload(&*inputs.begin() + 2, &*inputs.end() - 2, slot);
   }
   tCompare.tick();
@@ -755,8 +759,8 @@ void SWAlgorithm::compare_mn_local(const std::vector<std::string>& Seqs, const C
 #endif
 
   slotToken slot = 0;
+  slot = queue_slot(maxBucket);
   if (algoconfig.useRemoteBuffer) {
-    slot = queue_slot(maxBucket);
     upload(&*inputs.begin(), &*inputs.end(), slot);
   }
   prepared_remote_compare(&*inputs.begin(), &*inputs.end(), &*results.begin(), &*results.end(), slot);
@@ -1012,7 +1016,7 @@ void SWAlgorithm::run_executor() {
     engines[i]->connectStreamToCallback(STREAM_CONCAT_ALL_N(0), std::move(rb));
 
     // Connect input
-    std::unique_ptr<FillCallback> cb{new FillCallback(work_queue, resultTable, tableMutex,algoconfig.getInputBufferSize32b(), i)};
+    std::unique_ptr<FillCallback> cb{new FillCallback(work_queue, resultTable, tableMutex, algoconfig.getInputBufferSize32b(), i)};
     engines[i]->connectStreamToCallback(HOST_STREAM_CONCAT_N(0), std::move(cb));
 
     // Server

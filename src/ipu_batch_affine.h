@@ -103,6 +103,7 @@ class SWAlgorithm : public IPUAlgorithm {
 
   // Remote bufffer
   void prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token = 0);
+  void prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end);
 
   Job* async_submit_prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end);
   void blocking_join_prepared_remote_compare(Job& job);

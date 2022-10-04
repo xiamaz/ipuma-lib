@@ -9,6 +9,7 @@ add_gp_library(
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_batch_asm.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_multi_asm.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_multi_affine.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_xdrop.cpp
   HEADERS
 )
 
@@ -34,7 +35,7 @@ add_dependencies(IPUMA_LIBRARY  algoipu.gp_codelets)
 
 include(FetchContent)
 if (NOT channel_POPULATED)
-    FetchContent_Declare(channel URL https://github.com/andreiavrammsd/cpp-channel/archive/refs/tags/v0.7.1.tar.gz)
+    FetchContent_Declare(channel URL https://github.com/andreiavrammsd/cpp-channel/archive/refs/tags/v0.7.2.tar.gz)
     FetchContent_Populate(channel)
     target_include_directories(IPUMA_LIBRARY PUBLIC ${channel_SOURCE_DIR}/include)
     # OR

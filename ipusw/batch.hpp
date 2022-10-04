@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <vector>
 #include <string>
+#include "../src/ipuma.h"
 
 #include <plog/Log.h>
 
