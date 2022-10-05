@@ -137,10 +137,10 @@ int xdrop2k(const std::string& query, const std::string& reference, bool cut) {
   int* k2 = &((int*) calloc(M + 2, sizeof(int)))[1];
 
   auto cell_update = [&](int i, int j, int* k1, int* k2, int z, int &lastval) {
-    int new_lastval = k1[z] + sim(ref[i], quer[j]);
+    int new_lastval = k1[z];
     auto [index, score] = maxtuple({k2[z] - GAP_PENALTY,
                                     k2[z - 1] - GAP_PENALTY,
-                                    lastval});
+                                    lastval + sim(ref[i], quer[j])});
     lastval = new_lastval;
     if (score < T - X) {
       score = neginf;
