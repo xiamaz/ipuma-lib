@@ -17,16 +17,15 @@ inline int min(int a, int b) {
 }
 
 const int GAP_PENALTY = 1;
-const int X = 30;
+const int X = 5000;
 const int neginf = -9999;
 
-typedef short sType;
+typedef int sType;
 
 class MultiXDrop : public poplar::MultiVertex {
  private:
   poplar::Output<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>> K1;
   poplar::Output<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>> K2;
-  poplar::Output<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>> K3;
 
  public:
   // Fields
@@ -65,7 +64,6 @@ class MultiXDrop : public poplar::MultiVertex {
 
       sType* k1 = &K1[workerId * (maxAB+2)];
       sType* k2 = &K2[workerId * (maxAB+2)];
-      sType* k3 = &K3[workerId * (maxAB+2)];
 
 
       // Algo begin
@@ -75,18 +73,19 @@ class MultiXDrop : public poplar::MultiVertex {
 
         memset(k1, 0, (maxAB + 2) * sizeof(sType));
         memset(k2, 0, (maxAB + 2) * sizeof(sType));
-        memset(k3, 0, (maxAB + 2) * sizeof(sType));
         k1 = &k1[1];
         k2 = &k2[1];
-        k3 = &k3[1];
 
-        auto cell_update = [&](int i, int j, sType* k1, sType* k2, sType* k3, int z) {
+        auto cell_update = [&](int i, int j, sType* k1, sType* k2, int z, sType &lastval) {
+          sType new_lastval = k1[z];
           int score = max(k2[z] - GAP_PENALTY, k2[z - 1] - GAP_PENALTY);
-          score = max(score, k1[z - 1] + simMatrix[a[i]][b[j]]);
+          score = max(score, lastval + simMatrix[a[i]][b[j]]);
+          lastval = new_lastval;
+
           if (score < T - X) {
             score = neginf;
           }
-          k3[z] = score;
+          k1[z] = score;
           return score;
         };
 
@@ -94,22 +93,22 @@ class MultiXDrop : public poplar::MultiVertex {
           sType* t;  // 1->3, 2->1, 3->2
           t = k1;
           k1 = k2;
-          k2 = k3;
-          k3 = t;
+          k2 = t;
         };
 
         int k = 0;
         do {
           k = k + 1;
+          sType lastval = k1[L-1];
           for (size_t i = L; i < U + 1; i++) {
             auto j = k - i - 1;
-            int score = cell_update(i, j, k1, k2, k3, i);
+            int score = cell_update(i, j, k1, k2, i, lastval);
             T_prime = max(T_prime, score);
           }
 
           int minL = 99999;
           for (unsigned i = L; i < U + 1; i++) {
-            int s = k3[i];
+            int s = k1[i];
             if (s > neginf) {
               minL = i;
               break;
@@ -118,7 +117,7 @@ class MultiXDrop : public poplar::MultiVertex {
 
           int maxU = 0;
           for (unsigned i = L; i < U + 1; i++) {
-            int s = k3[i];
+            int s = k1[i];
             if (s > neginf) {
               maxU = i;
             }

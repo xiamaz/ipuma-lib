@@ -190,7 +190,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         break;
       case VertexType::multixdrop:
         // This ok?
-        sType = SHORT; 
+        sType = INT; 
         workerMultiplier = target.getNumWorkerContexts();
         break;
       default:
@@ -265,7 +265,18 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
                                           {"score", Scores[i]},
                                       });
 
-      if (vtype != VertexType::xdrop && vtype != VertexType::multixdrop) {
+      if (vtype == VertexType::xdrop) {
+        auto k_T = graph.addVariable(sType, {3, (maxAB+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
+        graph.setTileMapping(k_T, tileIndex);
+        graph.connect(vtx["K1"], k_T[0]);
+        graph.connect(vtx["K2"], k_T[1]);
+        graph.connect(vtx["K3"], k_T[2]);
+      } else if (vtype == VertexType::multixdrop) {
+        auto k_T = graph.addVariable(sType, {2, (maxAB+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
+        graph.setTileMapping(k_T, tileIndex);
+        graph.connect(vtx["K1"], k_T[0]);
+        graph.connect(vtx["K2"], k_T[1]);
+      } else {
         graph.connect(vtx["ARange"], ARanges[i]);
         graph.connect(vtx["BRange"], BRanges[i]);
         graph.connect(vtx["forwardOnly"], forward_only);
@@ -280,12 +291,6 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         graph.setTileMapping(bG_T, tileIndex);
         graph.connect(vtx["bG"], bG_T);
         // undef.add(program::WriteUndef(bG_T));
-      } else {
-        auto k_T = graph.addVariable(sType, {3, (maxAB+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
-        graph.setTileMapping(k_T, tileIndex);
-        graph.connect(vtx["K1"], k_T[0]);
-        graph.connect(vtx["K2"], k_T[1]);
-        graph.connect(vtx["K3"], k_T[2]);
       }
 
       // if (vtype == VertexType::stripedasm) {
