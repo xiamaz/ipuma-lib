@@ -100,7 +100,7 @@ std::vector<int> seqanAlign(const std::vector<std::string>& queryStrs, const std
 
 int main(int argc, char** argv) {
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
-  plog::init(plog::info, &consoleAppender);
+  plog::init(plog::debug, &consoleAppender);
 
   //    0 1 2 3 4 5 6 7 n
   // 0 [0,0,0,0,0,0,0,0,0]
@@ -122,16 +122,16 @@ int main(int argc, char** argv) {
   // std::cout <<  score << std::endl;
 
   // Tests  
-  // std::vector<std::string> refs{TEST_refs};
-  // std::vector<std::string> qers{TEST_qers};
+  std::vector<std::string> refs = TEST_refs;
+  std::vector<std::string> qers = TEST_queries;
 
-  std::vector<std::string> refs{};
-  std::vector<std::string> qers{};
+  // std::vector<std::string> refs{};
+  // std::vector<std::string> qers{};
 
-  for (int j =0 ; j<10;j++) {
-    refs.emplace_back(TEST_refs[10]);
-    qers.emplace_back(TEST_queries[10]);
-  }
+  // for (int j =0 ; j<10;j++) {
+  //   refs.emplace_back(TEST_refs[10]);
+  //   qers.emplace_back(TEST_queries[10]);
+  // }
 
 
 
@@ -152,13 +152,17 @@ int main(int argc, char** argv) {
   // auto aln_results = driver.get_result();
   // checkResults(aln_results);
 
-  std::cout <<  "We\t" << "IPU\t" << "Equal" << endl;
+  std::cout <<  "We\t" << "We2k\t" << "IPU\t" << "Equal" << endl;
   auto scores_seqan = seqanAlign(refs, qers);
   for (size_t i = 0; i < qers.size(); i++) {
     const std::string query = qers[i];
     const std::string reference = refs[i];
     int score = xdrop(query, reference, true);
-    std::cout << score  << "\t" << aln_results.scores[i] << "\t" <<  (score == aln_results.scores[i]) << endl;
+    int score2 = xdrop2k(query, reference, true);
+    std::cout << score  << "\t"
+    << score2 << "\t"
+     << aln_results.scores[i] << "\t"
+      <<  (score == aln_results.scores[i]) << endl;
   }
 
   // for (auto& [path_a, path_b] : INPUT_BATCHS) {

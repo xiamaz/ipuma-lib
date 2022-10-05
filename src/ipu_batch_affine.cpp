@@ -188,6 +188,11 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
       case VertexType::xdrop:
         sType = INT; 
         break;
+      case VertexType::multixdrop:
+        // This ok?
+        sType = SHORT; 
+        workerMultiplier = target.getNumWorkerContexts();
+        break;
       default:
         PLOGF.printf("Unknown vtype $d", vtype);
         throw "Unknown vtype";
@@ -196,8 +201,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     TypeTraits traits = typeToTrait(sType);
     void* similarityBuffer;
     convertSimilarityMatrix(target, sType, similarityData, &similarityBuffer);
-    Tensor similarity;
-    similarity = graph.addConstant(sType, {m, n}, similarityBuffer, traits, false, "similarity");
+    Tensor similarity = graph.addConstant(sType, {m, n}, similarityBuffer, traits, false, "similarity");
     free(similarityBuffer);
 
     // TypeTraits traits = typeToTrait(sType);
@@ -261,7 +265,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
                                           {"score", Scores[i]},
                                       });
 
-      if (vtype != VertexType::xdrop) {
+      if (vtype != VertexType::xdrop && vtype != VertexType::multixdrop) {
         graph.connect(vtx["ARange"], ARanges[i]);
         graph.connect(vtx["BRange"], BRanges[i]);
         graph.connect(vtx["forwardOnly"], forward_only);
@@ -277,7 +281,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         graph.connect(vtx["bG"], bG_T);
         // undef.add(program::WriteUndef(bG_T));
       } else {
-        auto k_T = graph.addVariable(sType, {3, (maxAB+2) * workerMultiplier}, "K1[" + std::to_string(i) + "]");
+        auto k_T = graph.addVariable(sType, {3, (maxAB+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
         graph.setTileMapping(k_T, tileIndex);
         graph.connect(vtx["K1"], k_T[0]);
         graph.connect(vtx["K2"], k_T[1]);

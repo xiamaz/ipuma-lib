@@ -17,18 +17,20 @@ inline int min(int a, int b) {
 }
 
 const int GAP_PENALTY = 1;
-const int X = 4;
+const int X = 30;
 const int neginf = -9999;
 
-class XDrop : public poplar::Vertex {
+typedef short sType;
+
+class MultiXDrop : public poplar::MultiVertex {
  private:
-  poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> K1;
-  poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> K2;
-  poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> K3;
+  poplar::Output<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>> K1;
+  poplar::Output<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>> K2;
+  poplar::Output<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>> K3;
 
  public:
   // Fields
-  poplar::Vector<poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>>> simMatrix;
+  poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>> simMatrix;
   poplar::Input<size_t> maxNPerTile;
   poplar::Input<int> gapInit;
   poplar::Input<int> gapExt;
@@ -38,7 +40,7 @@ class XDrop : public poplar::Vertex {
   poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Meta;
   poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> score;
 
-  bool compute() {
+  bool compute(unsigned workerId) {
     const bool cut = true;
 
     int gI = *gapInit;
@@ -46,18 +48,24 @@ class XDrop : public poplar::Vertex {
 
     uint8_t* cSeqs = (uint8_t*)&(Seqs[0]);
 
-    for (int n = 0; n < maxNPerTile; ++n) {
+    for (int n = 0; n < maxNPerTile; n += MultiVertex::numWorkers()) {
       int lastNoGap, prevNoGap;
 
       auto a_len = Meta[4 * n];
       int j_offset = Meta[4 * n + 1];
       auto b_len = Meta[4 * n + 2];
       int i_offset = Meta[4 * n + 3];
+      int M = a_len;
+      int N = b_len;
 
       uint8_t* a = cSeqs + j_offset;
       uint8_t* b = cSeqs + i_offset;
 
       if (a_len == 0 || b_len == 0) break;
+
+      sType* k1 = &K1[workerId * (maxAB+2)];
+      sType* k2 = &K2[workerId * (maxAB+2)];
+      sType* k3 = &K3[workerId * (maxAB+2)];
 
 
       // Algo begin
@@ -65,20 +73,14 @@ class XDrop : public poplar::Vertex {
       {
         unsigned L = 0, U = 0;
 
-        int M = a_len;
-        int N = b_len;
-
-        int* k1 = &K1[0];
-        int* k2 = &K2[0];
-        int* k3 = &K3[0];
-        memset(k1, 0, (maxAB + 2) * sizeof(int));
-        memset(k2, 0, (maxAB + 2) * sizeof(int));
-        memset(k3, 0, (maxAB + 2) * sizeof(int));
+        memset(k1, 0, (maxAB + 2) * sizeof(sType));
+        memset(k2, 0, (maxAB + 2) * sizeof(sType));
+        memset(k3, 0, (maxAB + 2) * sizeof(sType));
         k1 = &k1[1];
         k2 = &k2[1];
         k3 = &k3[1];
 
-        auto cell_update = [&](int i, int j, int* k1, int* k2, int* k3, int z) {
+        auto cell_update = [&](int i, int j, sType* k1, sType* k2, sType* k3, int z) {
           int score = max(k2[z] - GAP_PENALTY, k2[z - 1] - GAP_PENALTY);
           score = max(score, k1[z - 1] + simMatrix[a[i]][b[j]]);
           if (score < T - X) {
@@ -89,7 +91,7 @@ class XDrop : public poplar::Vertex {
         };
 
         auto rotate = [&]() {
-          int* t;  // 1->3, 2->1, 3->2
+          sType* t;  // 1->3, 2->1, 3->2
           t = k1;
           k1 = k2;
           k2 = k3;
