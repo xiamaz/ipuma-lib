@@ -2,30 +2,30 @@ from typing import Dict, Any
 from math import inf, floor
 
 sequences1 = [
-    "AAAAAAA",
-    "AAA",
-    "AAAA",
-    "ATAT",
-    "AAAT",
-    "AAAA",
-    "AAAAAAAAAAAAAAA",
-    "AAATTTTTTTTTTT",
-    "TTTTTTTTTTTAAA",
-    # "aaaaaaaaaaaaa"
-    "CATCGCCCGATTTTCACGTTCGAGAGCGGCGGAGCGGATCGCTCCTTGTTCTTTTTGCCAGGCCCGTAGTTCTTCACCCGTTTTGAATTCGGGTTTGTAT",
+    # "AAAAAAA",
+    # "AAA",
+    # "AAAA",
+    # "ATAT",
+    # "AAAT",
+    # "AAAA",
+    # "AAAAAAAAAAAAAAA",
+    # "AAATTTTTTTTTTT",
+    # "TTTTTTTTTTTAAA",
+    # # "aaaaaaaaaaaaa"
+    # "CATCGCCCGATTTTCACGTTCGAGAGCGGCGGAGCGGATCGCTCCTTGTTCTTTTTGCCAGGCCCGTAGTTCTTCACCCGTTTTGAATTCGGGTTTGTAT",
     "GCCAGGCAAAATCGGCGTTTCTGGCGGCGATGAGCCATGAGATCCGCACACCGCTGTACGGTATTCTCGGCACTGCTCACTTGATGGCAGATAACGCGCC",
 ]
 sequences2 = [
-    "AAAAAATTAAAAAAA",
-    "AAA",
-    "AAA",
-    "ATAT",
-    "AAAA",
-    "AAAT",
-    "AAATTTTTTTTTTTT",
-    "AAA",
-    "TTAAATT",
-    "CATCGCCCGATTTTCACGTTCGAGAGCGGCGGAGCGGATCGCTCCTTGTTCTTTTTGCCAGGCCAGTAGTTCTTCACCCGTTTTGAATGCGGGTTTGATA",
+    # "AAAAAATTAAAAAAA",
+    # "AAA",
+    # "AAA",
+    # "ATAT",
+    # "AAAA",
+    # "AAAT",
+    # "AAATTTTTTTTTTTT",
+    # "AAA",
+    # "TTAAATT",
+    # "CATCGCCCGATTTTCACGTTCGAGAGCGGCGGAGCGGATCGCTCCTTGTTCTTTTTGCCAGGCCAGTAGTTCTTCACCCGTTTTGAATGCGGGTTTGATA",
     "GCCAGGCAAAATCGGCGTTTCTGGCGGCGATGAGCCATGAGATCCGCACACCGCTGTACGGTATTCTCGGCACTGCTCAACTGCTGGCAGATAACCCCGC",
     # "aaabbaaaaaaaa"
 ]
@@ -181,6 +181,7 @@ def greedyXdrop(s1, s2):
                 R[1][k+R_offset] = -inf
             # print(R)
 
+        print(Tt)
         T[d+xdrop_offset] = Tt
 
         for rk, v in enumerate(R[1]):
@@ -196,7 +197,7 @@ def greedyXdrop(s1, s2):
         U = min(Umax, Umin-2)
         R = R[::-1]
 
-        if L > U + 1 or d >= M + N:
+        if L > U + 2 or d >= M + N:
             break
 
     return Tt
