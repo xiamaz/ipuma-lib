@@ -16,9 +16,9 @@ struct __attribute__((__packed__)) Comparison {
 
 typedef std::vector<Comparison> Comparisons;
 
-enum class VertexType { cpp, assembly, multi, multiasm, xdrop, multixdrop};
-static const std::vector<std::string> vertexTypeNames = {"cpp", "assembly", "multi", "multiasm", "xdrop", "multixdrop"};
-static const std::string typeLabels[] = {"SWAffine", "SWAffineAsm", "MultiSWAffine", "MultiSWAffineAsm", "XDrop", "MultiXDrop"};
+enum class VertexType { cpp, assembly, multi, multiasm, xdrop, multixdrop, greedyxdrop};
+static const std::vector<std::string> vertexTypeNames = {"cpp", "assembly", "multi", "multiasm", "xdrop", "multixdrop", "greedyxdrop"};
+static const std::string typeLabels[] = {"SWAffine", "SWAffineAsm", "MultiSWAffine", "MultiSWAffineAsm", "XDrop", "MultiXDrop", "GreedyXDrop",};
 
 enum class Algorithm {fillFirst, roundRobin, greedy};
 static const std::vector<std::string> algoNames = {"fillfirst", "roundrobin", "greedy"};

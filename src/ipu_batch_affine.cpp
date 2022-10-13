@@ -193,6 +193,10 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         sType = INT; 
         workerMultiplier = target.getNumWorkerContexts();
         break;
+      case VertexType::greedyxdrop:
+        // This ok?
+        sType = INT; 
+        break;
       default:
         PLOGF.printf("Unknown vtype $d", vtype);
         throw "Unknown vtype";
@@ -261,7 +265,6 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
                                           {"maxNPerTile", maxBatches},
                                           {"Seqs", Seqs[i]},
                                           {"Meta", CompMeta[i]},
-                                          {"simMatrix", similarity},
                                           {"score", Scores[i]},
                                       });
 
@@ -271,11 +274,28 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         graph.connect(vtx["K1"], k_T[0]);
         graph.connect(vtx["K2"], k_T[1]);
         graph.connect(vtx["K3"], k_T[2]);
+        graph.connect(vtx["simMatrix"], similarity);
       } else if (vtype == VertexType::multixdrop) {
         auto k_T = graph.addVariable(sType, {2, (maxAB+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
         graph.setTileMapping(k_T, tileIndex);
         graph.connect(vtx["K1"], k_T[0]);
         graph.connect(vtx["K2"], k_T[1]);
+        graph.connect(vtx["simMatrix"], similarity);
+      } else if (vtype == VertexType::greedyxdrop) {
+        int mis = -2;
+        int mat = 2;
+        int X = 10;
+        int xdrop_offset = ((X + mat / 2) / (mat - mis)) + 1;
+
+        Tensor R0 = graph.addVariable(INT, {2 * maxAB});
+        graph.setTileMapping(R0, tileIndex);
+        Tensor R1 = graph.addVariable(INT, {2 * maxAB});
+        graph.setTileMapping(R1, tileIndex);
+        Tensor T = graph.addVariable(INT, {maxAB+maxAB+xdrop_offset+1});
+        graph.setTileMapping(T, tileIndex);
+        graph.connect(vtx["VTR0"], R0);
+        graph.connect(vtx["VTR1"], R1);
+        graph.connect(vtx["VTT"], T);
       } else {
         graph.connect(vtx["ARange"], ARanges[i]);
         graph.connect(vtx["BRange"], BRanges[i]);
@@ -290,6 +310,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         auto bG_T = graph.addVariable(sType, {maxAB * workerMultiplier}, "bG[" + std::to_string(i) + "]");
         graph.setTileMapping(bG_T, tileIndex);
         graph.connect(vtx["bG"], bG_T);
+        graph.connect(vtx["simMatrix"], similarity);
         // undef.add(program::WriteUndef(bG_T));
       }
 
