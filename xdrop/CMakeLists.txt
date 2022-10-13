@@ -14,4 +14,4 @@ list (APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../seqan3/build_syst
 add_executable(seqdrop seqxdrop.cpp)
 set_target_properties(seqdrop PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-target_link_libraries (seqdrop seqan3::seqan3)
+target_link_libraries (seqdrop seqan3::seqan3 swatlib)

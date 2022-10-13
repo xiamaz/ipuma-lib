@@ -8,6 +8,7 @@
 #include <seqan3/alphabet/nucleotide/dna4.hpp>
 #include <seqan3/core/debug_stream.hpp>
 
+#include "../src/swatlib/swatlib.h"
 #include "./data.h"
 
 seqan3::dna4_vector convertSequence(const std::string& string) {
@@ -49,8 +50,10 @@ std::vector<int> seqanAlign(const std::vector<std::string>& queryStrs, const std
 }
 
 int xdropAlign(const std::string& s1, const std::string& s2) {
-    int M = s1.size();
     int N = s2.size();
+    int M = s1.size();
+
+    swatlib::Matrix<int> H(M + 1, N + 1, 0); // DEBUG
 
     int mis = -2;
     int mat = 2;
@@ -65,14 +68,16 @@ int xdropAlign(const std::string& s1, const std::string& s2) {
     };
 
     int i = 0;
-    for (; i < std::min(M, N) && s1[i] == s2[i]; ++i){}
+    for (; i < std::min(M, N) && s1[i] == s2[i]; ++i){
+            H(i, i) = H(i, i)+1; // DEBUG
+    }
 
     int R_offset = N;
 
     int* R0 = (int*) malloc(2 * N * sizeof(int));
     int* R1 = (int*) malloc(2 * N * sizeof(int));
     memset(R0, -inf, 2*N*sizeof(int));
-    memset(R1, 0, 2*N*sizeof(int));
+    memset(R1, -inf, 2*N*sizeof(int));
     R0[R_offset] = i;
 
     int xdrop_offset = ((X + mat / 2) / (mat - mis)) + 1;
@@ -107,12 +112,16 @@ int xdropAlign(const std::string& s1, const std::string& s2) {
             }
             int j = i - k;
             int cs = calcSPrime(i+j, d);
+            if (i >= 0 && j>=0 && i < M && j < N) H(i, j) = H(i, j)+1; // DEBUG
             // std::cout << i << " " << j << " " << cs << std::endl;
-            if (i >= 0 && cs >= T[dd+xdrop_offset] - X) {
+            if (i >= 0 && j >= 0 && cs >= T[dd+xdrop_offset] - X) {
                 while (i < M && j < N && s1[i] == s2[j]) {
+                    H(i, j) = H(i, j)+1; // DEBUG
                     ++i, ++j;
                 }
                 R1[k + R_offset] = i;
+                std::cout << i << " ,j=" << j << " ,M=" << M << " ,N=" << N << " ,cs=" << cs << std::endl;
+                cs = calcSPrime(i+j, d);
                 Tt = std::max(Tt, cs);
             } else {
                 R1[k + R_offset] = -inf;
@@ -144,6 +153,7 @@ int xdropAlign(const std::string& s1, const std::string& s2) {
     free(R0);
     free(R1);
     free(T);
+    std::cout << H.toString();
     return Tt;
 }
 
@@ -151,7 +161,7 @@ int main()
 {
     for (int i = 0; i < TEST_refs.size(); ++i) {
         auto score = xdropAlign(TEST_refs[i], TEST_queries[i]);
-        seqan3::debug_stream << "s1=" << TEST_refs[i] << "\ns1=" << TEST_queries[i] << "\n" << "   Score=" << score << "\n######\n";
+        seqan3::debug_stream << "s1=" << TEST_refs[i] << "\ns2=" << TEST_queries[i] << "\n" << "   Score=" << score << "\n######\n";
     }
     // Invoke the pairwise alignment which returns a lazy range over alignment results.
     // auto score = seqanAlign(TEST_refs, TEST_queries);

@@ -118,7 +118,11 @@ std::string swatlib::Matrix<T>::toString() {
         for (int j = 0; j < n; j++) {
             if (j > 0)
                 ss << ",";
+            if (get(i, j) != 0) {
+               ss << "\033[41m";
+            }
             ss << get(i, j);
+            ss << "\033[0m";
         }
         ss << "\n";
     }
