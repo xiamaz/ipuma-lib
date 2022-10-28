@@ -193,6 +193,11 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         sType = INT; 
         workerMultiplier = target.getNumWorkerContexts();
         break;
+      case VertexType::multibandxdrop:
+        // This ok?
+        sType = INT; 
+        workerMultiplier = target.getNumWorkerContexts();
+        break;
       case VertexType::greedyxdrop:
         // This ok?
         sType = INT; 
@@ -259,7 +264,6 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
       VertexRef vtx = graph.addVertex(frontCs, vertexTypeToIpuLabel(vtype),
                                       {
                                           {"bufSize", bufSize},
-                                          {"maxAB", maxAB},
                                           {"gapInit", gapInit},
                                           {"gapExt", gapExt},
                                           {"maxNPerTile", maxBatches},
@@ -271,12 +275,23 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
       if (vtype == VertexType::xdrop) {
         auto k_T = graph.addVariable(sType, {3, (maxAB+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
         graph.setTileMapping(k_T, tileIndex);
+        graph.connect(vtx["maxAB"], maxAB);
         graph.connect(vtx["K1"], k_T[0]);
         graph.connect(vtx["K2"], k_T[1]);
         graph.connect(vtx["K3"], k_T[2]);
         graph.connect(vtx["simMatrix"], similarity);
       } else if (vtype == VertexType::multixdrop) {
         auto k_T = graph.addVariable(sType, {2, (maxAB+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
+        graph.connect(vtx["maxAB"], maxAB);
+        graph.setTileMapping(k_T, tileIndex);
+        graph.connect(vtx["K1"], k_T[0]);
+        graph.connect(vtx["K2"], k_T[1]);
+        graph.connect(vtx["simMatrix"], similarity);
+      } else if (vtype == VertexType::multibandxdrop) {
+        int scaledMaxAB = maxAB / 2;
+        PLOGF.printf("MAXAB HOST = %d", maxAB);
+        auto k_T = graph.addVariable(sType, {2, (scaledMaxAB+2+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
+        graph.connect(vtx["maxAB"], scaledMaxAB);
         graph.setTileMapping(k_T, tileIndex);
         graph.connect(vtx["K1"], k_T[0]);
         graph.connect(vtx["K2"], k_T[1]);
@@ -287,6 +302,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         int X = 10;
         int xdrop_offset = ((X + mat / 2) / (mat - mis)) + 1;
 
+        graph.connect(vtx["maxAB"], maxAB);
         Tensor R0 = graph.addVariable(INT, {2 * maxAB});
         graph.setTileMapping(R0, tileIndex);
         Tensor R1 = graph.addVariable(INT, {2 * maxAB});
@@ -297,6 +313,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         graph.connect(vtx["VTR1"], R1);
         graph.connect(vtx["VTT"], T);
       } else {
+        graph.connect(vtx["maxAB"], maxAB);
         graph.connect(vtx["ARange"], ARanges[i]);
         graph.connect(vtx["BRange"], BRanges[i]);
         graph.connect(vtx["forwardOnly"], forward_only);
