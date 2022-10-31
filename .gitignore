@@ -14,3 +14,4 @@ contrib/collect_comm_stats
 !/download/download_benchmark_datasets.sh
 /output
 xdrop/data/inputs_ab/*
+logs/
