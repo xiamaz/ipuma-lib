@@ -149,7 +149,7 @@ class RecvCallback final : public poplar::StreamCallback {
 std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigned long activeTiles, unsigned long maxAB,
                                          unsigned long bufSize, unsigned long maxBatches,
                                          const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt,
-                                         bool use_remote_buffer, int transmissionPrograms, int buf_rows, bool forward_only, int ioTiles) {
+                                         int transmissionPrograms, int buf_rows, bool forward_only, int ioTiles) {
   int buffers = transmissionPrograms;
 
   std::vector<program::Program> progs(buffers);
@@ -290,7 +290,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
       } else if (vtype == VertexType::multibandxdrop) {
         int scaledMaxAB = maxAB / 2;
         PLOGF.printf("MAXAB HOST = %d", maxAB);
-        auto k_T = graph.addVariable(sType, {2, (scaledMaxAB+2+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
+        auto k_T = graph.addVariable(sType, {2, ((size_t)scaledMaxAB+2+2) * (size_t) workerMultiplier}, "K[" + std::to_string(i) + "]");
         graph.connect(vtx["maxAB"], scaledMaxAB);
         graph.setTileMapping(k_T, tileIndex);
         graph.connect(vtx["K1"], k_T[0]);
@@ -330,17 +330,6 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         graph.connect(vtx["simMatrix"], similarity);
         // undef.add(program::WriteUndef(bG_T));
       }
-
-      // if (vtype == VertexType::stripedasm) {
-      //   assert(false && "Not Implemented");
-      //   graph.connect(vtx["simWidth"], m);
-      //   graph.setFieldSize(vtx["tS"], maxAB * workerMultiplier);
-      // }
-      // if (vtype == VertexType::multistriped || vtype == VertexType::multistripedasm) {
-      //   assert(false && "Not Implemented");
-      //   graph.setFieldSize(vtx["tS"], maxAB * target.getNumWorkerContexts());
-      //   graph.setFieldSize(vtx["locks"], target.getNumWorkerContexts());
-      // }
       graph.setTileMapping(vtx, tileIndex);
       graph.setPerfEstimate(vtx, 1);
     }
@@ -355,50 +344,13 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     auto slotT = graph.addVariable(INT, {1}, "SlotToken+1");
     graph.setTileMapping(slotT, tileCount - 1);
     DataStream device_stream_concat;
-    if (use_remote_buffer) {
-      const char* units[] = {"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
-      int b_size = inputs_tensor.numElements() * 4;
-      PLOGI.printf("Use a RemoteBuffer of bytes %.2f", (double)b_size);
-      int i = 0;
-      for (; b_size > 1024; i++) {
-        b_size /= 1024;
-      }
-      PLOGI.printf("Use a RemoteBuffer of %dx(Banksize %.2f %s)", buf_rows, (double)b_size, units[i]);
-      auto offset = graph.addVariable(INT, {1}, "Remote Buffer Offset");
-      graph.setTileMapping(offset, 0);
-      // graph.setInitialValue<int>(offset, {0});
-      // auto cs = graph.addComputeSet("AddMod");
-      // auto vtx = graph.addVertex(cs, "AddMod");
-      // graph.connect(vtx["val"], offset[0]);
-      // graph.setInitialValue<int>(vtx["mod"], buf_rows);
-      // graph.setTileMapping(vtx, 0);
 
-      // 256 MB row limit?
-      // https://docs.graphcore.ai/projects/poplar-user-guide/en/latest/poplar_programs.html#remote-buffer-restrictions
-      auto host_stream_offset = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, 1);
-      h2d_prog_concat.add(poplar::program::Copy(host_stream_offset, offset));
-      auto memid = REMOTE_MEMORY_N(buffer_share);
-      auto remote_mem = graph.addRemoteBuffer(memid, inputs_tensor.elementType(), inputs_tensor.numElements(), buf_rows, true, true);
-      // h2d_prog_concat.add(poplar::program::Copy(remote_mem, inputs_tensor, offset, "Copy Inputs from Remote->IPU"));
-      // d2h_prog_concat.add(program::Execute(cs));
+    auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, inputs_tensor.numElements() + 1, ReplicatedStreamMode::REPLICATE, {{"splitLimit", std::to_string(264 * 1024 * 1024)}, {"bufferingDepth", "1"}});
+    device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements() + 1 + 2 + 2);
+    auto inT = concat({inputs_tensor.flatten(), slotT.flatten()});
+    PLOGE.printf("Input Buffer size = %lu bytes", inT.numElements() * 4);
+    h2d_prog_concat.add(poplar::program::Copy(host_stream_concat, inT));
 
-      device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements());
-      d2h_prog_concat.add(poplar::program::Copy(outputs_tensor, device_stream_concat, "Copy Outputs from IPU->Host"));
-    } else {
-      auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, inputs_tensor.numElements() + 1, ReplicatedStreamMode::REPLICATE, {{"splitLimit", std::to_string(264 * 1024 * 1024)}, {"bufferingDepth", "1"}});
-      device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements() + 1 + 2 + 2);
-      auto inT = concat({inputs_tensor.flatten(), slotT.flatten()});
-      PLOGE.printf("Input Buffer size = %lu bytes", inT.numElements() * 4);
-      h2d_prog_concat.add(poplar::program::Copy(host_stream_concat, inT));
-    }
-
-    auto print_tensors_prog = program::Sequence({
-        // program::PrintTensor("Alens", Alens),
-        // program::PrintTensor("Blens", Blens),
-        // program::PrintTensor("CompMeta", CompMeta),
-        program::PrintTensor("Slot", slotT),
-        // program::PrintTensor("Scores", Scores),
-    });
     program::Sequence main_prog;
     main_prog.add(program::Execute(frontCs));
     // #ifdef IPUMA_DEBUG
@@ -407,13 +359,11 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     Tensor cyclesInner = poplar::cycleCount(graph, main_prog, 0, SyncType::EXTERNAL);
     Tensor cyclesH2D = poplar::cycleCount(graph, h2d_prog_concat, 0, SyncType::EXTERNAL);
     prog.add(h2d_prog_concat);
-    // prog.add(print_tensors_prog);
     prog.add(main_prog);
     // prog.add(program::PrintTensor(cycles));
     auto outT = concat({slotT.flatten(), cyclesH2D.reinterpret(INT).flatten(), cyclesInner.reinterpret(INT).flatten(), outputs_tensor.flatten()});
     PLOGE.printf("Output Buffer size = %lu bytes", outT.numElements() * 4);
     d2h_prog_concat.add(poplar::program::Copy(outT, device_stream_concat));
-    // prog.add(print_tensors_prog);
     prog.add(d2h_prog_concat);
     // #ifdef IPUMA_DEBUG
     //     addCycleCount(graph, prog, CYCLE_COUNT_OUTER_N(buffer_share));
@@ -427,7 +377,6 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     progs[buffer_share] = reps;
   }
   return progs;
-  // return {prog, d2h_prog_concat, print_tensors_prog};
 }
 
 // TODO: Better default for work_queue!!!
@@ -452,7 +401,7 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
   auto similarityMatrix = swatlib::selectMatrix(config.similarity, config.matchValue, config.mismatchValue, config.ambiguityValue);
   std::vector<program::Program> programs =
       buildGraph(graph, algoconfig.vtype, algoconfig.tilesUsed, algoconfig.maxAB, algoconfig.bufsize, algoconfig.maxBatches,
-                 similarityMatrix, config.gapInit, config.gapExtend, algoconfig.useRemoteBuffer, algoconfig.transmissionPrograms, slot_size, algoconfig.forwardOnly, algoconfig.ioTiles);
+                 similarityMatrix, config.gapInit, config.gapExtend, algoconfig.transmissionPrograms, slot_size, algoconfig.forwardOnly, algoconfig.ioTiles);
 
   std::hash<std::string> hasher;
   auto s = json{algoconfig, config};
@@ -667,9 +616,6 @@ void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::ve
   //                         unord_b_range.data());
   slotToken slot = 0;
   slot = queue_slot(maxbucket);
-  if (algoconfig.useRemoteBuffer) {
-    upload(&*inputs.begin() + 2, &*inputs.end() - 2, slot);
-  }
   tCompare.tick();
   prepared_remote_compare(&*inputs.begin() + 2, &*inputs.end() - 2, &*results.begin() + 2, &*results.end() - 2, slot);
   tCompare.tock();
@@ -807,9 +753,6 @@ void SWAlgorithm::compare_mn_local(const std::vector<std::string>& Seqs, const C
 
   slotToken slot = 0;
   slot = queue_slot(maxBucket);
-  if (algoconfig.useRemoteBuffer) {
-    upload(&*inputs.begin(), &*inputs.end(), slot);
-  }
   prepared_remote_compare(&*inputs.begin(), &*inputs.end(), &*results.begin(), &*results.end(), slot);
 
   transferResults(&*results.begin(), &*results.end(), &*mapping.begin(), &*mapping.end(), &*scores.begin(), &*scores.end(),
