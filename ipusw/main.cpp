@@ -22,6 +22,9 @@ void parseArguments(json& dict, const cxxopts::ParseResult& result) {
 		case json::value_t::number_integer:
 			dict[k] = result[k].as<int>();
 			break;
+		case json::value_t::number_float:
+			dict[k] = result[k].as<double>();
+			break;
 		case json::value_t::string:
 			dict[k] = result[k].as<std::string>();
 			break;
@@ -42,6 +45,10 @@ void addArguments(const json& dict, cxxopts::Options& options, std::string gname
 			case json::value_t::number_integer:
 				strval = std::to_string(v.get<int>());
 				options.add_option(gname, "", k, "", cxxopts::value<int>()->default_value(strval), strval);
+				break;
+			case json::value_t::number_float:
+				strval = std::to_string(v.get<double>());
+				options.add_option(gname, "", k, "", cxxopts::value<double>()->default_value(strval), strval);
 				break;
 			case json::value_t::string:
 				options.add_option(gname, "", k, "", cxxopts::value<std::string>()->default_value(v), v);

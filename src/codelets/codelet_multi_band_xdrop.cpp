@@ -18,11 +18,12 @@ inline int min(int a, int b) {
 }
 
 const int GAP_PENALTY = 1;
-const int X = 10;
+// const int X = 20;
 const int neginf = -9999;
 
 typedef int sType;
 
+template<int X>
 class MultiBandXDrop : public poplar::MultiVertex {
  private:
   poplar::Output<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>> K1;
@@ -153,3 +154,8 @@ class MultiBandXDrop : public poplar::MultiVertex {
     return true;
   }
 };
+
+template class MultiBandXDrop<10>;
+template class MultiBandXDrop<20>;
+template class MultiBandXDrop<50>;
+template class MultiBandXDrop<100>;

@@ -76,8 +76,6 @@ class SWAlgorithm : public IPUAlgorithm {
   SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig);
   SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap = 1, size_t ipuCount = 1, bool runExecutor = true);
 
-  std::string printTensors();
-
   static int calculate_slot_region_index(const IPUAlgoConfig& algoconfig, int max_buffer_size);
   int calculate_slot_region_index(int max_buffer_size);
   std::tuple<int, slotToken> unpack_slot(slotToken);

@@ -36,14 +36,14 @@ class FillCallback final : public poplar::StreamCallback {
   FillCallback(msd::channel<SubmittedBatch*>& value, std::map<slotToken, SubmittedBatch*>& results, std::mutex& rmutex, size_t size, size_t ipu_id) : ch(value), resultTable(results), size(size), id(ipu_id), result_mutex(rmutex) {}
 
   Result prefetch(void* __restrict p) noexcept override {
-    PLOGE.printf("Enter PreFETCH, id %d", id);
+    PLOGV.printf("Enter PreFETCH, id %d", id);
     // We do this to handle closed streams;
     for (auto b : ch) {
-      PLOGE.printf("Do PreFETCH, id %d", id);
+      PLOGV.printf("Do PreFETCH, id %d", id);
       pushBatch(p, b);
       return Result::Success;
     }
-    PLOGE.printf("Exit PreFETCH, id %d", id);
+    PLOGV.printf("Exit PreFETCH, id %d", id);
     if (ch.closed()) {
       close(p);
     }
@@ -51,7 +51,7 @@ class FillCallback final : public poplar::StreamCallback {
   }
 
   void fetch(void* __restrict p) noexcept override {
-    PLOGE.printf("FETCH, %d", id);
+    PLOGV.printf("FETCH, %d", id);
     // We do this to handle closed streams;
     for (auto b : ch) {
       pushBatch(p, b);
@@ -79,7 +79,7 @@ class FillCallback final : public poplar::StreamCallback {
     int* ip = reinterpret_cast<int*>(&reinterpret_cast<char*>(p)[inputsize]);
     ip[0] = b->slot + 1;
     b->runTick.tick();
-    PLOGD << "PushBatch slot " << b->slot;
+    PLOGV << "PushBatch slot " << b->slot;
     result_mutex.lock();
     resultTable.insert({b->slot, b});
     result_mutex.unlock();
@@ -100,7 +100,7 @@ class RecvCallback final : public poplar::StreamCallback {
   RecvCallback(std::map<slotToken, SubmittedBatch*>& results, std::mutex& rmutex) : resultTable(results), result_mutex(rmutex) {}
 
   Result prefetch(void* __restrict p) noexcept override {
-    PLOGE.printf("NOOOOOOOOOOOOOOOOOOOOOOOOOO");
+    PLOGF.printf("NOOOOOOOOOOOOOOOOOOOOOOOOOO");
     exit(1);
     return Result::NotAvailable;
   }
@@ -119,7 +119,7 @@ class RecvCallback final : public poplar::StreamCallback {
     if (st == -1) {
       return;
     }
-    PLOGD << "PullBatch slot " << st;
+    PLOGV << "PullBatch slot " << st;
     result_mutex.lock();
     auto b = resultTable[st];
     *b->cyclesH2D = readTime(&ip[1]);
@@ -149,7 +149,9 @@ class RecvCallback final : public poplar::StreamCallback {
 std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigned long activeTiles, unsigned long maxAB,
                                          unsigned long bufSize, unsigned long maxBatches,
                                          const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt,
-                                         int transmissionPrograms, int buf_rows, bool forward_only, int ioTiles) {
+                                         int transmissionPrograms, int buf_rows, bool forward_only, int ioTiles,
+                                         int xDrop, double bandPercentageXDrop
+                                         ) {
   int buffers = transmissionPrograms;
 
   std::vector<program::Program> progs(buffers);
@@ -256,12 +258,17 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
       }
     }
 
+    auto label = vertexTypeToIpuLabel(vtype);
+    if (vtype == VertexType::multibandxdrop) {
+      label += "<" + std::to_string(xDrop) + ">";
+    }
+    PLOGD.printf("Use Vertex class: %s", label.c_str());
     OptionFlags streamOptions({});
     program::Sequence undef;
     auto frontCs = graph.addComputeSet("SmithWaterman");
     for (int i = 0; i < activeTiles; ++i) {
       int tileIndex = i % tileCount;
-      VertexRef vtx = graph.addVertex(frontCs, vertexTypeToIpuLabel(vtype),
+      VertexRef vtx = graph.addVertex(frontCs, label,
                                       {
                                           {"bufSize", bufSize},
                                           {"gapInit", gapInit},
@@ -288,8 +295,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         graph.connect(vtx["K2"], k_T[1]);
         graph.connect(vtx["simMatrix"], similarity);
       } else if (vtype == VertexType::multibandxdrop) {
-        int scaledMaxAB = maxAB / 2;
-        PLOGF.printf("MAXAB HOST = %d", maxAB);
+        int scaledMaxAB = maxAB * bandPercentageXDrop;
         auto k_T = graph.addVariable(sType, {2, ((size_t)scaledMaxAB+2+2) * (size_t) workerMultiplier}, "K[" + std::to_string(i) + "]");
         graph.connect(vtx["maxAB"], scaledMaxAB);
         graph.setTileMapping(k_T, tileIndex);
@@ -401,7 +407,8 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
   auto similarityMatrix = swatlib::selectMatrix(config.similarity, config.matchValue, config.mismatchValue, config.ambiguityValue);
   std::vector<program::Program> programs =
       buildGraph(graph, algoconfig.vtype, algoconfig.tilesUsed, algoconfig.maxAB, algoconfig.bufsize, algoconfig.maxBatches,
-                 similarityMatrix, config.gapInit, config.gapExtend, algoconfig.transmissionPrograms, slot_size, algoconfig.forwardOnly, algoconfig.ioTiles);
+                 similarityMatrix, config.gapInit, config.gapExtend, algoconfig.transmissionPrograms, slot_size, algoconfig.forwardOnly, algoconfig.ioTiles,
+                 algoconfig.xDrop, algoconfig.bandPercentageXDrop);
 
   std::hash<std::string> hasher;
   auto s = json{algoconfig, config};
@@ -675,15 +682,6 @@ retry:
   }
 }
 
-std::string SWAlgorithm::printTensors() {
-  // std::stringstream graphstream;
-  // engine->setPrintTensorStream(graphstream);
-  // engine->run(2);
-  // return graphstream.str();
-  assert(false && "Not implemented");
-  return "";
-}
-
 void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end) {
   int numComparisons = mapping_end - mapping_begin;
   transferResults(results_begin, results_end, mapping_begin, mapping_end, scores_begin, scores_end, arange_begin, arange_end, brange_begin, brange_end, numComparisons);
@@ -852,13 +850,7 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
   int8_t* seqs = (int8_t*)inputs_begin + seqs_offset;
   int32_t* meta = inputs_begin + meta_offset;
 
-  // PLOGW << "======";
-  // omp_set_num_threads(16);
-  // PLOGW << omp_get_num_threads();
-  // PLOGW << "======";
-  // #pragma omp parallel for num_threads(32)
-  // for (const auto& bucketMapping : map.buckets) {
-  for (int zzz = 0; zzz < map.buckets.size(); ++zzz) {
+ for (int zzz = 0; zzz < map.buckets.size(); ++zzz) {
     const auto& bucketMapping = map.buckets[zzz];
     const size_t offsetBuffer = bucketMapping.bucketIndex * scale_bufsize(algoconfig.getBufsize32b() * 4);
     const size_t offsetMeta = bucketMapping.bucketIndex * algoconfig.maxBatches * 4;

@@ -29,6 +29,10 @@ struct IPUAlgoConfig {
   int transmissionPrograms = 1;  // number of separate transmission programs, use only with remote!
   int ioTiles = 0;
 
+  // Optional: XDrop
+  int xDrop = 10;
+  double bandPercentageXDrop = 0.5;
+
   // this is maxbatches * num_vertices
   int getTotalNumberOfComparisons() const;
 
