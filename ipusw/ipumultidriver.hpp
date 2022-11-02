@@ -57,7 +57,7 @@ class IPUMultiDriver {
   void wait(ipu::batchaffine::Job *job) {
     job->join();
 
-    PLOGD << "Total engine run time (in s): "
+    PLOGV << "Total engine run time (in s): "
           << static_cast<double>(
                  job->tick.duration<std::chrono::milliseconds>()) /
                  1000.0;

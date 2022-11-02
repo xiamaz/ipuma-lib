@@ -526,7 +526,7 @@ Job* SWAlgorithm::async_submit_prepared_remote_compare(int32_t* inputs_begin, in
 void SWAlgorithm::blocking_join_prepared_remote_compare(Job& job) {
   job.join();
   // release_slot(slot_token);
-  PLOGD << "Total engine run time (in s): " << static_cast<double>(job.tick.duration<std::chrono::milliseconds>()) / 1000.0;
+  PLOGV << "Total engine run time (in s): " << static_cast<double>(job.tick.duration<std::chrono::milliseconds>()) / 1000.0;
 
 #ifdef IPUMA_DEBUG
   // auto [lot, sid] = unpack_slot(slot_token);
