@@ -5,6 +5,7 @@
 #include <poplar/StackSizeDefs.hpp>
 #include <poplar/Vertex.hpp>
 #include <type_traits>
+// #include <print.h>
 
 #include "poplar/TileConstants.hpp"
 
@@ -39,6 +40,12 @@ class MultiXDrop : public poplar::MultiVertex {
   poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Meta;
   poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> score;
 
+  private:
+  // This is an eventual atomic counter
+  int currentN; 
+
+  public:
+
   bool compute(unsigned workerId) {
     const bool cut = true;
 
@@ -46,8 +53,13 @@ class MultiXDrop : public poplar::MultiVertex {
     int gE = *gapExt;
 
     uint8_t* cSeqs = (uint8_t*)&(Seqs[0]);
+    // This is an eventual atomic counter
+    int myN = workerId;
+    volatile int *globalN = &currentN;
+    *globalN = 6;
 
-    for (int n = 0; n < maxNPerTile; n += MultiVertex::numWorkers()) {
+    for (; myN < maxNPerTile;) {
+      const int n = myN;
       int lastNoGap, prevNoGap;
 
       auto a_len = Meta[4 * n];
@@ -138,6 +150,10 @@ class MultiXDrop : public poplar::MultiVertex {
         } while (L <= U + 1);
       }
       score[n] = T;
+      // This operation can cause raise conditions, but that will not produce
+      // incurrect results. However, double work can be done, which we accept.
+      myN = *globalN;
+      (*globalN) += 1;
     }
     return true;
   }
