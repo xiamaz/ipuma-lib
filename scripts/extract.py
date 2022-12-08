@@ -13,13 +13,13 @@ def read_log(path):
 
 parser = ArgumentParser()
 parser.add_argument("dataset_dir", type=pathlib.Path)
-parser.add_argument("output", type=pathlib.Path)
+parser.add_argument("output", type=str)
 parser.add_argument("--move_failed", type=bool, default=False)
 args = parser.parse_args()
 
 move_failed = args.move_failed
 
-logpaths = args.dataset_dir.glob("*.log")
+logpaths = pathlib.Path('.').glob(f"{args.dataset_dir}_rep*/*.log")
 logdata = {p.stem : (p, read_log(p)) for p in logpaths}
 
 
@@ -85,7 +85,6 @@ def extract_ipu_lines(logdata):
                 "numDevices": setup_log["config"]["numDevices"],
                 "numThreads": setup_log["config"]["numThreads"],
                 "duplication": "dup" if setup_log["config"]["duplicateDatasets"] else "nodup",
-                "remote": "remote" if setup_log["config"]["ipu"]["useRemoteBuffer"] else "stream",
                 "fillAlgo": setup_log["config"]["ipu"]["fillAlgo"],
             },
             # **buckets_data_stat_info,
