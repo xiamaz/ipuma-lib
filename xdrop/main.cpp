@@ -144,8 +144,9 @@ int main(int argc, char** argv) {
     .ambiguityValue = -1,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {1, 200, 40, 200 * 20, ipu::VertexType::multibandxdrop, ipu::Algorithm::fillFirst});
-  driver.compare_local(refs, qers);
+  }, {1 /*Tiles used*/, 200 /*maxAB*/, 4 , 200 * 20, ipu::VertexType::multixdrop, ipu::Algorithm::greedy});
+  // driver.compare_local(refs, qers);
+  driver.compare_local_many(refs, qers);
   auto aln_results = driver.get_result();
 
   // driver.compare_local(queries, refs);

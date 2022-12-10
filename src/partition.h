@@ -1,8 +1,9 @@
 #ifndef PARTITION_H
 #define PARTITION_H
-#include<string>
-#include<vector>
-#include<queue>
+#include <string>
+#include <vector>
+#include <queue>
+#include <list>
 #include "types.h"
 
 namespace ipu { namespace partition {
@@ -49,6 +50,8 @@ namespace ipu { namespace partition {
 
     BucketMap();
     BucketMap(int nB, int nC, int sC);
+
+    void addBuckets(int nB);
 
     std::string toString();
   };

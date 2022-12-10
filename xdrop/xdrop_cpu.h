@@ -306,8 +306,8 @@ int xdrop2k(const std::string& query, const std::string& reference, bool cut) {
 
   } while (L <= U + 1);
 
-  PLOGD << "EXPECTED: " << H.toString(); // DEBUG
-  PLOGD << "EXPECTED: " << C.toString(); // DEBUG
+  // PLOGD << "EXPECTED: " << H.toString(); // DEBUG
+  // PLOGD << "EXPECTED: " << C.toString(); // DEBUG
 
   // free(&k2[-1]);
   // free(&k1[-1]);

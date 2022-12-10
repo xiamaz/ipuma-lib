@@ -100,7 +100,7 @@ class SWAlgorithm : public IPUAlgorithm {
   void refetch();
 
   // Remote bufffer
-  void prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token = 0);
+  void prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token);
   void prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end);
 
   Job* async_submit_prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end);
@@ -114,6 +114,17 @@ class SWAlgorithm : public IPUAlgorithm {
   static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end);
   static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons);
   ~SWAlgorithm();
+
+  // V1.1 APIs:
+  void compare_local_many(const std::vector<std::string>& A, const std::vector<std::string>& B);
+  void prepare_local_many(
+  const SWConfig& swconfig,
+  const IPUAlgoConfig& algoconfig,
+  const std::vector<std::string>& A,
+  const std::vector<std::string>& B,
+    std::vector<int32_t*>& inputs_begins,
+    std::vector<int*>& seqMappings
+  );
 };
 }  // namespace batchaffine
 }  // namespace ipu

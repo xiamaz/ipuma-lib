@@ -57,13 +57,31 @@ namespace partition {
     return ss.str();
   }
 
-  BucketMap::BucketMap() : numBuckets(0), cmpCapacity(0), sequenceCapacity(0) { }
+  BucketMap::BucketMap() : numBuckets(0), cmpCapacity(0), sequenceCapacity(0) { 
+    buckets.reserve(1472*6*200);
+  }
 
   BucketMap::BucketMap(int nB, int cC, int sC) : numBuckets(nB), cmpCapacity(cC), sequenceCapacity(sC) {
-    buckets.resize(nB);
+    buckets.reserve(nB*200);
+    // buckets.resize(nB);
     for (int i = 0; i < nB; ++i) {
+      buckets.push_back({});
       buckets[i].bucketIndex = i;
     }
+    PLOGE << &buckets[0];
+  }
+
+  void BucketMap::addBuckets(int nB) {
+    size_t oldi = buckets.size();
+    // buckets.resize(buckets.size() + nB);
+    for (int i = 0; i < nB; ++i) {
+      buckets.push_back({});
+    }
+    for (size_t i = oldi; i < buckets.size(); ++i) {
+      buckets[i].bucketIndex = i;
+    }
+    numBuckets += nB;
+    PLOGE << &buckets[0];
   }
 
   inline int minW(const int z[6]) {
@@ -384,6 +402,8 @@ namespace partition {
   }
 
   bool greedy(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, BucketHeap& q) {
+    int newbuckets = map.numBuckets;
+    PLOGE << "HERE USED!!!!!!!!!!!!!!1";
     std::vector<std::pair<int, int>> srts(A.size());
     for (size_t i = 0; i < A.size(); i++) {
       const auto aLen = A[i].size();
@@ -410,6 +430,7 @@ namespace partition {
       q.pop();
       std::deque<std::reference_wrapper<BucketMapping>> qq;
       int tries = 0;
+      PLOGE << "Num Buckets" << map.numBuckets;
       while (tries < map.numBuckets) {
         if ((bucket.cmps.size() + 1 > map.cmpCapacity) || (bucket.seqSize + aLen + bLen > map.sequenceCapacity)) {
           qq.push_back(std::ref(bucket));
@@ -428,7 +449,30 @@ namespace partition {
           PLOGE << "\t" << b.cmps.size() << "/" << map.cmpCapacity;
         }
         PLOGE << "Alen: " << aLen << " Blen: " << bLen;
-        return false;
+        // return false;
+        auto starti = map.buckets.size();
+        PLOGE << "Heap size: " << q.size();
+        PLOGE << "HEAP from REF addr" << &q.top();
+        PLOGE << "HEAP from REF" << q.top().get().toString();
+        map.addBuckets(newbuckets);
+        PLOGE << "ADDED buckets";
+        for (int i = 0; i < newbuckets; i++) {
+          auto tt = map.buckets.size() - 1 - i;
+          PLOGE << "Bucket I" << i << " using " << tt << " bucketsize " << map.buckets.size();
+          PLOGE << "Bucket " << map.buckets[tt].toString();
+          auto bref = std::ref(map.buckets[tt]);
+          PLOGE << "Bucket from REF" << bref.get().toString();
+          PLOGE << "Heap size: " << q.size();
+          PLOGE << "HEAP from REF addr" << &q.top();
+          PLOGE << "HEAP from REF" << q.top().get().toString();
+          qq.push_back(std::ref(map.buckets[tt]));
+          PLOGE << "Bucket added I" << i;
+        }
+        for (auto b : qq) {
+          q.push(b);
+        }
+        i--;
+        continue;
       }
 
       for (auto b : qq) {

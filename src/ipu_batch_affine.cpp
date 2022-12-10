@@ -584,6 +584,39 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
   blocking_join_prepared_remote_compare(*job);
 }
 
+void SWAlgorithm::compare_local_many(const std::vector<std::string>& A, const std::vector<std::string>& B) {
+  swatlib::TickTock tPrepare, tCompare;
+
+  std::vector<int*> mapping;
+  std::vector<int32_t*> inputs;
+
+  tPrepare.tick();
+  prepare_local_many(config, algoconfig, A, B, inputs, mapping);
+  tPrepare.tock();
+
+  for (int batch = 0; batch < mapping.size(); ++batch) {
+    int32_t* input_begin = inputs[batch];
+    int32_t* input_end = input_begin + algoconfig.getInputBufferSize32b();
+    size_t results_size = scores.size() + a_range_result.size() + b_range_result.size();
+    std::vector<int32_t> results(results_size);
+    tCompare.tick();
+    prepared_remote_compare(input_begin, input_end, &*results.begin(), &*results.end());
+    tCompare.tock();
+    int* mapping_begin = mapping[batch];
+    int* mapping_end = mapping_begin + algoconfig.getTotalNumberOfComparisons();
+    transferResults(&*results.begin(), &*results.end(), mapping_begin, mapping_end, &*scores.begin(), &*scores.end(),
+                    &*a_range_result.begin(), &*a_range_result.end(), &*b_range_result.begin(), &*b_range_result.end());
+  }
+
+  double prepare_time = static_cast<double>(tPrepare.duration<std::chrono::milliseconds>()) / 1e3;
+  double compare_time = static_cast<double>(tCompare.duration<std::chrono::milliseconds>()) / 1e3;
+  double total_time = prepare_time + compare_time;
+  double prepare_perc = prepare_time / total_time * 100;
+  PLOGD << "Total time: " << total_time << " prepare(" << prepare_time << ") compare(" << compare_time << ") preprocessing is "
+        << prepare_perc << "% of total";
+
+}
+
 void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::vector<std::string>& B, bool errcheck) {
   swatlib::TickTock tPrepare, tCompare;
   std::vector<int> mapping(A.size(), 0);
@@ -887,6 +920,37 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
 
       mapping[cmpMapping.comparisonIndex] = map.cmpCapacity * bucketMapping.bucketIndex + i;
     }
+  }
+}
+
+void SWAlgorithm::prepare_local_many(
+  const SWConfig& swconfig,
+  const IPUAlgoConfig& algoconfig,
+  const std::vector<std::string>& A,
+  const std::vector<std::string>& B,
+    std::vector<int32_t*>& inputs_begins,
+    std::vector<int*>& seqMappings
+  ) {
+  partition::BucketMap map(algoconfig.tilesUsed, algoconfig.maxBatches, algoconfig.bufsize);
+  fillBuckets(algoconfig.fillAlgo, map, A, B, 0);
+
+
+  size_t batches = map.numBuckets / algoconfig.tilesUsed;
+  PLOGW << "NUM BATCHES!!!!!!!!!!!!!!!!!!!!!!!!: " << batches;
+
+  const auto inputBufferSize = algoconfig.getInputBufferSize32b();
+  const auto mappingBufferSize = algoconfig.getTotalNumberOfComparisons();
+  // const auto resultBufferSize = algoconfig.getTotalNumberOfComparisons() * 3;
+
+  inputs_begins.resize(batches);
+  seqMappings.resize(batches);
+  for (int i = 0; i<batches; i++) {
+    inputs_begins[i] = (int32_t*) malloc(inputBufferSize * sizeof(int32_t));
+    seqMappings[i] = (int32_t*) malloc(mappingBufferSize * sizeof(int32_t));
+
+    partition::BucketMap maptmp(algoconfig.tilesUsed, algoconfig.maxBatches, algoconfig.bufsize);
+    std::copy(map.buckets.begin(), map.buckets.end(), maptmp.buckets.begin());
+    fill_input_buffer(maptmp, swconfig.datatype, algoconfig, A, B, inputs_begins[i], inputs_begins[i]+inputBufferSize, seqMappings[i]);
   }
 }
 
