@@ -33,25 +33,25 @@ namespace partition {
     throw std::runtime_error("Unhandled sequence type.");
   }
 
-  std::string ComparisonMapping::toString() {
+  std::string ComparisonMapping::toString() const {
     std::stringstream ss;
     ss << "CM[" << comparisonIndex << ": a(l" << sizeA << " o" << offsetA << ") b(l" << sizeB << " o" << offsetB << ")]";
     return ss.str();
   }
 
-  std::string SequenceMapping::toString() {
+  std::string SequenceMapping::toString() const {
     std::stringstream ss;
     ss << "SM[" << index << ": o" << offset << " t" << sequenceOriginToString(origin) << "]";
     return ss.str();
   }
 
-  std::string BucketMapping::toString() {
+  std::string BucketMapping::toString() const {
     std::stringstream ss;
     ss << "BMapping[" << bucketIndex << ": cmps(" << cmps.size() << ") maxLen(" << maxLen << ") seqSize(" << seqSize << ") weight(" << weight << ")]";
     return ss.str();
   }
 
-  std::string BucketMap::toString() {
+  std::string BucketMap::toString() const {
     std::stringstream ss;
     ss << "BMap[" << numBuckets << ": maxCmps(" << cmpCapacity << ") bufsize(" << sequenceCapacity << ")]";
     return ss.str();
@@ -62,26 +62,10 @@ namespace partition {
   }
 
   BucketMap::BucketMap(int nB, int cC, int sC) : numBuckets(nB), cmpCapacity(cC), sequenceCapacity(sC) {
-    buckets.reserve(nB*200);
-    // buckets.resize(nB);
     for (int i = 0; i < nB; ++i) {
       buckets.push_back({});
       buckets[i].bucketIndex = i;
     }
-    PLOGE << &buckets[0];
-  }
-
-  void BucketMap::addBuckets(int nB) {
-    size_t oldi = buckets.size();
-    // buckets.resize(buckets.size() + nB);
-    for (int i = 0; i < nB; ++i) {
-      buckets.push_back({});
-    }
-    for (size_t i = oldi; i < buckets.size(); ++i) {
-      buckets[i].bucketIndex = i;
-    }
-    numBuckets += nB;
-    PLOGE << &buckets[0];
   }
 
   inline int minW(const int z[6]) {
@@ -207,11 +191,18 @@ namespace partition {
   void greedy(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset) {
     BucketHeap q;
     for (auto& b : map.buckets) {
-      q.push(std::ref(b));
+      q.push(b);
     }
     if (!greedy(map, A, B, indexOffset, q)) {
       throw std::runtime_error("Out of buckets.");
     }
+
+    map.buckets.clear();
+    for (; !q.empty(); q.pop()) {
+      map.buckets.push_back(q.top());
+    }
+    // TODO: this is ugly and needs to be refactored
+    map.numBuckets = map.buckets.size();
   }
 
 
@@ -404,6 +395,8 @@ namespace partition {
   bool greedy(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, BucketHeap& q) {
     int newbuckets = map.numBuckets;
     PLOGE << "HERE USED!!!!!!!!!!!!!!1";
+
+    // Sort sequence pairs by total estimated complexity (currently only valid for normal SW)
     std::vector<std::pair<int, int>> srts(A.size());
     for (size_t i = 0; i < A.size(); i++) {
       const auto aLen = A[i].size();
@@ -426,53 +419,25 @@ namespace partition {
         PLOGE << "aLen " << aLen << " bLen " << bLen;
       }
 
-      auto& bucket = q.top().get();
+      auto bucket = q.top();
       q.pop();
-      std::deque<std::reference_wrapper<BucketMapping>> qq;
-      int tries = 0;
-      PLOGE << "Num Buckets" << map.numBuckets;
-      while (tries < map.numBuckets) {
-        if ((bucket.cmps.size() + 1 > map.cmpCapacity) || (bucket.seqSize + aLen + bLen > map.sequenceCapacity)) {
-          qq.push_back(std::ref(bucket));
-          bucket = q.top().get();
-          q.pop();
-          tries++;
-          continue;
-        } else {
-          break;
-        }
-      }
 
-      if (tries == map.numBuckets) {
-        for (auto& b : map.buckets) {
-          PLOGE << b.bucketIndex << ": " << map.sequenceCapacity - b.seqSize;
-          PLOGE << "\t" << b.cmps.size() << "/" << map.cmpCapacity;
+      // insert all popped buckets into our heap later
+      std::deque<BucketMapping> qq;
+      int tries = 0;
+      PLOGE << "Num Buckets in Heap after popping HEAD: " << q.size();
+      while ((bucket.cmps.size() + 1 > map.cmpCapacity) || (bucket.seqSize + aLen + bLen > map.sequenceCapacity)) {
+        if (!q.empty()) {
+          qq.push_back(bucket);
+          bucket = q.top();
+          q.pop();
+        } else {
+          // resize our map by newbucket count buckets
+          PLOGD << "Extending buckets by " << newbuckets << " number of buckets";
+          for (int n = 0; n < newbuckets; ++n) {
+            q.push({});
+          }
         }
-        PLOGE << "Alen: " << aLen << " Blen: " << bLen;
-        // return false;
-        auto starti = map.buckets.size();
-        PLOGE << "Heap size: " << q.size();
-        PLOGE << "HEAP from REF addr" << &q.top();
-        PLOGE << "HEAP from REF" << q.top().get().toString();
-        map.addBuckets(newbuckets);
-        PLOGE << "ADDED buckets";
-        for (int i = 0; i < newbuckets; i++) {
-          auto tt = map.buckets.size() - 1 - i;
-          PLOGE << "Bucket I" << i << " using " << tt << " bucketsize " << map.buckets.size();
-          PLOGE << "Bucket " << map.buckets[tt].toString();
-          auto bref = std::ref(map.buckets[tt]);
-          PLOGE << "Bucket from REF" << bref.get().toString();
-          PLOGE << "Heap size: " << q.size();
-          PLOGE << "HEAP from REF addr" << &q.top();
-          PLOGE << "HEAP from REF" << q.top().get().toString();
-          qq.push_back(std::ref(map.buckets[tt]));
-          PLOGE << "Bucket added I" << i;
-        }
-        for (auto b : qq) {
-          q.push(b);
-        }
-        i--;
-        continue;
       }
 
       for (auto b : qq) {
@@ -489,7 +454,7 @@ namespace partition {
       bucket.maxLen = std::max(bucket.maxLen, static_cast<int>(aLen > bLen ? aLen : bLen));
       bucket.seqSize += aLen + bLen;
       bucket.weight[(bucket.cmps.size() - 1)%6] += aLen * bLen;
-      q.push(std::ref(bucket));
+      q.push(bucket);
     }
 
     // std::stringstream ss;

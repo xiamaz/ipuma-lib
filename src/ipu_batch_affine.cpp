@@ -75,9 +75,13 @@ class FillCallback final : public poplar::StreamCallback {
     // Wireformat: inputbuffer+slotToken
     // TODO!!!!!!!!!: Are the offsets correct?????
     size_t inputsize = abs((char*)b->inputs_end - (char*)b->inputs_begin);
+    PLOGD << "Input buffer size " << inputsize << " defined size is " << size;
     memcpy(p, (char*)b->inputs_begin, inputsize);
+    PLOGD << "Here";
     int* ip = reinterpret_cast<int*>(&reinterpret_cast<char*>(p)[inputsize]);
+    PLOGD << "Here";
     ip[0] = b->slot + 1;
+    PLOGD << "Here";
     b->runTick.tick();
     PLOGV << "PushBatch slot " << b->slot;
     result_mutex.lock();
@@ -594,6 +598,8 @@ void SWAlgorithm::compare_local_many(const std::vector<std::string>& A, const st
   prepare_local_many(config, algoconfig, A, B, inputs, mapping);
   tPrepare.tock();
 
+  PLOGD << "Starting comparisons";
+
   for (int batch = 0; batch < mapping.size(); ++batch) {
     int32_t* input_begin = inputs[batch];
     int32_t* input_end = input_begin + algoconfig.getInputBufferSize32b();
@@ -877,6 +883,8 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
   size_t input_elems = inputs_end - inputs_begin;
   memset(inputs_begin, 0, input_elems * sizeof(int32_t));
 
+  PLOGI << "Number of input elements " << input_elems;
+
   const auto encodeTable = swatlib::getEncoder(dtype).getCodeTable();
   const size_t seqs_offset = getSeqsOffset(algoconfig);
 
@@ -906,6 +914,7 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
           throw std::runtime_error("Using unordered mapping with A/B comparison.");
           break;
       }
+      PLOGD << "Sequence size written " << seqSize;
 #pragma omp simd
       for (int j = 0; j < seqSize; ++j) {
         bucket_seq[sm.offset + j] = encodeTable[seq[j]];
@@ -928,8 +937,8 @@ void SWAlgorithm::prepare_local_many(
   const IPUAlgoConfig& algoconfig,
   const std::vector<std::string>& A,
   const std::vector<std::string>& B,
-    std::vector<int32_t*>& inputs_begins,
-    std::vector<int*>& seqMappings
+  std::vector<int32_t*>& inputs_begins,
+  std::vector<int*>& seqMappings
   ) {
   partition::BucketMap map(algoconfig.tilesUsed, algoconfig.maxBatches, algoconfig.bufsize);
   fillBuckets(algoconfig.fillAlgo, map, A, B, 0);
@@ -949,9 +958,11 @@ void SWAlgorithm::prepare_local_many(
     seqMappings[i] = (int32_t*) malloc(mappingBufferSize * sizeof(int32_t));
 
     partition::BucketMap maptmp(algoconfig.tilesUsed, algoconfig.maxBatches, algoconfig.bufsize);
-    std::copy(map.buckets.begin(), map.buckets.end(), maptmp.buckets.begin());
+    std::copy(map.buckets.begin() + i * algoconfig.tilesUsed, map.buckets.begin() + (i + 1 * algoconfig.tilesUsed), maptmp.buckets.begin());
+    PLOGD << "Input buffer size " << inputBufferSize;
     fill_input_buffer(maptmp, swconfig.datatype, algoconfig, A, B, inputs_begins[i], inputs_begins[i]+inputBufferSize, seqMappings[i]);
   }
+  PLOGD << "Finished prepare_local";
 }
 
 int SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, int* seqMapping) {

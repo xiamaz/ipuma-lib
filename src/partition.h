@@ -17,7 +17,7 @@ namespace ipu { namespace partition {
     int sizeB;
     int offsetB;
 
-    std::string toString();
+    std::string toString() const;
   };
 
   struct SequenceMapping {
@@ -25,7 +25,7 @@ namespace ipu { namespace partition {
     int offset;
     SequenceOrigin origin = SequenceOrigin::unordered;
 
-    std::string toString();
+    std::string toString() const;
   };
 
   struct BucketMapping {
@@ -36,7 +36,7 @@ namespace ipu { namespace partition {
     std::vector<SequenceMapping> seqs;
     std::vector<ComparisonMapping> cmps;
 
-    std::string toString();
+    std::string toString() const;
   };
 
   bool operator<(const ipu::partition::BucketMapping& b1, const ipu::partition::BucketMapping& b2);
@@ -51,9 +51,7 @@ namespace ipu { namespace partition {
     BucketMap();
     BucketMap(int nB, int nC, int sC);
 
-    void addBuckets(int nB);
-
-    std::string toString();
+    std::string toString() const;
   };
 
   struct BucketData {
@@ -62,7 +60,8 @@ namespace ipu { namespace partition {
     int weight;
   };
 
-  using BucketHeap = std::priority_queue<std::reference_wrapper<BucketMapping>, std::deque<std::reference_wrapper<BucketMapping>>, std::greater<std::deque<std::reference_wrapper<BucketMapping>>::value_type>>;
+  using BucketHeapRef = std::priority_queue<std::reference_wrapper<BucketMapping>, std::deque<std::reference_wrapper<BucketMapping>>, std::greater<std::deque<std::reference_wrapper<BucketMapping>>::value_type>>;
+  using BucketHeap = std::priority_queue<BucketMapping, std::deque<BucketMapping>, std::greater<std::deque<BucketMapping>::value_type>>;
 
   bool fillFirst(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, int& curBucket);
   bool roundRobin(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, int& curBucket);
