@@ -100,7 +100,7 @@ std::vector<int> seqanAlign(const std::vector<std::string>& queryStrs, const std
 
 int main(int argc, char** argv) {
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
-  plog::init(plog::debug, &consoleAppender);
+  plog::init(plog::verbose, &consoleAppender);
 
   //    0 1 2 3 4 5 6 7 n
   // 0 [0,0,0,0,0,0,0,0,0]

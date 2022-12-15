@@ -71,17 +71,17 @@ class FillCallback final : public poplar::StreamCallback {
     std::vector<int32_t> aa(size + 1, 0);
     memcpy(p, aa.data(), aa.size() * 4);
   }
-  inline void pushBatch(void* __restrict p, SubmittedBatch* b) {
+  void pushBatch(void* __restrict p, SubmittedBatch* b) {
     // Wireformat: inputbuffer+slotToken
     // TODO!!!!!!!!!: Are the offsets correct?????
     size_t inputsize = abs((char*)b->inputs_end - (char*)b->inputs_begin);
     PLOGD << "Input buffer size " << inputsize << " defined size is " << size;
     memcpy(p, (char*)b->inputs_begin, inputsize);
-    PLOGD << "Here";
+    PLOGD << "Here 1";
     int* ip = reinterpret_cast<int*>(&reinterpret_cast<char*>(p)[inputsize]);
-    PLOGD << "Here";
+    PLOGD << "Here 2";
     ip[0] = b->slot + 1;
-    PLOGD << "Here";
+    PLOGD << "Here 3";
     b->runTick.tick();
     PLOGV << "PushBatch slot " << b->slot;
     result_mutex.lock();
@@ -116,7 +116,7 @@ class RecvCallback final : public poplar::StreamCallback {
   void complete() noexcept override {}
 
  private:
-  inline void pullBatch(void* __restrict p) {
+  void pullBatch(void* __restrict p) {
     // Wireformat: slotToken+outbuffer
     int32_t* ip = reinterpret_cast<int32_t*>(p);
     slotToken st = ip[0] - 1;
@@ -134,6 +134,7 @@ class RecvCallback final : public poplar::StreamCallback {
     result_mutex.unlock();
     memcpy((char*)b->results_begin, &ip[1 + 2 + 2], abs((char*)b->results_end - (char*)b->results_begin));
     b->signal_done->close();
+    PLOGV << "PullBatch EXIT slot " << st;
   }
 
   uint64_t readTime(int32_t* mem) {
@@ -591,14 +592,16 @@ void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs
 void SWAlgorithm::compare_local_many(const std::vector<std::string>& A, const std::vector<std::string>& B) {
   swatlib::TickTock tPrepare, tCompare;
 
-  std::vector<int*> mapping;
+  std::vector<int32_t*> mapping;
   std::vector<int32_t*> inputs;
 
   tPrepare.tick();
   prepare_local_many(config, algoconfig, A, B, inputs, mapping);
   tPrepare.tock();
+  PLOGE << "MAPPING SIZE " << mapping.size();
+  PLOGE << "MAPPING FIRST VAL " << ((int32_t*)mapping[0])[0];
 
-  PLOGD << "Starting comparisons";
+  PLOGE << "Starting comparisons";
 
   for (int batch = 0; batch < mapping.size(); ++batch) {
     int32_t* input_begin = inputs[batch];
@@ -606,13 +609,16 @@ void SWAlgorithm::compare_local_many(const std::vector<std::string>& A, const st
     size_t results_size = scores.size() + a_range_result.size() + b_range_result.size();
     std::vector<int32_t> results(results_size);
     tCompare.tick();
+    PLOGE << "prepared_remote_compare";
     prepared_remote_compare(input_begin, input_end, &*results.begin(), &*results.end());
     tCompare.tock();
-    int* mapping_begin = mapping[batch];
-    int* mapping_end = mapping_begin + algoconfig.getTotalNumberOfComparisons();
+    int32_t* mapping_begin = mapping[batch];
+    int32_t* mapping_end = mapping_begin + algoconfig.getTotalNumberOfComparisons();
+    PLOGE << "transfer results";
     transferResults(&*results.begin(), &*results.end(), mapping_begin, mapping_end, &*scores.begin(), &*scores.end(),
                     &*a_range_result.begin(), &*a_range_result.end(), &*b_range_result.begin(), &*b_range_result.end());
   }
+  PLOGE << "Comps Done";
 
   double prepare_time = static_cast<double>(tPrepare.duration<std::chrono::milliseconds>()) / 1e3;
   double compare_time = static_cast<double>(tCompare.duration<std::chrono::milliseconds>()) / 1e3;
@@ -621,6 +627,7 @@ void SWAlgorithm::compare_local_many(const std::vector<std::string>& A, const st
   PLOGD << "Total time: " << total_time << " prepare(" << prepare_time << ") compare(" << compare_time << ") preprocessing is "
         << prepare_perc << "% of total";
 
+  PLOGE << "Exit func";
 }
 
 void SWAlgorithm::compare_local(const std::vector<std::string>& A, const std::vector<std::string>& B, bool errcheck) {
@@ -723,6 +730,7 @@ retry:
 
 void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end) {
   int numComparisons = mapping_end - mapping_begin;
+  PLOGE << "numComparisons " << numComparisons;
   transferResults(results_begin, results_end, mapping_begin, mapping_end, scores_begin, scores_end, arange_begin, arange_end, brange_begin, brange_end, numComparisons);
 }
 void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons) {
@@ -736,9 +744,16 @@ void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, 
   auto* results_arange = results_begin + result_part_size;
   auto* results_brange = results_begin + result_part_size * 2;
 
+  PLOGE << "transfer results loop";
   for (int i = 0; i < numComparisons; ++i) {
+    PLOGE << "transfer results loop " << i;
     auto mapped_i = mapping_begin[i];
-    scores_begin[i] = results_score[mapped_i];
+    PLOGE << "transfer results loop mapped " << i;
+    PLOGE << "transfer results loop mappidx " << mapped_i;
+    auto s = results_score[mapped_i];
+    PLOGE << "transfer results loop got score " << i;
+    scores_begin[i] = s;
+    PLOGE << "transfer results loop wrote score " << i;
     arange_begin[i] = results_arange[mapped_i];
     brange_begin[i] = results_brange[mapped_i];
   }
@@ -919,7 +934,9 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
       for (int j = 0; j < seqSize; ++j) {
         bucket_seq[sm.offset + j] = encodeTable[seq[j]];
       }
+      PLOGD << "bucket_seq " << seqSize;
     }
+    PLOGD << "Here X1";
     for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
       const auto& cmpMapping = bucketMapping.cmps[i];
       bucket_meta[i * 4] = cmpMapping.sizeA;
@@ -927,9 +944,15 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
       bucket_meta[i * 4 + 2] = cmpMapping.sizeB;
       bucket_meta[i * 4 + 3] = cmpMapping.offsetB;
 
-      mapping[cmpMapping.comparisonIndex] = map.cmpCapacity * bucketMapping.bucketIndex + i;
+      PLOGW << "Here set mapping idx " << cmpMapping.comparisonIndex << " -> " <<  (map.cmpCapacity * bucketMapping.bucketIndex + i);
+      // TODO: This is wrong!!!
+      mapping[map.cmpCapacity * bucketMapping.bucketIndex + i] = cmpMapping.comparisonIndex;
+      // This should be correct but is not.
+      // mapping[cmpMapping.comparisonIndex] = map.cmpCapacity * bucketMapping.bucketIndex + i;
     }
+    PLOGD << "Here X2";
   }
+    PLOGD << "Here return";
 }
 
 void SWAlgorithm::prepare_local_many(
@@ -938,7 +961,7 @@ void SWAlgorithm::prepare_local_many(
   const std::vector<std::string>& A,
   const std::vector<std::string>& B,
   std::vector<int32_t*>& inputs_begins,
-  std::vector<int*>& seqMappings
+  std::vector<int32_t*>& seqMappings
   ) {
   partition::BucketMap map(algoconfig.tilesUsed, algoconfig.maxBatches, algoconfig.bufsize);
   fillBuckets(algoconfig.fillAlgo, map, A, B, 0);
@@ -956,6 +979,7 @@ void SWAlgorithm::prepare_local_many(
   for (int i = 0; i<batches; i++) {
     inputs_begins[i] = (int32_t*) malloc(inputBufferSize * sizeof(int32_t));
     seqMappings[i] = (int32_t*) malloc(mappingBufferSize * sizeof(int32_t));
+    PLOGW << "FRESH MAPPING VALUE " << seqMappings[0][0];
 
     partition::BucketMap maptmp(algoconfig.tilesUsed, algoconfig.maxBatches, algoconfig.bufsize);
     std::copy(map.buckets.begin() + i * algoconfig.tilesUsed, map.buckets.begin() + (i + 1 * algoconfig.tilesUsed), maptmp.buckets.begin());
