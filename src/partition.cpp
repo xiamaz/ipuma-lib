@@ -403,9 +403,11 @@ namespace partition {
       const auto bLen = B[i].size();
       srts[i] = {aLen * bLen, i};
     }
+    PLOGE << "SORT START";
     std::sort(srts.begin(), srts.end(), [](std::pair<int, int> &a, std::pair<int, int> &b) { 
       return std::get<0>(a) > std::get<0>(b);
     });
+    PLOGE << "SORT END";
 
     json js;
     js["top"] = std::get<0>(srts[0]);
@@ -425,7 +427,7 @@ namespace partition {
       // insert all popped buckets into our heap later
       std::deque<BucketMapping> qq;
       int tries = 0;
-      PLOGE << "Num Buckets in Heap after popping HEAD: " << q.size();
+      // PLOGE << "Num Buckets in Heap after popping HEAD: " << q.size();
       while ((bucket.cmps.size() + 1 > map.cmpCapacity) || (bucket.seqSize + aLen + bLen > map.sequenceCapacity)) {
         if (!q.empty()) {
           qq.push_back(bucket);

@@ -125,6 +125,15 @@ int main(int argc, char** argv) {
   std::vector<std::string> refs = TEST_refs;
   std::vector<std::string> qers = TEST_queries;
 
+  for (auto& [path_a, path_b] : INPUT_BATCHS) {
+    auto refsnew = loadSequences(path_a);
+    auto queriesnew = loadSequences(path_b);
+    refs.insert(refs.end(), refsnew.begin(), refsnew.end());
+    qers.insert(qers.end(), queriesnew.begin(), queriesnew.end());
+  }
+
+  PLOGE << "NUMBER OF COMPARISONS: " << refs.size();
+
   // std::vector<std::string> refs{};
   // std::vector<std::string> qers{};
 
@@ -144,7 +153,7 @@ int main(int argc, char** argv) {
     .ambiguityValue = -1,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {1 /*Tiles used*/, 200 /*maxAB*/, 4 , 200 * 20, ipu::VertexType::multixdrop, ipu::Algorithm::greedy});
+  }, {1472 /*Tiles used*/, 1000 /*maxAB*/, 200 , 200 * 20, ipu::VertexType::multixdrop, ipu::Algorithm::greedy});
   // driver.compare_local(refs, qers);
   driver.compare_local_many(refs, qers);
   auto aln_results = driver.get_result();

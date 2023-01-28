@@ -42,6 +42,9 @@ struct IPUAlgoConfig {
   int getMetaBufferSize32b() const;
   int getLenBufferSize32b() const;
   int getInputBufferSize32b() const;
+
+  size_t getOffsetInputSequence() const;
+  size_t getOffsetMetadata() const;
 };
 
 void to_json(json& j, const SWConfig& c);

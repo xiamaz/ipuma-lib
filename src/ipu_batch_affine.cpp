@@ -486,15 +486,6 @@ size_t SWAlgorithm::getMetaOffset(const IPUAlgoConfig& config) {
   return config.getTotalBufsize32b();
 }
 
-void SWAlgorithm::refetch() {
-  assert(false && "Not implemented");
-  // engine->run(1);
-}
-
-std::tuple<int, slotToken> SWAlgorithm::unpack_slot(slotToken s) {
-  return {s / slot_size, s % slot_size};
-}
-
 void SWAlgorithm::upload(int32_t* inputs_begin, int32_t* inputs_end, slotToken slot) {
   auto [lot, sid] = unpack_slot(slot);
   PLOGD.printf("Slot is %d, lot is %d", sid, lot);
@@ -733,6 +724,7 @@ void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, 
   PLOGE << "numComparisons " << numComparisons;
   transferResults(results_begin, results_end, mapping_begin, mapping_end, scores_begin, scores_end, arange_begin, arange_end, brange_begin, brange_end, numComparisons);
 }
+
 void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons) {
   size_t results_size = results_end - results_begin;
   size_t result_part_size = results_size / 3;
@@ -744,18 +736,20 @@ void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, 
   auto* results_arange = results_begin + result_part_size;
   auto* results_brange = results_begin + result_part_size * 2;
 
-  PLOGE << "transfer results loop";
+  // PLOGE << "transfer results loop";
   for (int i = 0; i < numComparisons; ++i) {
-    PLOGE << "transfer results loop " << i;
+    // PLOGE << "transfer results loop " << i;
     auto mapped_i = mapping_begin[i];
-    PLOGE << "transfer results loop mapped " << i;
-    PLOGE << "transfer results loop mappidx " << mapped_i;
-    auto s = results_score[mapped_i];
-    PLOGE << "transfer results loop got score " << i;
-    scores_begin[i] = s;
-    PLOGE << "transfer results loop wrote score " << i;
-    arange_begin[i] = results_arange[mapped_i];
-    brange_begin[i] = results_brange[mapped_i];
+    // PLOGE << "transfer results loop mapped " << i;
+    // PLOGE << "transfer results loop mappidx " << mapped_i;
+    // PLOGE << "transfer results loop got score " << i;
+    // scores_begin[i] = results_score[mapped_i];
+    // // PLOGE << "transfer results loop wrote score " << i;
+    // arange_begin[i] = results_arange[mapped_i];
+    // brange_begin[i] = results_brange[mapped_i];
+    scores_begin[i] = 0;
+    arange_begin[i] = 0;
+    brange_begin[i] = 0;
   }
 }
 
@@ -929,14 +923,14 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
           throw std::runtime_error("Using unordered mapping with A/B comparison.");
           break;
       }
-      PLOGD << "Sequence size written " << seqSize;
+      // PLOGD << "Sequence size written " << seqSize;
 #pragma omp simd
       for (int j = 0; j < seqSize; ++j) {
         bucket_seq[sm.offset + j] = encodeTable[seq[j]];
       }
-      PLOGD << "bucket_seq " << seqSize;
+      // PLOGD << "bucket_seq " << seqSize;
     }
-    PLOGD << "Here X1";
+    // PLOGD << "Here X1";
     for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
       const auto& cmpMapping = bucketMapping.cmps[i];
       bucket_meta[i * 4] = cmpMapping.sizeA;
@@ -944,15 +938,15 @@ void SWAlgorithm::fill_input_buffer(const partition::BucketMap& map, const swatl
       bucket_meta[i * 4 + 2] = cmpMapping.sizeB;
       bucket_meta[i * 4 + 3] = cmpMapping.offsetB;
 
-      PLOGW << "Here set mapping idx " << cmpMapping.comparisonIndex << " -> " <<  (map.cmpCapacity * bucketMapping.bucketIndex + i);
+      // PLOGW << "Here set mapping idx " << cmpMapping.comparisonIndex << " -> " <<  (map.cmpCapacity * bucketMapping.bucketIndex + i);
       // TODO: This is wrong!!!
       mapping[map.cmpCapacity * bucketMapping.bucketIndex + i] = cmpMapping.comparisonIndex;
       // This should be correct but is not.
       // mapping[cmpMapping.comparisonIndex] = map.cmpCapacity * bucketMapping.bucketIndex + i;
     }
-    PLOGD << "Here X2";
+    // PLOGD << "Here X2";
   }
-    PLOGD << "Here return";
+    // PLOGD << "Here return";
 }
 
 void SWAlgorithm::prepare_local_many(
@@ -984,6 +978,31 @@ void SWAlgorithm::prepare_local_many(
     partition::BucketMap maptmp(algoconfig.tilesUsed, algoconfig.maxBatches, algoconfig.bufsize);
     std::copy(map.buckets.begin() + i * algoconfig.tilesUsed, map.buckets.begin() + (i + 1 * algoconfig.tilesUsed), maptmp.buckets.begin());
     PLOGD << "Input buffer size " << inputBufferSize;
+
+#ifdef IPUMA_DEBUG
+  int emptyBuckets = 0;
+  long dataCount = 0;
+  std::vector<int> bucketCmps;
+  for (const auto& bucket : maptmp.buckets) {
+    if (bucket.cmps.size() == 0) emptyBuckets++;
+    dataCount += bucket.seqSize;
+  }
+  std::stringstream ss;
+  // ss << "Map[";
+  // for (auto [k, v] : occurence) {
+  //   ss << k << ": " << v << ",";
+  // }
+  // ss << "]";
+  PLOGD << "Total number of buckets: " << map.numBuckets << " empty buckets: " << emptyBuckets;
+  // PLOGD << "Bucket size occurence: " << ss.str();
+  // int adjusted_bufsize = (algoconfig.bufsize / algoconfig.transmissionPrograms;
+  // double bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(algoconfig.bufsize) * 100.0;
+  // double adjusted_bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(adjusted_bufsize) * 100.0;
+  // PLOGD << "Max bucket: " << maxBucket << "/" << algoconfig.bufsize << " (" << bucketPerc << "%), adjusted " << maxBucket << "/" << adjusted_bufsize << " (" << adjusted_bucketPerc << "%)";
+  double totalTransferSize = ((algoconfig.getInputBufferSize32b() * 4) / algoconfig.transmissionPrograms);
+  auto transferInfoRatio = static_cast<double>(dataCount) / totalTransferSize * 100;
+  PLOGD << "Transfer info/total: " << dataCount << "/" << totalTransferSize << " (" << transferInfoRatio << "%)";
+#endif
     fill_input_buffer(maptmp, swconfig.datatype, algoconfig, A, B, inputs_begins[i], inputs_begins[i]+inputBufferSize, seqMappings[i]);
   }
   PLOGD << "Finished prepare_local";

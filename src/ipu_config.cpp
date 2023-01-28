@@ -13,6 +13,14 @@ int IPUAlgoConfig::getTotalBufsize32b() const { return tilesUsed * getBufsize32b
 
 int IPUAlgoConfig::getInputBufferSize32b() const { return getTotalBufsize32b() + getMetaBufferSize32b(); }
 
+size_t IPUAlgoConfig::getOffsetInputSequence() const {
+        return 0;
+}
+
+size_t IPUAlgoConfig::getOffsetMetadata() const {
+        return getTotalBufsize32b();
+}
+
 void to_json(json& j, const SWConfig& c) {
         j = json{
                 {"gapInit", c.gapInit},

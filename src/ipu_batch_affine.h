@@ -18,69 +18,66 @@ using namespace poplar;
 namespace ipu {
 namespace batchaffine {
 
-using slotToken = long;
+using JobId = long;
 struct BlockAlignmentResults {
   std::vector<int32_t> scores;
   std::vector<int32_t> a_range_result;
   std::vector<int32_t> b_range_result;
 };
 
-struct SubmittedBatch {
-  int32_t* inputs_begin;
-  int32_t* inputs_end;
-  int32_t* results_begin;
-  int32_t* results_end;
-  slotToken slot;
-  msd::channel<int>* signal_done;
-  uint64_t* cyclesH2D = nullptr;
-  uint64_t* cyclesInner = nullptr;
-  swatlib::TickTock runTick;
+struct Batch {
+  std::vector<int32_t> inputs;
+  std::vector<int32_t> results;
+  std::vector<int32_t> origin_comparison_index;
+  swatlib::TickTock batchTick;
+  BlockAlignmentResults get_result();
+  static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end);
+  static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons);
 };
 
 struct Job {
   Job(): tick({}) {};
   void join();
+
+  JobId id;
   msd::channel<int>* done_signal;
   uint64_t h2dCycles;
   uint64_t innerCycles;
-  swatlib::TickTock tick;
-  SubmittedBatch sb;
+
+  swatlib::TickTock jobTick;
+  Batch* batch;
 };
 
-using BatchChannel = msd::channel<SubmittedBatch*>;
+
+
+/**
+ * Workflow:
+ * 1. Langer sequenz wird präperiert -> variable sized vector ab `Batch`es als output. (Sorting passiert hier)
+ * 2. Submitted -> Batch wird zum Job,.. Job der für 1:1 Batch zuständig ist
+ * 3. Job beendet, batch enthält informationen.
+ *    -> wir können im Batch UPC++ pounter magie machen.
+ * 
+ * 
+ * Seqs = {"ctgaa", "aact", "ttgg", "aact" }
+ * Comps = [
+ *            (0, 1), // index = 0
+ *            (3, 4)  // index = 1
+ *          ]
+ * 
+ */
 
 class SWAlgorithm : public IPUAlgorithm {
  private:
-  msd::channel<SubmittedBatch*> work_queue;
+  msd::channel<Job*> work_queue;
   std::mutex tableMutex;
-  std::map<slotToken, SubmittedBatch*> resultTable;
-  // std::vector<int32_t> results;
-  std::vector<int32_t> scores;
-  std::vector<int32_t> a_range_result;
-  std::vector<int32_t> b_range_result;
+  std::map<JobId, Job*> resultTable;
   std::vector<std::thread> executor_procs;
-
-  int slot_size;
-  std::vector<int> slot_avail;
-  int last_slot;
-  std::vector<std::vector<bool>> slots;
-
-  static size_t getSeqsOffset(const IPUAlgoConfig& config);
-  static size_t getMetaOffset(const IPUAlgoConfig& config);
-
-  void release_slot(slotToken i);
 
  public:
   IPUAlgoConfig algoconfig;
 
   SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig);
-  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap = 1, size_t ipuCount = 1, bool runExecutor = true);
-
-  static int calculate_slot_region_index(const IPUAlgoConfig& algoconfig, int max_buffer_size);
-  int calculate_slot_region_index(int max_buffer_size);
-  std::tuple<int, slotToken> unpack_slot(slotToken);
-  bool slot_available(int max_buffer_size);
-  slotToken queue_slot(int max_buffer_size);
+  SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t ipuCount = 1, bool runExecutor = true);
 
   static void checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std::vector<int>& SeqSizes);
   static void checkSequenceSizes(const IPUAlgoConfig& algoconfig, const RawSequences& Seqs);
@@ -91,40 +88,23 @@ class SWAlgorithm : public IPUAlgorithm {
   static void fill_input_buffer(const partition::BucketMap& map, const swatlib::DataType dtype, const IPUAlgoConfig& algoconfig, const RawSequences& Seqs, const Comparisons& Cmps, int32_t* inputs_begin, int32_t* inputs_end, int32_t* mapping);
   static void fill_input_buffer(const partition::BucketMap& map, const swatlib::DataType dtype, const IPUAlgoConfig& algoconfig, const RawSequences& A, const RawSequences& B, int32_t* inputs_begin, int32_t* inputs_end, int32_t* mapping);
 
-  BlockAlignmentResults get_result();
-
   // Local Buffers
-  void compare_local(const std::vector<std::string>& A, const std::vector<std::string>& B, bool errcheck = false);
-  void compare_mn_local(const std::vector<std::string>& Seqs, const Comparisons& Cmps, bool errcheck = false);
+  // void compare_local(const std::vector<std::string>& A, const std::vector<std::string>& B, bool errcheck = false);
+  // void compare_mn_local(const std::vector<std::string>& Seqs, const Comparisons& Cmps, bool errcheck = false);
 
-  void refetch();
+  // Convenience (checkSequenceSizes, fillMNBuckets, fill_input_buffer)
+  std::vector<Batch> create_batches(
+    const SWConfig& swconfig, 
+    const IPUAlgoConfig& algoconfig, 
+    const std::vector<std::string>& Seqs,
+    const Comparisons& Cmps
+  );
 
-  // Remote bufffer
-  void prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token);
-  void prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end);
-
-  Job* async_submit_prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end);
-  void blocking_join_prepared_remote_compare(Job& job);
-
-  void upload(int32_t* inputs_begin, int32_t* inputs_end, slotToken slot);
-  // slotToken upload(int32_t* inputs_begin, int32_t* inputs_end);
+  Job* async_submit(Batch* batch);
+  void blocking_join(Job& job);
 
   void run_executor();
-  static int prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& algoconfig, const std::vector<std::string>& A, const std::vector<std::string>& B, int32_t* inputs_begin, int32_t* inputs_end, int* deviceMapping);
-  static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end);
-  static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons);
   ~SWAlgorithm();
-
-  // V1.1 APIs:
-  void compare_local_many(const std::vector<std::string>& A, const std::vector<std::string>& B);
-  void prepare_local_many(
-  const SWConfig& swconfig,
-  const IPUAlgoConfig& algoconfig,
-  const std::vector<std::string>& A,
-  const std::vector<std::string>& B,
-    std::vector<int32_t*>& inputs_begins,
-    std::vector<int*>& seqMappings
-  );
 };
 }  // namespace batchaffine
 }  // namespace ipu
