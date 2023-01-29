@@ -34,8 +34,9 @@ protected:
     // std::unique_ptr<Engine> engine;
     // Engine* engine = nullptr;
     std::vector<poplar::Engine*> engines;
-public:
     SWConfig config;
+
+public:
     IPUAlgorithm(SWConfig config, int thread_id, int ipu_count);
 
     Graph createGraph();

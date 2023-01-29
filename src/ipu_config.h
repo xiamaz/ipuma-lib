@@ -26,14 +26,13 @@ struct IPUAlgoConfig {
   VertexType vtype = VertexType::cpp;
   Algorithm fillAlgo = Algorithm::fillFirst;
   bool forwardOnly = false; // do not calculate the start position of a match, this should approx 2x performance, as no reverse pass is needed
-  int transmissionPrograms = 1;  // number of separate transmission programs, use only with remote!
   int ioTiles = 0;
 
   // Optional: XDrop
   int xDrop = 10;
   double bandPercentageXDrop = 0.5;
 
-  // this is maxbatches * num_vertices
+  // this is maxbatches * num_vertices and is the maximum number of comparisons in a single batch
   int getTotalNumberOfComparisons() const;
 
   // size of the sequence buffer with 32bits

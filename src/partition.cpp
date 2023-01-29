@@ -480,19 +480,17 @@ namespace partition {
     return true;
   }
 
-  bool fillBuckets(Algorithm algo, BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, int& curBucket, BucketHeap& heap) {
-    bool ret = false;
+  void fillBuckets(Algorithm algo, BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset) {
     switch (algo) {
     case Algorithm::fillFirst:
-      ret = partition::fillFirst(map, A, B, indexOffset, curBucket);
+      partition::fillFirst(map, Seqs, Cmps, indexOffset);
       break;
     case Algorithm::roundRobin:
-      ret = partition::roundRobin(map, A, B, indexOffset, curBucket);
+      partition::roundRobin(map, Seqs, Cmps, indexOffset);
       break;
     case Algorithm::greedy:
-      ret = partition::greedy(map, A, B, indexOffset, heap);
+      partition::greedy(map, Seqs, Cmps, indexOffset);
       break;
     }
-    return ret;
   }
 }}

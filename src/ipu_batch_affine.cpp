@@ -29,11 +29,21 @@ using json = nlohmann::json;
 #define CYCLE_COUNT_OUTER_N(n) "cycle-count-outer" + std::to_string(n)
 #define CYCLE_COUNT_INNER_N(n) "cycle-count-inner" + std::to_string(n)
 
+/**
+ * @brief Callback for pushing jobs to the IPU.
+ * 
+ */
 class FillCallback final : public poplar::StreamCallback {
  public:
   using Result = poplar::StreamCallback::Result;
 
-  FillCallback(msd::channel<SubmittedBatch*>& value, std::map<slotToken, SubmittedBatch*>& results, std::mutex& rmutex, size_t size, size_t ipu_id) : ch(value), resultTable(results), size(size), id(ipu_id), result_mutex(rmutex) {}
+  FillCallback(
+    msd::channel<Job*>& value,
+    JobMap& results,
+    std::mutex& rmutex,
+    size_t size,
+    size_t ipu_id
+  ) : ch(value), resultTable(results), size(size), id(ipu_id), result_mutex(rmutex) {}
 
   Result prefetch(void* __restrict p) noexcept override {
     PLOGV.printf("Enter PreFETCH, id %d", id);
@@ -71,37 +81,44 @@ class FillCallback final : public poplar::StreamCallback {
     std::vector<int32_t> aa(size + 1, 0);
     memcpy(p, aa.data(), aa.size() * 4);
   }
-  void pushBatch(void* __restrict p, SubmittedBatch* b) {
-    // Wireformat: inputbuffer+slotToken
-    // TODO!!!!!!!!!: Are the offsets correct?????
-    size_t inputsize = abs((char*)b->inputs_end - (char*)b->inputs_begin);
-    PLOGD << "Input buffer size " << inputsize << " defined size is " << size;
-    memcpy(p, (char*)b->inputs_begin, inputsize);
-    PLOGD << "Here 1";
-    int* ip = reinterpret_cast<int*>(&reinterpret_cast<char*>(p)[inputsize]);
-    PLOGD << "Here 2";
-    ip[0] = b->slot + 1;
-    PLOGD << "Here 3";
-    b->runTick.tick();
-    PLOGV << "PushBatch slot " << b->slot;
+  void pushBatch(void* __restrict p, Job* j) {
+    // Wireformat: inputbuffer+JobId
+    const auto& inputBuffer = j->batch->inputs;
+    size_t inputSize = inputBuffer.size() * sizeof(inputBuffer[0]);
+
+    PLOGD << "Input buffer size " << inputSize << " defined size is " << size;
+    memcpy(p, inputBuffer.data(), inputSize);
+
+    // insert job ID at the end of the transfer buffer
+    int* ip = reinterpret_cast<int*>(&reinterpret_cast<char*>(p)[inputSize]);
+    ip[0] = j->id;
+
+    j->batch->tick.tick();
+    PLOGV << "PushBatch slot " << j->id;
+
+    // inserting job into resultTable so that we can add result later
     result_mutex.lock();
-    resultTable.insert({b->slot, b});
+    resultTable.insert({j->id, j});
     result_mutex.unlock();
   }
   size_t size;
   size_t id;
-  msd::channel<SubmittedBatch*>& ch;
+  msd::channel<Job*>& ch;
   // TODO: Add mutex!
   // TODO: move this out of the hot worker?
   std::mutex &result_mutex;
-  std::map<slotToken, SubmittedBatch*>& resultTable;
+  JobMap& resultTable;
 };
 
+/**
+ * @brief Callback for getting back results from the IPU
+ * 
+ */
 class RecvCallback final : public poplar::StreamCallback {
  public:
   using Result = poplar::StreamCallback::Result;
 
-  RecvCallback(std::map<slotToken, SubmittedBatch*>& results, std::mutex& rmutex) : resultTable(results), result_mutex(rmutex) {}
+  RecvCallback(JobMap& results, std::mutex& rmutex) : resultTable(results), result_mutex(rmutex) {}
 
   Result prefetch(void* __restrict p) noexcept override {
     PLOGF.printf("NOOOOOOOOOOOOOOOOOOOOOOOOOO");
@@ -117,24 +134,30 @@ class RecvCallback final : public poplar::StreamCallback {
 
  private:
   void pullBatch(void* __restrict p) {
+
     // Wireformat: slotToken+outbuffer
     int32_t* ip = reinterpret_cast<int32_t*>(p);
-    slotToken st = ip[0] - 1;
-    if (st == -1) {
+    JobId jobId = ip[0];
+    if (jobId == -1) {
       return;
     }
-    PLOGV << "PullBatch slot " << st;
+    PLOGV << "PullBatch JobId " << jobId;
+
+    // getting Job object based on id
     result_mutex.lock();
-    auto b = resultTable[st];
-    *b->cyclesH2D = readTime(&ip[1]);
-    *b->cyclesInner = readTime(&ip[1 + 2]);
-    b->runTick.tock();
-    // PLOGE.printf("Cycles: %lu, %lu", *b.cyclesH2D, *b.cyclesInner);
-    resultTable.erase(st);
+    auto* j = resultTable[jobId];
+    j->h2dCycles = readTime(&ip[1]);
+    j->innerCycles = readTime(&ip[1 + 2]);
+    j->batch->tick.tock();
+    resultTable.erase(jobId);
     result_mutex.unlock();
-    memcpy((char*)b->results_begin, &ip[1 + 2 + 2], abs((char*)b->results_end - (char*)b->results_begin));
-    b->signal_done->close();
-    PLOGV << "PullBatch EXIT slot " << st;
+
+    auto& resultBuffer = j->batch->results;
+    size_t bufferSize = resultBuffer.size() * sizeof(resultBuffer[0]);
+    memcpy((char*)resultBuffer.data(), &ip[1 + 2 + 2], bufferSize);
+    j->done_signal->close();
+
+    PLOGV << "PullBatch EXIT jobId " << jobId;
   }
 
   uint64_t readTime(int32_t* mem) {
@@ -144,9 +167,37 @@ class RecvCallback final : public poplar::StreamCallback {
     return totalCycles;
   }
 
-  std::mutex &result_mutex;
-  std::map<slotToken, SubmittedBatch*>& resultTable;
+  std::mutex& result_mutex;
+  JobMap& resultTable;
 };
+
+BlockAlignmentResults Batch::get_result() {
+  std::vector<int32_t> scores(numComparisons);
+  std::vector<int32_t> a_range_result(numComparisons);
+  std::vector<int32_t> b_range_result(numComparisons);
+
+  // TODO this should not be hardcoded here but passed as a config to make layout changes easier.
+  int aOffset = results.size() / 3;
+  int bOffset = aOffset * 2;
+
+  // mapping is now responsibility of the caller
+  for (int i = 0; i < numComparisons; ++i) {
+    int aindex = i + aOffset;
+    int bindex = i + bOffset;
+    scores[i] = results[i];
+    a_range_result[i] = results[aindex];
+    b_range_result[i] = results[bindex];
+  }
+
+  return {scores, a_range_result, b_range_result};
+}
+
+void Job::join() {
+  for (auto done : *done_signal) {
+    throw std::runtime_error("done_signal should be closed");
+  }
+  tick.tock();
+}
 
 /**
  * Streamable IPU graph for SW
@@ -154,10 +205,11 @@ class RecvCallback final : public poplar::StreamCallback {
 std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigned long activeTiles, unsigned long maxAB,
                                          unsigned long bufSize, unsigned long maxBatches,
                                          const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt,
-                                         int transmissionPrograms, int buf_rows, bool forward_only, int ioTiles,
+                                         bool forward_only, int ioTiles,
                                          int xDrop, double bandPercentageXDrop
                                          ) {
-  int buffers = transmissionPrograms;
+  // TODO: remove transmissionPrograms
+  int buffers = 1;
 
   std::vector<program::Program> progs(buffers);
   for (size_t buffer_share = 0; buffer_share < buffers; buffer_share++) {
@@ -391,29 +443,26 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
 }
 
 // TODO: Better default for work_queue!!!
-SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t slotCap, size_t ipuCount, bool runExecutor)
+SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t ipuCount, bool runExecutor)
     : IPUAlgorithm(config, thread_id, ipuCount), algoconfig(algoconfig), work_queue({WORK_QUEUE_SIZE}), resultTable({}) {
-  const auto totalComparisonsCount = algoconfig.getTotalNumberOfComparisons();
-  slot_size = slotCap;
-  slot_avail.resize(algoconfig.transmissionPrograms);
-  std::fill(slot_avail.begin(), slot_avail.end(), slotCap);
-  slots.resize(algoconfig.transmissionPrograms);
-  for (size_t i = 0; i < algoconfig.transmissionPrograms; i++) {
-    slots[i].resize(slot_size);
-    std::fill(slots[i].begin(), slots[i].end(), false);
-  }
-
-  scores.resize(totalComparisonsCount);
-  a_range_result.resize(totalComparisonsCount);
-  b_range_result.resize(totalComparisonsCount);
-
   Graph graph = createGraph();
 
   auto similarityMatrix = swatlib::selectMatrix(config.similarity, config.matchValue, config.mismatchValue, config.ambiguityValue);
-  std::vector<program::Program> programs =
-      buildGraph(graph, algoconfig.vtype, algoconfig.tilesUsed, algoconfig.maxAB, algoconfig.bufsize, algoconfig.maxBatches,
-                 similarityMatrix, config.gapInit, config.gapExtend, algoconfig.transmissionPrograms, slot_size, algoconfig.forwardOnly, algoconfig.ioTiles,
-                 algoconfig.xDrop, algoconfig.bandPercentageXDrop);
+  std::vector<program::Program> programs = buildGraph(
+    graph,
+    algoconfig.vtype,
+    algoconfig.tilesUsed,
+    algoconfig.maxAB,
+    algoconfig.bufsize,
+    algoconfig.maxBatches,
+    similarityMatrix,
+    config.gapInit,
+    config.gapExtend,
+    algoconfig.forwardOnly,
+    algoconfig.ioTiles,
+    algoconfig.xDrop,
+    algoconfig.bandPercentageXDrop
+  );
 
   std::hash<std::string> hasher;
   auto s = json{algoconfig, config};
@@ -428,156 +477,108 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
 SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig)
     : SWAlgorithm::SWAlgorithm(config, algoconfig, 0) {}
 
-BlockAlignmentResults SWAlgorithm::get_result() { return {scores, a_range_result, b_range_result}; }
-
-void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const std::vector<int>& SeqSizes) {
-  if (SeqSizes.size() > algoconfig.maxBatches * algoconfig.tilesUsed) {
+void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const RawSequences& Seqs) {
+  if (Seqs.size() > algoconfig.maxBatches * algoconfig.tilesUsed) {
     PLOGW << "Sequence has more elements than the maxBatchsize";
-    PLOGW << "Seq.size() = " << SeqSizes.size();
+    PLOGW << "Seq.size() = " << Seqs.size();
     PLOGW << "max comparisons = " << algoconfig.tilesUsed << " * " << algoconfig.maxBatches;
     throw std::runtime_error("Input sequence (A) is over the max length.");
   }
 
-  for (const auto& s : SeqSizes) {
-    if (s > algoconfig.maxAB) {
-      PLOGW << "Sequence size in seq " << s << " > " << algoconfig.maxAB;
+  std::vector<int> seqSizes;
+  for (const auto& sequence : Seqs) {
+    const auto size = sequence.size();
+    if (size > algoconfig.maxAB) {
+      PLOGW << "Sequence size in seq " << size << " > " << algoconfig.maxAB;
       exit(1);
     }
   }
 }
 
-void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const RawSequences& Seqs) {
-  std::vector<int> seqSizes;
-  std::transform(Seqs.begin(), Seqs.end(), std::back_inserter(seqSizes), [](const auto& s) { return s.size(); });
-  checkSequenceSizes(algoconfig, seqSizes);
-}
-
-void SWAlgorithm::fillMNBuckets(Algorithm algo, partition::BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int offset) {
-  switch (algo) {
-    case Algorithm::fillFirst:
-      partition::fillFirst(map, Seqs, Cmps, offset);
-      break;
-    case Algorithm::roundRobin:
-      partition::roundRobin(map, Seqs, Cmps, offset);
-      break;
-    case Algorithm::greedy:
-      partition::greedy(map, Seqs, Cmps, offset);
-      break;
+Job* SWAlgorithm::async_submit(Batch* batch) {
+  if (batch != nullptr) {
+    auto job = new Job();
+    job->done_signal = new msd::channel<int>();
+    job->id = (rand() % 100000000) + 1;
+    job->batch = batch;
+    job->tick.tick();
+    job >> this->work_queue;
+    return job;
+  } else {
+    PLOGE << "null pointer passed as batch.";
   }
+  return nullptr;
 }
 
-void SWAlgorithm::fillBuckets(Algorithm algo, partition::BucketMap& map, const RawSequences& A, const RawSequences& B, int offset) {
-  switch (algo) {
-    case Algorithm::fillFirst:
-      partition::fillFirst(map, A, B, offset);
-      break;
-    case Algorithm::roundRobin:
-      partition::roundRobin(map, A, B, offset);
-      break;
-    case Algorithm::greedy:
-      partition::greedy(map, A, B, offset);
-      break;
-  }
-}
-
-size_t SWAlgorithm::getSeqsOffset(const IPUAlgoConfig& config) { return 0; }
-
-size_t SWAlgorithm::getMetaOffset(const IPUAlgoConfig& config) {
-  return config.getTotalBufsize32b();
-}
-
-void SWAlgorithm::upload(int32_t* inputs_begin, int32_t* inputs_end, slotToken slot) {
-  auto [lot, sid] = unpack_slot(slot);
-  PLOGD.printf("Slot is %d, lot is %d", sid, lot);
-  swatlib::TickTock rbt;
-  rbt.tick();
-  assert(false && "Not implemented");
-  // engine->copyToRemoteBuffer(inputs_begin, REMOTE_MEMORY_N(lot), sid);
-  rbt.tock();
-  auto transferTime = rbt.duration<std::chrono::milliseconds>();
-  size_t totalTransferSize = algoconfig.getInputBufferSize32b() * 4;
-  auto transferBandwidth = (double)totalTransferSize / ((double)transferTime / 1000.0) / 1e6;
-  PLOGI.printf("Transfer rate to remote buffer %.3f mb/s. %ld bytes in %.2fms", transferBandwidth, totalTransferSize, transferTime);
-}
-
-void Job::join() {
-  for (auto done : *done_signal) {
-    throw std::runtime_error("done_signal should be closed");
-  }
-  tick.tock();
-}
-
-Job* SWAlgorithm::async_submit_prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end) {
-  auto job = new Job();
-  job->done_signal = new msd::channel<int>();
-  slotToken sid = (rand() % 100000000) + 1;
-
-  uint64_t h2d_cycles, inner_cycles;
-  job->sb = SubmittedBatch{inputs_begin, inputs_end, results_begin, results_end, sid, job->done_signal, &(job->h2dCycles), &(job->innerCycles), {}};
-  job->tick.tick();
-  &(job->sb) >> this->work_queue;
-  return job;
-}
-
-void SWAlgorithm::blocking_join_prepared_remote_compare(Job& job) {
-  job.join();
-  // release_slot(slot_token);
-  PLOGV << "Total engine run time (in s): " << static_cast<double>(job.tick.duration<std::chrono::milliseconds>()) / 1000.0;
-
-#ifdef IPUMA_DEBUG
-  // auto [lot, sid] = unpack_slot(slot_token);
+void computeJobMetrics(const Job& job, double tileFrequency, size_t numberVertices) {
   auto cyclesOuter = job.h2dCycles + job.innerCycles;
   auto cyclesInner = job.innerCycles;
-  auto timeOuter = static_cast<double>(cyclesOuter) / getTarget().getTileClockFrequency();
-  auto timeInner = static_cast<double>(cyclesInner) / getTarget().getTileClockFrequency();
-  PLOGD << "Poplar cycle count: " << cyclesInner << "/" << cyclesOuter << " computed time (in s): " << timeInner << "/"
-        << timeOuter;
-
-  int buffers = algoconfig.transmissionPrograms;
-  int ibufsize = (algoconfig.bufsize / 4) + (algoconfig.bufsize % 4 == 0 ? 0 : 1);
-  auto scale_bufsize = [=](int bufsize, int lot) {
-    return static_cast<size_t>((bufsize / buffers + (bufsize % buffers == 0 ? 0 : 1)) * (lot + 1));
-  };
-  // int32_t* meta_input = inputs_begin + scale_bufsize(getMetaOffset(algoconfig), lot);
-  int32_t* meta_input = job.sb.inputs_begin + getMetaOffset(algoconfig);
+  auto timeOuter = static_cast<double>(cyclesOuter) / tileFrequency;
+  auto timeInner = static_cast<double>(cyclesInner) / tileFrequency;
 
   // GCUPS computation
-  uint64_t cellCount = 0;
-  uint64_t dataCount = 0;
-  for (size_t i = 0; i < algoconfig.getTotalNumberOfComparisons(); i++) {
-    auto a_len = meta_input[4 * i];
-    auto b_len = meta_input[4 * i + 2];
-    cellCount += a_len * b_len;
-    dataCount += a_len + b_len;
-    // PLOGW << a_len << " : blen : " << b_len;
-  }
+  double GCUPSOuter = static_cast<double>(job.batch->cellCount) / timeOuter / 1e9;
+  double GCUPSInner = static_cast<double>(job.batch->cellCount) / timeInner / 1e9;
 
-  double GCUPSOuter = static_cast<double>(cellCount) / timeOuter / 1e9;
-  double GCUPSInner = static_cast<double>(cellCount) / timeInner / 1e9;
-  PLOGD << "Poplar estimated cells(" << cellCount << ") GCUPS " << GCUPSInner << "/" << GCUPSOuter;
-
-  // dataCount - actual data content transferred
-  // totalTransferSize - size of buffer being transferred
-  double totalTransferSize = algoconfig.getInputBufferSize32b() * 4;
-
-  auto transferTime = timeOuter - timeInner;
-  auto transferInfoRatio = static_cast<double>(dataCount) / totalTransferSize * 100;
+  // transfer computation
+  double totalTransferSize = job.batch->inputs.size() * sizeof(job.batch->inputs[0]);
+  auto transferTime = static_cast<double>(job.h2dCycles) / tileFrequency;
+  auto transferInfoRatio = static_cast<double>(job.batch->dataCount) / totalTransferSize * 100;
   auto transferBandwidth = totalTransferSize / transferTime / 1e6;
-  auto transferBandwidthPerVertex = transferBandwidth / algoconfig.tilesUsed;
-  PLOGD << "Transfer time: " << transferTime << "s estimated bandwidth: " << transferBandwidth
-        << "mb/s, per vertex: " << transferBandwidthPerVertex << "mb/s";
+  auto transferBandwidthPerVertex = transferBandwidth / numberVertices;
+
+  double timeJob = static_cast<double>(job.tick.duration<std::chrono::milliseconds>()) / 1000.0;
+  double timeBatch = static_cast<double>(job.batch->tick.duration<std::chrono::milliseconds>()) / 1000.0;
+
+  json logData = {
+    {"job_id", job.id},
+    {"cycles_h2d", job.h2dCycles},
+    {"cycles_inner", job.innerCycles},
+    {"cycles_outer", cyclesOuter},
+    {"time_job", timeJob},
+    {"time_batch", timeBatch},
+    {"time_inner", timeInner},
+    {"time_outer", timeOuter},
+    {"time_transfer", transferTime },
+    {"gcups_inner", GCUPSInner},
+    {"gcups_outer", GCUPSOuter},
+    {"transfer_bandwidth", transferBandwidth},
+    {"transfer_bandwidth_per_vertex", transferBandwidthPerVertex},
+    {"transfer_info_ratio", transferInfoRatio},
+  };
+
+  PLOGD << "JOBLOG: " << logData.dump();
+}
+
+void SWAlgorithm::blocking_join(Job& job) {
+  job.join();
+  // release_slot(slot_token);
+
+#ifdef IPUMA_DEBUG
+  computeJobMetrics(job, getTileClockFrequency(), algoconfig.tilesUsed);
 #endif
 }
 
-void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end, slotToken slot_token) {
-  release_slot(slot_token);
-  auto job = async_submit_prepared_remote_compare(inputs_begin, inputs_end, results_begin, results_end);
-  blocking_join_prepared_remote_compare(*job);
-}
+std::vector<Batch> SWAlgorithm::create_batches(const RawSequences& seqs, const Comparisons& cmps) {
+  partition::BucketMap map(
+    algoconfig.tilesUsed,
+    algoconfig.maxBatches,
+    algoconfig.bufsize
+  );
+  fillBuckets(algoconfig.fillAlgo, map, seqs, cmps, 0);
+  std::vector<Batch> batches;
+  const auto inputBufferSize = algoconfig.getInputBufferSize32b();
+  const auto mappingBufferSize = algoconfig.getTotalNumberOfComparisons();
 
-void SWAlgorithm::prepared_remote_compare(int32_t* inputs_begin, int32_t* inputs_end, int32_t* results_begin, int32_t* results_end) {
-  auto job = async_submit_prepared_remote_compare(inputs_begin, inputs_end, results_begin, results_end);
-  blocking_join_prepared_remote_compare(*job);
+  batches.push_back({});
+
+  // fill data into batches
+
+  json logData = {
+    {"batches_created", batches.size()}
+  };
+  PLOGD << "BATCHCREATE: " << logData;
+  return batches;
 }
 
 void SWAlgorithm::compare_local_many(const std::vector<std::string>& A, const std::vector<std::string>& B) {
@@ -716,40 +717,6 @@ retry:
       refetch();
       goto retry;
     }
-  }
-}
-
-void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end) {
-  int numComparisons = mapping_end - mapping_begin;
-  PLOGE << "numComparisons " << numComparisons;
-  transferResults(results_begin, results_end, mapping_begin, mapping_end, scores_begin, scores_end, arange_begin, arange_end, brange_begin, brange_end, numComparisons);
-}
-
-void SWAlgorithm::transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons) {
-  size_t results_size = results_end - results_begin;
-  size_t result_part_size = results_size / 3;
-  if (results_size % 3 != 0) {
-    std::cout << results_size << "\n";
-    throw std::runtime_error("Results buffer not 3 aligned.");
-  }
-  auto* results_score = results_begin;
-  auto* results_arange = results_begin + result_part_size;
-  auto* results_brange = results_begin + result_part_size * 2;
-
-  // PLOGE << "transfer results loop";
-  for (int i = 0; i < numComparisons; ++i) {
-    // PLOGE << "transfer results loop " << i;
-    auto mapped_i = mapping_begin[i];
-    // PLOGE << "transfer results loop mapped " << i;
-    // PLOGE << "transfer results loop mappidx " << mapped_i;
-    // PLOGE << "transfer results loop got score " << i;
-    // scores_begin[i] = results_score[mapped_i];
-    // // PLOGE << "transfer results loop wrote score " << i;
-    // arange_begin[i] = results_arange[mapped_i];
-    // brange_begin[i] = results_brange[mapped_i];
-    scores_begin[i] = 0;
-    arange_begin[i] = 0;
-    brange_begin[i] = 0;
   }
 }
 
@@ -964,8 +931,6 @@ void SWAlgorithm::prepare_local_many(
   size_t batches = map.numBuckets / algoconfig.tilesUsed;
   PLOGW << "NUM BATCHES!!!!!!!!!!!!!!!!!!!!!!!!: " << batches;
 
-  const auto inputBufferSize = algoconfig.getInputBufferSize32b();
-  const auto mappingBufferSize = algoconfig.getTotalNumberOfComparisons();
   // const auto resultBufferSize = algoconfig.getTotalNumberOfComparisons() * 3;
 
   inputs_begins.resize(batches);
@@ -979,30 +944,6 @@ void SWAlgorithm::prepare_local_many(
     std::copy(map.buckets.begin() + i * algoconfig.tilesUsed, map.buckets.begin() + (i + 1 * algoconfig.tilesUsed), maptmp.buckets.begin());
     PLOGD << "Input buffer size " << inputBufferSize;
 
-#ifdef IPUMA_DEBUG
-  int emptyBuckets = 0;
-  long dataCount = 0;
-  std::vector<int> bucketCmps;
-  for (const auto& bucket : maptmp.buckets) {
-    if (bucket.cmps.size() == 0) emptyBuckets++;
-    dataCount += bucket.seqSize;
-  }
-  std::stringstream ss;
-  // ss << "Map[";
-  // for (auto [k, v] : occurence) {
-  //   ss << k << ": " << v << ",";
-  // }
-  // ss << "]";
-  PLOGD << "Total number of buckets: " << map.numBuckets << " empty buckets: " << emptyBuckets;
-  // PLOGD << "Bucket size occurence: " << ss.str();
-  // int adjusted_bufsize = (algoconfig.bufsize / algoconfig.transmissionPrograms;
-  // double bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(algoconfig.bufsize) * 100.0;
-  // double adjusted_bucketPerc = static_cast<double>(maxBucket) / static_cast<double>(adjusted_bufsize) * 100.0;
-  // PLOGD << "Max bucket: " << maxBucket << "/" << algoconfig.bufsize << " (" << bucketPerc << "%), adjusted " << maxBucket << "/" << adjusted_bufsize << " (" << adjusted_bucketPerc << "%)";
-  double totalTransferSize = ((algoconfig.getInputBufferSize32b() * 4) / algoconfig.transmissionPrograms);
-  auto transferInfoRatio = static_cast<double>(dataCount) / totalTransferSize * 100;
-  PLOGD << "Transfer info/total: " << dataCount << "/" << totalTransferSize << " (" << transferInfoRatio << "%)";
-#endif
     fill_input_buffer(maptmp, swconfig.datatype, algoconfig, A, B, inputs_begins[i], inputs_begins[i]+inputBufferSize, seqMappings[i]);
   }
   PLOGD << "Finished prepare_local";
@@ -1067,46 +1008,6 @@ int SWAlgorithm::prepare_remote(const SWConfig& swconfig, const IPUAlgoConfig& a
 #endif
 
   return maxBucket;
-}
-
-slotToken SWAlgorithm::queue_slot(int max_bucket_size) {
-  // assert(buf_has_capacity(max_bucket_size));
-  auto si = calculate_slot_region_index(max_bucket_size);
-  int s = -1;
-  for (size_t i = 0; i < slots.size(); i++) {
-    if (!slots[si][i]) {
-      s = i;
-      break;
-    }
-  }
-  assert(s != -1);
-  slots[si][s] = true;
-  slot_avail[si]--;
-  last_slot = s;
-  return s + (si * slot_size);
-}
-
-void SWAlgorithm::release_slot(slotToken i) {
-  auto [lot, sid] = unpack_slot(i);
-  assert(slots[lot][sid] == true);
-  slots[lot][sid] = false;
-  slot_avail[lot]++;
-}
-
-bool SWAlgorithm::slot_available(int max_buffer_size) {
-  return slot_avail[calculate_slot_region_index(max_buffer_size)] > 0;
-}
-
-int SWAlgorithm::calculate_slot_region_index(const IPUAlgoConfig& algoconfig, int max_buffer_size) {
-  auto ret = (int)ceil((max_buffer_size / (double)algoconfig.bufsize) * static_cast<double>(algoconfig.transmissionPrograms)) - 1;
-  PLOGD.printf("Calculated slot region %d from maxbuf %d and bufsize %d", ret, max_buffer_size, algoconfig.bufsize);
-  return ret;
-}
-
-int SWAlgorithm::calculate_slot_region_index(int max_buffer_size) {
-  auto ret = (int)ceil((max_buffer_size / (double)algoconfig.bufsize) * static_cast<double>(algoconfig.transmissionPrograms)) - 1;
-  PLOGD.printf("Calculated slot region %d from maxbuf %d and bufsize %d", ret, max_buffer_size, algoconfig.bufsize);
-  return ret;
 }
 
 void SWAlgorithm::run_executor() {

@@ -76,7 +76,7 @@ namespace ipu { namespace partition {
   void greedy(BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset = 0);
 
   // generic methods
-  bool fillBuckets(Algorithm algo, BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, int& curBucket, BucketHeap& heap);
+  void fillBuckets(Algorithm algo, BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset);
 }}
 
 #endif
