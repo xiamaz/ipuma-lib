@@ -15,11 +15,6 @@
 #include "./xdrop_cpu.h"
 
 #include <utility>
- 
-#include <seqan3/alignment/pairwise/align_pairwise.hpp>
-#include <seqan3/alignment/scoring/nucleotide_scoring_scheme.hpp>
-#include <seqan3/alphabet/nucleotide/dna4.hpp>
-#include <seqan3/core/debug_stream.hpp>
 
 #include <fstream>
 #include <sstream>
@@ -58,46 +53,6 @@ std::vector<std::string> loadSequences(const std::string& path) {
   return sequences;
 }
 
-
-seqan3::dna4_vector convertSequence(const std::string& string) {
-    seqan3::dna4_vector dna4_str{};
-    for (auto c : string) dna4_str.push_back(seqan3::assign_char_to(c, seqan3::dna4{}));
-    return dna4_str;
-}
-
-std::vector<seqan3::dna4_vector> convertSequences(const std::vector<std::string>& strings) {
-    std::vector<seqan3::dna4_vector> seqs{};
-    for (const auto& s : strings) {
-        seqs.push_back(convertSequence(s));
-    }
-    return seqs;
-}
-
-std::vector<int> seqanAlign(const std::vector<std::string>& queryStrs, const std::vector<std::string>& referenceStrs) {
-    auto queries = convertSequences(queryStrs);
-    auto references = convertSequences(referenceStrs);
-    // seqan3::dna4_vector query = convertSequence(queryStr);
-    // seqan3::dna4_vector reference = convertSequence(referenceStr);
-
-    // Configure the alignment kernel.
-    auto config =
-        seqan3::align_cfg::method_global(
-            seqan3::align_cfg::free_end_gaps_sequence1_leading{true},
-            seqan3::align_cfg::free_end_gaps_sequence2_leading{true},
-            seqan3::align_cfg::free_end_gaps_sequence1_trailing{true},
-            seqan3::align_cfg::free_end_gaps_sequence2_trailing{true}
-        ) | seqan3::align_cfg::scoring_scheme{seqan3::nucleotide_scoring_scheme{seqan3::match_score{1}, seqan3::mismatch_score{-1}}}
-        | seqan3::align_cfg::gap_cost_affine{seqan3::align_cfg::open_score{0}, seqan3::align_cfg::extension_score{-1}};;
-
-    auto results = seqan3::align_pairwise(seqan3::views::zip(queries, references), config);
-    std::vector<int> scores{};
-    for (auto const& res : results) {
-        scores.push_back(res.score());
-    }
-    return scores;
-}
-
-
 int main(int argc, char** argv) {
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
   plog::init(plog::verbose, &consoleAppender);
@@ -131,6 +86,15 @@ int main(int argc, char** argv) {
     refs.insert(refs.end(), refsnew.begin(), refsnew.end());
     qers.insert(qers.end(), queriesnew.begin(), queriesnew.end());
   }
+  std::vector<std::string> sequences(refs.size() + qers.size());
+  std::vector<ipu::Comparison> comparisons(refs.size());
+  for (int i = 0; i < refs.size(); ++i) {
+    sequences[2*i] = refs[i];
+    sequences[2*i+1] = qers[i];
+    comparisons[i] = {
+      2*i, 2*i+1
+    };
+  }
 
   PLOGE << "NUMBER OF COMPARISONS: " << refs.size();
 
@@ -154,41 +118,15 @@ int main(int argc, char** argv) {
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
   }, {1472 /*Tiles used*/, 1000 /*maxAB*/, 200 , 200 * 20, ipu::VertexType::multixdrop, ipu::Algorithm::greedy});
-  // driver.compare_local(refs, qers);
-  driver.compare_local_many(refs, qers);
-  auto aln_results = driver.get_result();
 
-  // driver.compare_local(queries, refs);
-  // auto aln_results = driver.get_result();
-  // checkResults(aln_results);
-
-  std::cout <<  "We\t" << "We2k\t" << "IPU\t" << "Equal" << endl;
-  auto scores_seqan = seqanAlign(refs, qers);
-  for (size_t i = 0; i < qers.size(); i++) {
-    const std::string query = qers[i];
-    const std::string reference = refs[i];
-    int score = xdrop(query, reference, true);
-    int score2 = xdrop2k(query, reference, true);
-    std::cout << score  << "\t"
-    << score2 << "\t"
-     << aln_results.scores[i] << "\t"
-      <<  (score == aln_results.scores[i]) << endl;
+  std::vector<ipu::batchaffine::Batch> batches = driver.create_batches(sequences, comparisons);
+  std::vector<ipu::batchaffine::BlockAlignmentResults> results;
+  for (auto& batch : batches) {
+    ipu::batchaffine::Job* j = driver.async_submit(&batch);
+    driver.blocking_join(*j);
+    delete j;
+    results.push_back(batch.get_result());
   }
 
-  // for (auto& [path_a, path_b] : INPUT_BATCHS) {
-  //   auto refs = loadSequences(path_a);
-  //   auto queries = loadSequences(path_b);
-    
-  //   for (size_t i = 0; i < queries.size(); i++) {
-  //     const std::string query = queries[i];
-  //     const std::string reference = refs[i];
-  //     auto score_seqan = seqanAlign(std::vector<std::string>{reference}, std::vector<std::string>{query});
-  //     int score = xdrop(query, reference, true);
-  //     std::cout << score << "\t" << scores_seqan[i] << "\t" << (score == scores_seqan[i]) << endl;
-  //     if (score != scores_seqan[i]) {
-  //       PLOGE.printf("ref=%s, quer=%s", reference.c_str(), query.c_str());
-  //     }
-  //   }
-  // }
   return 0;
 }

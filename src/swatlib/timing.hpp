@@ -50,6 +50,10 @@ public:
     int64_t accumulate_microseconds() const {
         return accumulate_time.count();
     }
+
+    double seconds() const {
+        return static_cast<double>(duration<std::chrono::milliseconds>()) / 1000.0;
+    }
     
     void add(const TickTock& t) {
         accumulate_time += t.accumulate_time;

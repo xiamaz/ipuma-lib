@@ -68,7 +68,6 @@ void to_json(json& j, const IPUAlgoConfig& c) {
                 {"vtype", c.vtype},
                 {"fillAlgo", c.fillAlgo},
                 {"forwardOnly", c.forwardOnly},
-                {"transmissionPrograms", c.transmissionPrograms},
                 {"ioTiles", c.ioTiles},
                 {"xDrop", c.xDrop},
                 {"bandPercentageXDrop", c.bandPercentageXDrop}
@@ -83,7 +82,6 @@ void from_json(const json& j, IPUAlgoConfig& c) {
         j.at("vtype").get_to(c.vtype);
         j.at("fillAlgo").get_to(c.fillAlgo);
         j.at("forwardOnly").get_to(c.forwardOnly);
-        j.at("transmissionPrograms").get_to(c.transmissionPrograms);
         j.at("ioTiles").get_to(c.ioTiles);
         j.at("xDrop").get_to(c.xDrop);
         j.at("bandPercentageXDrop").get_to(c.bandPercentageXDrop);
