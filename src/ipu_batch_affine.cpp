@@ -566,60 +566,61 @@ void SWAlgorithm::blocking_join(Job& job) {
 }
 
 std::vector<Batch> SWAlgorithm::create_batches(const RawSequences& seqs, const Comparisons& cmps) {
-  partition::BucketMap map(
-    algoconfig.tilesUsed,
-    algoconfig.maxBatches,
-    algoconfig.bufsize
-  );
   std::vector<swatlib::TickTock> stageTimers(3);
   stageTimers[0].tick();
   stageTimers[1].tick();
-  fillBuckets(algoconfig.fillAlgo, map, seqs, cmps, 0);
+  std::list<partition::BatchMapping> mappings = partition::mapBatches(algoconfig, seqs, cmps);
   stageTimers[1].tock();
 
   std::vector<Batch> batches;
   const auto inputBufferSize = algoconfig.getInputBufferSize32b();
-  batches.push_back({});
-  Batch& batch = batches[0];
-  batch.resize(inputBufferSize, algoconfig.getTotalNumberOfComparisons());
-
-  stageTimers[2].tick();
   auto encodeTable = swatlib::getEncoder(config.datatype).getCodeTable();
 
-  int8_t* seqInput = (int8_t*)batch.inputs.data();
-  int32_t* metaInput = batch.inputs.data() + algoconfig.getOffsetMetadata();
+  stageTimers[2].tick();
+  for (const auto& map : mappings) {
+    batches.push_back({});
+    Batch& batch = batches[0];
+    batch.resize(inputBufferSize, algoconfig.getTotalNumberOfComparisons());
 
-  auto& cellCount = batch.cellCount;
-  auto& dataCount = batch.dataCount;
-  auto& comparisonCount = batch.numComparisons;
-  for (const auto& bucketMapping : map.buckets) {
-    const size_t offsetSequence = bucketMapping.bucketIndex * algoconfig.getBufsize32b() * 4;
-    const size_t offsetMeta = bucketMapping.bucketIndex * algoconfig.maxBatches * 4;
+    int8_t* seqInput = (int8_t*)batch.inputs.data();
+    int32_t* metaInput = batch.inputs.data() + algoconfig.getOffsetMetadata();
+    auto& cellCount = batch.cellCount;
+    auto& dataCount = batch.dataCount;
+    auto& comparisonCount = batch.numComparisons;
 
-    auto* bucketSeq = seqInput + offsetSequence;
-    auto* bucketMeta = metaInput + offsetMeta;
-    for (const auto& sequenceMapping : bucketMapping.seqs) {
-      const char *seq = seqs[sequenceMapping.index].data();
-      size_t seqSize = seqs[sequenceMapping.index].size();
-      for (int j = 0; j < seqSize; ++j) {
-        bucketSeq[sequenceMapping.offset + j] = encodeTable[seq[j]];
+    for (const auto& bucketMapping : map.buckets) {
+      const size_t offsetSequence = bucketMapping.bucketIndex * algoconfig.getBufsize32b() * 4;
+      const size_t offsetMeta = bucketMapping.bucketIndex * algoconfig.maxBatches * 4;
+
+      auto* bucketSeq = seqInput + offsetSequence;
+      auto* bucketMeta = metaInput + offsetMeta;
+      for (const auto& sequenceMapping : bucketMapping.seqs) {
+        const char *seq = seqs[sequenceMapping.index].data();
+        size_t seqSize = seqs[sequenceMapping.index].size();
+        for (int j = 0; j < seqSize; ++j) {
+          bucketSeq[sequenceMapping.offset + j] = encodeTable[seq[j]];
+        }
+        dataCount += seqSize;
       }
-      dataCount += seqSize;
-    }
 
-    for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
-      const auto& comparison = bucketMapping.cmps[i];
-      bucketMeta[i * 4] = comparison.sizeA;
-      bucketMeta[i * 4 + 1] = comparison.offsetA;
-      bucketMeta[i * 4 + 2] = comparison.sizeB;
-      bucketMeta[i * 4 + 3] = comparison.offsetB;
+      for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
+        const auto& comparison = bucketMapping.cmps[i];
+        bucketMeta[i * 4] = comparison.sizeA;
+        bucketMeta[i * 4 + 1] = comparison.offsetA;
+        bucketMeta[i * 4 + 2] = comparison.sizeB;
+        bucketMeta[i * 4 + 3] = comparison.offsetB;
 
-      batch.origin_comparison_index[comparison.comparisonIndex] = map.cmpCapacity * bucketMapping.bucketIndex + i;
+        batch.origin_comparison_index[comparison.comparisonIndex] = bucketMapping.comparisonCapacity * bucketMapping.bucketIndex + i;
 
-      cellCount += comparison.sizeA * comparison.sizeB;
-      comparisonCount++;
+        cellCount += comparison.sizeA * comparison.sizeB;
+        comparisonCount++;
+      }
     }
   }
+
+
+
+
   stageTimers[2].tock();
 
 

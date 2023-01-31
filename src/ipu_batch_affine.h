@@ -92,9 +92,6 @@ class SWAlgorithm : public IPUAlgorithm {
   SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig);
   SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_id, size_t ipuCount = 1, bool runExecutor = true);
 
-  static void fill_input_buffer(const partition::BucketMap& map, const swatlib::DataType dtype, const IPUAlgoConfig& algoconfig, const RawSequences& Seqs, const Comparisons& Cmps, int32_t* inputs_begin, int32_t* inputs_end, int32_t* mapping);
-  static void fill_input_buffer(const partition::BucketMap& map, const swatlib::DataType dtype, const IPUAlgoConfig& algoconfig, const RawSequences& A, const RawSequences& B, int32_t* inputs_begin, int32_t* inputs_end, int32_t* mapping);
-
   // Convenience (checkSequenceSizes, fillMNBuckets, fill_input_buffer)
   std::vector<Batch> create_batches(
     const RawSequences& Seqs,

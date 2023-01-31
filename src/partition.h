@@ -5,78 +5,62 @@
 #include <queue>
 #include <list>
 #include "types.h"
+#include "ipu_config.h"
 
 namespace ipu { namespace partition {
-  enum class SequenceOrigin{unordered, A, B};
-  std::string sequenceOriginToString(SequenceOrigin o);
-
+  // mapping of the comparison to an individual tile
   struct ComparisonMapping {
     int comparisonIndex;  // index in cmp input list
-    int sizeA;
-    int offsetA;
-    int sizeB;
-    int offsetB;
+    size_t sizeA;
+    size_t offsetA;
+    size_t sizeB;
+    size_t offsetB;
 
     std::string toString() const;
   };
 
   struct SequenceMapping {
     int index;  // index in input list
-    int offset;
-    SequenceOrigin origin = SequenceOrigin::unordered;
+    size_t offset;
 
     std::string toString() const;
   };
 
-  struct BucketMapping {
+  struct Bucket {
     int bucketIndex;
-    int maxLen; // length of longest sequence
-    int seqSize; // length of current sequences
-    int weight[6] = {}; // custom weight (currently only used in round robin)
+
+    size_t sequenceCapacity;
+    size_t comparisonCapacity;
+
+    size_t longestLength;
+    size_t totalSequenceLength;
     std::vector<SequenceMapping> seqs;
     std::vector<ComparisonMapping> cmps;
 
-    std::string toString() const;
-  };
+    Bucket(int bucketIndex, size_t sequenceCapacity, size_t comparisonCapacity);
 
-  bool operator<(const ipu::partition::BucketMapping& b1, const ipu::partition::BucketMapping& b2);
-  bool operator>(const ipu::partition::BucketMapping& b1, const ipu::partition::BucketMapping& b2);
-
-  struct BucketMap {
-    std::vector<BucketMapping> buckets;
-    int numBuckets;
-    int cmpCapacity;
-    int sequenceCapacity;
-
-    BucketMap();
-    BucketMap(int nB, int nC, int sC);
+    bool addComparison(int comparisonIndex, int indexA, int indexB, size_t sizeA, size_t sizeB);
 
     std::string toString() const;
   };
 
-  struct BucketData {
-    int count;
-    int lenSeq;
-    int weight;
+  bool operator<(const ipu::partition::Bucket& b1, const ipu::partition::Bucket& b2);
+  bool operator>(const ipu::partition::Bucket& b1, const ipu::partition::Bucket& b2);
+
+  struct BatchMapping {
+    std::vector<Bucket> buckets;
+
+    BatchMapping(int bucketCount, size_t sequenceCapacity, size_t comparisonCapacity);
+    BatchMapping(IPUAlgoConfig config);
+
+    std::string toString() const;
   };
 
-  using BucketHeapRef = std::priority_queue<std::reference_wrapper<BucketMapping>, std::deque<std::reference_wrapper<BucketMapping>>, std::greater<std::deque<std::reference_wrapper<BucketMapping>>::value_type>>;
-  using BucketHeap = std::priority_queue<BucketMapping, std::deque<BucketMapping>, std::greater<std::deque<BucketMapping>::value_type>>;
-
-  bool fillFirst(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, int& curBucket);
-  bool roundRobin(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, int& curBucket);
-  bool greedy(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset, BucketHeap& heap);
-
-  void fillFirst(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset = 0);
-  void roundRobin(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset = 0);
-  void greedy(BucketMap& map, const RawSequences& A, const RawSequences& B, int indexOffset = 0);
-
-  void fillFirst(BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset = 0);
-  void roundRobin(BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset = 0);
-  void greedy(BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset = 0);
+  using BucketHeapRef = std::priority_queue<std::reference_wrapper<Bucket>, std::deque<std::reference_wrapper<Bucket>>, std::greater<std::deque<std::reference_wrapper<Bucket>>::value_type>>;
+  using BucketHeap = std::priority_queue<Bucket, std::deque<Bucket>, std::greater<std::deque<Bucket>::value_type>>;
 
   // generic methods
-  void fillBuckets(Algorithm algo, BucketMap& map, const RawSequences& Seqs, const Comparisons& Cmps, int indexOffset);
+  std::list<BatchMapping> mapBatches(IPUAlgoConfig config, const RawSequences& Seqs, const Comparisons& Cmps);
 }}
 
 #endif
