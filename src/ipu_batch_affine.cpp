@@ -91,7 +91,7 @@ class FillCallback final : public poplar::StreamCallback {
 
     // insert job ID at the end of the transfer buffer
     int* ip = reinterpret_cast<int*>(&reinterpret_cast<char*>(p)[inputSize]);
-    ip[0] = j->id;
+    ip[0] = j->id + 1;
 
     j->batch->tick.tick();
     PLOGV << "PushBatch slot " << j->id;
@@ -137,7 +137,7 @@ class RecvCallback final : public poplar::StreamCallback {
 
     // Wireformat: slotToken+outbuffer
     int32_t* ip = reinterpret_cast<int32_t*>(p);
-    JobId jobId = ip[0];
+    JobId jobId = ip[0] - 1;
     if (jobId == -1) {
       return;
     }
