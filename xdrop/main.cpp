@@ -86,14 +86,17 @@ int main(int argc, char** argv) {
     refs.insert(refs.end(), refsnew.begin(), refsnew.end());
     qers.insert(qers.end(), queriesnew.begin(), queriesnew.end());
   }
-  std::vector<std::string> sequences(refs.size() + qers.size());
-  std::vector<ipu::Comparison> comparisons(refs.size());
+  // std::vector<std::string> sequences(refs.size() + qers.size());
+  // std::vector<ipu::Comparison> comparisons(refs.size());
+  std::vector<std::string> sequences(2);
+  std::vector<ipu::Comparison> comparisons(1);
   for (int i = 0; i < refs.size(); ++i) {
     sequences[2*i] = refs[i];
     sequences[2*i+1] = qers[i];
     comparisons[i] = {
       2*i, 2*i+1
     };
+    break;
   }
 
   PLOGE << "NUMBER OF COMPARISONS: " << refs.size();
@@ -117,7 +120,7 @@ int main(int argc, char** argv) {
     .ambiguityValue = -1,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {1472 /*Tiles used*/, 1000 /*maxAB*/, 200 , 200 * 20, ipu::VertexType::multixdrop, ipu::Algorithm::greedy});
+  }, {1472 /*Tiles used*/, 1000 /*maxAB*/, 200 , 200 * 20, ipu::VertexType::multixdrop, ipu::Algorithm::fillFirst});
 
   std::vector<ipu::batchaffine::Batch> batches = driver.create_batches(sequences, comparisons);
   std::vector<ipu::batchaffine::BlockAlignmentResults> results;
