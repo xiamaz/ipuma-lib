@@ -630,7 +630,7 @@ std::vector<Batch> SWAlgorithm::create_batches(const RawSequences& seqs, const C
     {"time_fill_buckets", stageTimers[1].seconds()},
     {"time_fill_inputs", stageTimers[2].seconds()},
   };
-  PLOGD << "BATCHCREATE: " << logData;
+  PLOGD << "BATCHCREATE: " << logData.dump();
   return batches;
 }
 
