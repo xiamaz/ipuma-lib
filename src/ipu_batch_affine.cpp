@@ -46,14 +46,14 @@ class FillCallback final : public poplar::StreamCallback {
   ) : ch(value), resultTable(results), size(size), id(ipu_id), result_mutex(rmutex) {}
 
   Result prefetch(void* __restrict p) noexcept override {
-    PLOGV.printf("Enter PreFETCH, id %d", id);
+    PLOGV.printf("Enter PreFETCH, ipuId %d", id);
     // We do this to handle closed streams;
     for (auto b : ch) {
-      PLOGV.printf("Do PreFETCH, id %d", id);
+      PLOGV.printf("Do PreFETCH, ipuId %d", id);
       pushBatch(p, b);
       return Result::Success;
     }
-    PLOGV.printf("Exit PreFETCH, id %d", id);
+    PLOGV.printf("Exit PreFETCH, ipuId %d", id);
     if (ch.closed()) {
       close(p);
     }
@@ -61,7 +61,7 @@ class FillCallback final : public poplar::StreamCallback {
   }
 
   void fetch(void* __restrict p) noexcept override {
-    PLOGV.printf("FETCH, %d", id);
+    PLOGV.printf("FETCH, ipuId %d", id);
     // We do this to handle closed streams;
     for (auto b : ch) {
       pushBatch(p, b);
@@ -77,13 +77,14 @@ class FillCallback final : public poplar::StreamCallback {
 
  private:
   void close(void* __restrict p) {
-    PLOGW.printf("Send teardown message to IPU, id %d", id);
+    PLOGW.printf("Send teardown message to IPU, ipuId %d", id);
     std::vector<int32_t> aa(size + 1, 0);
     memcpy(p, aa.data(), aa.size() * 4);
   }
   void pushBatch(void* __restrict p, Job* j) {
     // Wireformat: inputbuffer+JobId
     const auto& inputBuffer = j->batch->inputs;
+    assert(inputBuffer.size() > 0);
     size_t inputSize = inputBuffer.size() * sizeof(inputBuffer[0]);
 
     PLOGD << "Input buffer size " << inputSize << " defined size is " << size;
@@ -91,7 +92,7 @@ class FillCallback final : public poplar::StreamCallback {
 
     // insert job ID at the end of the transfer buffer
     int* ip = reinterpret_cast<int*>(&reinterpret_cast<char*>(p)[inputSize]);
-    ip[0] = j->id + 1;
+    ip[0] = j->id;
 
     j->batch->tick.tick();
     PLOGV << "PushBatch slot " << j->id;
@@ -134,14 +135,13 @@ class RecvCallback final : public poplar::StreamCallback {
 
  private:
   void pullBatch(void* __restrict p) {
-
     // Wireformat: slotToken+outbuffer
     int32_t* ip = reinterpret_cast<int32_t*>(p);
-    JobId jobId = ip[0] - 1;
-    if (jobId == -1) {
+    JobId jobId = ip[0];
+    PLOGV << "PullBatch JobId " << jobId;
+    if (jobId == -1 || jobId == 0) {
       return;
     }
-    PLOGV << "PullBatch JobId " << jobId;
 
     // getting Job object based on id
     result_mutex.lock();
@@ -579,7 +579,7 @@ std::vector<Batch> SWAlgorithm::create_batches(const RawSequences& seqs, const C
   stageTimers[2].tick();
   for (const auto& map : mappings) {
     batches.push_back({});
-    Batch& batch = batches[0];
+    Batch& batch = batches.back();
     batch.resize(inputBufferSize, algoconfig.getTotalNumberOfComparisons());
 
     int8_t* seqInput = (int8_t*)batch.inputs.data();
@@ -626,6 +626,8 @@ std::vector<Batch> SWAlgorithm::create_batches(const RawSequences& seqs, const C
 
   stageTimers[0].tock();
   json logData = {
+    {"sequences_count", seqs.size() },
+    {"comparisons_count", cmps.size() },
     {"batches_created", batches.size()},
     {"time_total", stageTimers[0].seconds()},
     {"time_fill_buckets", stageTimers[1].seconds()},

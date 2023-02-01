@@ -48,10 +48,10 @@ namespace partition {
     size_t newTotalLength = totalSequenceLength + sizeA + sizeB;
     size_t newTotalCmps = cmps.size() + 1;
 
-    PLOGW << "TL: " << newTotalLength;
-    PLOGW << sequenceCapacity;
-    PLOGW << newTotalCmps;
-    PLOGW << comparisonCapacity;
+    // PLOGW << "TL: " << newTotalLength;
+    // PLOGW << sequenceCapacity;
+    // PLOGW << newTotalCmps;
+    // PLOGW << comparisonCapacity;
 
     if (newTotalLength < sequenceCapacity && newTotalCmps < comparisonCapacity) {
       size_t offsetA = totalSequenceLength;

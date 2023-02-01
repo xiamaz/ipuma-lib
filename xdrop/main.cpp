@@ -88,15 +88,15 @@ int main(int argc, char** argv) {
   }
   // std::vector<std::string> sequences(refs.size() + qers.size());
   // std::vector<ipu::Comparison> comparisons(refs.size());
-  std::vector<std::string> sequences(2);
-  std::vector<ipu::Comparison> comparisons(1);
+  std::vector<std::string> sequences(2*refs.size());
+  std::vector<ipu::Comparison> comparisons(1*refs.size());
   for (int i = 0; i < refs.size(); ++i) {
     sequences[2*i] = refs[i];
     sequences[2*i+1] = qers[i];
     comparisons[i] = {
       2*i, 2*i+1
     };
-    break;
+    // break;
   }
 
   PLOGE << "NUMBER OF COMPARISONS: " << refs.size();
@@ -125,10 +125,11 @@ int main(int argc, char** argv) {
   std::vector<ipu::batchaffine::Batch> batches = driver.create_batches(sequences, comparisons);
   std::vector<ipu::batchaffine::BlockAlignmentResults> results;
   for (auto& batch : batches) {
+    PLOGI << "NEW BATCH =======================================================";
     ipu::batchaffine::Job* j = driver.async_submit(&batch);
     driver.blocking_join(*j);
-    delete j;
     results.push_back(batch.get_result());
+    delete j;
   }
 
   return 0;
