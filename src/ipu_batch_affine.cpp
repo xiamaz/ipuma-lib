@@ -617,10 +617,6 @@ std::vector<Batch> SWAlgorithm::create_batches(const RawSequences& seqs, const C
       }
     }
   }
-
-
-
-
   stageTimers[2].tock();
 
 
@@ -630,8 +626,8 @@ std::vector<Batch> SWAlgorithm::create_batches(const RawSequences& seqs, const C
     {"comparisons_count", cmps.size() },
     {"batches_created", batches.size()},
     {"time_total", stageTimers[0].seconds()},
-    {"time_fill_buckets", stageTimers[1].seconds()},
-    {"time_fill_inputs", stageTimers[2].seconds()},
+    {"time_partition", stageTimers[1].seconds()},
+    {"time_copy_inputs", stageTimers[2].seconds()},
   };
   PLOGD << "BATCHCREATE: " << logData.dump();
   return batches;

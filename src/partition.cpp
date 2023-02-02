@@ -156,14 +156,14 @@ namespace partition {
     MappingFunction mapData = selectAlgorithm(config.fillAlgo);
 
     mappings.push_back(BatchMapping(config));
-    BatchMapping& curBatch = mappings.back();
+    BatchMapping* curBatch = &mappings.back();
     for (int i = 0; i < Cmps.size(); ++i) {
       const Comparison& cmp = Cmps[i];
       ComparisonData cmpData = createCmpData(i, cmp, Seqs);
-      if (!mapData(curBatch, cmpData)) {
+      if (!mapData(*curBatch, cmpData)) {
         mappings.push_back(BatchMapping(config));
-        curBatch = mappings.back();
-        if (!mapData(curBatch, cmpData)) {
+        curBatch = &mappings.back();
+        if (!mapData(*curBatch, cmpData)) {
           throw std::runtime_error("Could not insert data into a new batch");
         }
       }

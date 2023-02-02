@@ -127,6 +127,8 @@ int main(int argc, char** argv) {
   for (auto& batch : batches) {
     PLOGI << "NEW BATCH =======================================================";
     ipu::batchaffine::Job* j = driver.async_submit(&batch);
+    assert(batch.cellCount > 0);
+    assert(batch.dataCount > 0);
     driver.blocking_join(*j);
     results.push_back(batch.get_result());
     delete j;
