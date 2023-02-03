@@ -324,6 +324,8 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     auto label = vertexTypeToIpuLabel(vtype);
     if (vtype == VertexType::multibandxdrop) {
       label += "<" + std::to_string(xDrop) + ">";
+    } else if (vtype == VertexType::multixdrop) {
+      label += "<" + std::to_string(xDrop) + ">";
     }
     PLOGD.printf("Use Vertex class: %s", label.c_str());
     OptionFlags streamOptions({});
@@ -610,7 +612,7 @@ std::vector<Batch> SWAlgorithm::create_batches(const RawSequences& seqs, const C
         bucketMeta[i * 4 + 2] = comparison.sizeB;
         bucketMeta[i * 4 + 3] = comparison.offsetB;
 
-        batch.origin_comparison_index[comparison.comparisonIndex] = bucketMapping.comparisonCapacity * bucketMapping.bucketIndex + i;
+        batch.origin_comparison_index[i] = comparison.comparisonIndex;
 
         cellCount += comparison.sizeA * comparison.sizeB;
         comparisonCount++;
