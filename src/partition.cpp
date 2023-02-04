@@ -107,37 +107,83 @@ namespace partition {
     size_t sizeB;
   };
 
-  bool batchFillFirst(BatchMapping& map, const ComparisonData& cmpData) {
-    for (auto& bucket : map.buckets) {
-      if (bucket.addComparison(cmpData.comparisonIndex, cmpData.indexA, cmpData.indexB, cmpData.sizeA, cmpData.sizeB)) {
-        return true;
-      }
+  class PartitioningAlgorithm {
+  protected:
+    const IPUAlgoConfig& config;
+
+    virtual BatchMapping& createBatch() = 0;
+  public:
+    std::list<BatchMapping> mappings;
+
+    PartitioningAlgorithm(const IPUAlgoConfig& config) : config(config), mappings{BatchMapping(config)} {
     }
-    return false;
-  }
+    virtual bool addComparison(const ComparisonData& cmpData, BatchMapping& curMapping) = 0;
 
-  bool batchRoundRobin(BatchMapping& map, const ComparisonData& cmpData) {
-    return false;
-  }
-  bool batchGreedy(BatchMapping& map, const ComparisonData& cmpData) {
-    return false;
-  }
+    std::list<BatchMapping> getMappings() {
+      return std::move(mappings);
+    }
 
-  using MappingFunction = std::function<bool(BatchMapping&, const ComparisonData&)>;
+    bool addComparison(const ComparisonData& cmpData) {
+      BatchMapping& curMapping = mappings.back();
+      if (!addComparison(cmpData, curMapping)) {
+        curMapping = createBatch();
+        if (!addComparison(cmpData, curMapping)) {
+          throw std::runtime_error("Could not insert data into a new batch");
+        }
+      }
+      return true;
+    }
+  };
 
-  MappingFunction selectAlgorithm(Algorithm algo) {
-    switch (algo) {
+  class FillFirstPartitioning : public PartitioningAlgorithm {
+    using PartitioningAlgorithm::PartitioningAlgorithm;
+
+    int bucketIndex = 0;
+
+    BatchMapping& createBatch() override {
+      mappings.push_back(BatchMapping(config));
+      bucketIndex = 0;
+      return mappings.back();
+    }
+
+    bool addComparison(const ComparisonData& cmpData, BatchMapping& curMapping) override {
+      for (; bucketIndex < curMapping.buckets.size(); ++bucketIndex) {
+        Bucket& bucket = curMapping.buckets[bucketIndex];
+        if (bucket.addComparison(cmpData.comparisonIndex, cmpData.indexA, cmpData.indexB, cmpData.sizeA, cmpData.sizeB)) {
+          return true;
+        }
+      }
+      return false;
+    }
+  };
+
+  class GreedyPartitioning : public PartitioningAlgorithm {
+    using PartitioningAlgorithm::PartitioningAlgorithm;
+    virtual bool addComparison(const ComparisonData& cmpData, BatchMapping& curMapping) override {
+      PLOGW << "Greedy";
+      return false;
+    }
+
+    BatchMapping& createBatch() override {
+      PLOGW << "Greedy Create";
+      mappings.push_back(BatchMapping(config));
+      return mappings.back();
+    }
+  };
+
+  std::unique_ptr<PartitioningAlgorithm> createPartitioner(const IPUAlgoConfig& config) {
+    switch (config.fillAlgo) {
     case Algorithm::fillFirst:
-      return batchFillFirst;
+      return std::unique_ptr<PartitioningAlgorithm>(new FillFirstPartitioning(config));
       break;
     case Algorithm::roundRobin:
-      return batchRoundRobin;
+      throw std::runtime_error("Not implemented");
       break;
     case Algorithm::greedy:
-      return batchGreedy;
+      return std::unique_ptr<PartitioningAlgorithm>(new GreedyPartitioning(config));
       break;
     }
-    throw std::runtime_error("No valid algorithm given");
+    throw std::runtime_error("Not any of supported algorithm");
   }
 
   ComparisonData createCmpData(int i, const Comparison& cmp, const RawSequences& seqs) {
@@ -151,23 +197,32 @@ namespace partition {
   }
 
   std::list<BatchMapping> mapBatches(IPUAlgoConfig config, const RawSequences& Seqs, const Comparisons& Cmps) {
-    std::list<BatchMapping> mappings;
 
-    MappingFunction mapData = selectAlgorithm(config.fillAlgo);
+    PLOGD << "Mapping " << Cmps.size() << " comparisons to batches";
+    // std::list<BatchMapping> mappings;
 
-    mappings.push_back(BatchMapping(config));
-    BatchMapping* curBatch = &mappings.back();
+    // MappingFunction mapData = selectAlgorithm(config.fillAlgo);
+    auto Partitioner = createPartitioner(config);
     for (int i = 0; i < Cmps.size(); ++i) {
-      const Comparison& cmp = Cmps[i];
-      ComparisonData cmpData = createCmpData(i, cmp, Seqs);
-      if (!mapData(*curBatch, cmpData)) {
-        mappings.push_back(BatchMapping(config));
-        curBatch = &mappings.back();
-        if (!mapData(*curBatch, cmpData)) {
-          throw std::runtime_error("Could not insert data into a new batch");
-        }
-      }
+      ComparisonData cmpData = createCmpData(i, Cmps[i], Seqs);
+      Partitioner->addComparison(cmpData);
     }
-    return mappings;
+    PLOGD << "Created " << Partitioner->mappings.size() << " batches";
+    return Partitioner->getMappings();
+
+    // mappings.push_back(BatchMapping(config));
+    // BatchMapping* curBatch = &mappings.back();
+    // for (int i = 0; i < Cmps.size(); ++i) {
+    //   const Comparison& cmp = Cmps[i];
+    //   ComparisonData cmpData = createCmpData(i, cmp, Seqs);
+    //   if (!mapData(*curBatch, cmpData)) {
+    //     mappings.push_back(BatchMapping(config));
+    //     curBatch = &mappings.back();
+    //     if (!mapData(*curBatch, cmpData)) {
+    //       throw std::runtime_error("Could not insert data into a new batch");
+    //     }
+    //   }
+    // }
+    // return mappings;
   }
 }}
