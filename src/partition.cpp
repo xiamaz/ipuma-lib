@@ -48,12 +48,7 @@ namespace partition {
     size_t newTotalLength = totalSequenceLength + sizeA + sizeB;
     size_t newTotalCmps = cmps.size() + 1;
 
-    // PLOGW << "TL: " << newTotalLength;
-    // PLOGW << sequenceCapacity;
-    // PLOGW << newTotalCmps;
-    // PLOGW << comparisonCapacity;
-
-    if (newTotalLength < sequenceCapacity && newTotalCmps < comparisonCapacity) {
+    if (newTotalLength <= sequenceCapacity && newTotalCmps <= comparisonCapacity) {
       size_t offsetA = totalSequenceLength;
       size_t offsetB = totalSequenceLength + sizeA;
 
@@ -84,7 +79,13 @@ namespace partition {
 
   std::string BatchMapping::toString() const {
     std::stringstream ss;
-    ss << "BMap[" << buckets.size() << "]";
+    uint64_t totalSequenceSize = 0;
+    uint64_t sequenceCapacity = 0;
+    for (const auto& b : buckets) {
+      sequenceCapacity += b.sequenceCapacity;
+      totalSequenceSize += b.totalSequenceLength;
+    }
+    ss << "BMap[" << buckets.size() << "] " << totalSequenceSize << "/" << sequenceCapacity;
     return ss.str();
   }
 
