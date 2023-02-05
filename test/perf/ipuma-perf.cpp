@@ -212,14 +212,14 @@ TEST(MNPerformance, fullyMxN) {
   int numWorkers = 8832 / 6;
   int numCmps = 3200;
   int strlen = 200;
-  int bufsize = 8000 * 2;
-  int strPerBucket = bufsize / strlen;
+  int vertexBufferSize = 8000 * 2;
+  int strPerBucket = vertexBufferSize / strlen;
 
-  auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::multiasm});
+  auto driver = ipu::batchaffine::SWAlgorithm({}, {numWorkers, strlen, numCmps, vertexBufferSize, ipu::VertexType::multiasm});
 
   std::vector<std::string> seqs;
   ipu::Comparisons cmps;
-  for (int s = 0; s < bufsize * numWorkers; s += strlen) {
+  for (int s = 0; s < vertexBufferSize * numWorkers; s += strlen) {
     seqs.push_back(string(strlen, 'A'));
   }
   for (int b = 0; b < numWorkers; ++b) {

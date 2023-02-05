@@ -35,7 +35,7 @@ class MultiXDrop : public poplar::MultiVertex {
   poplar::Input<int> gapInit;
   poplar::Input<int> gapExt;
   poplar::Input<int> bufSize;
-  poplar::Input<int> maxAB;
+  poplar::Input<int> maxSequenceLength;
   poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Seqs;
   poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Meta;
   poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> score;
@@ -74,8 +74,8 @@ class MultiXDrop : public poplar::MultiVertex {
 
       if (a_len == 0 || b_len == 0) break;
 
-      sType* k1 = &K1[workerId * (maxAB+2)];
-      sType* k2 = &K2[workerId * (maxAB+2)];
+      sType* k1 = &K1[workerId * (maxSequenceLength+2)];
+      sType* k2 = &K2[workerId * (maxSequenceLength+2)];
 
 
       // Algo begin
@@ -83,8 +83,8 @@ class MultiXDrop : public poplar::MultiVertex {
       {
         unsigned L = 0, U = 0;
 
-        memset(k1, 0, (maxAB + 2) * sizeof(sType));
-        memset(k2, 0, (maxAB + 2) * sizeof(sType));
+        memset(k1, 0, (maxSequenceLength + 2) * sizeof(sType));
+        memset(k2, 0, (maxSequenceLength + 2) * sizeof(sType));
         k1 = &k1[1];
         k2 = &k2[1];
 

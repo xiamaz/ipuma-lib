@@ -90,8 +90,8 @@ void run_comparison(IpuSwConfig config, std::string referencePath, std::string q
   refLoader.join();
   queryLoader.join();
 
-  const int batchCmpLimit = config.ipuconfig.getTotalNumberOfComparisons() - config.ipuconfig.maxBatches;
-  const int batchDataLimit = config.ipuconfig.getTotalBufsize32b() * 4 - config.ipuconfig.bufsize * 100;
+  const int batchCmpLimit = config.ipuconfig.getTotalNumberOfComparisons() - config.ipuconfig.maxComparisonsPerVertex;
+  const int batchDataLimit = config.ipuconfig.getTotalBufsize32b() * 4 - config.ipuconfig.vertexBufferSize * 100;
   PLOGF << references.size();
   auto batches = createBatches(references, queries, batchCmpLimit, batchDataLimit);
 

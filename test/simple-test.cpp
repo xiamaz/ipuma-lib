@@ -86,7 +86,7 @@ TEST_F(SimpleCorrectnessTest, UseAssemblyVertex) {
   int numWorkers = 1;
   int numCmps = 30;
   int strlen = 20;
-  int bufsize = 1000;
+  int vertexBufferSize = 1000;
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = 0,
     .gapExtend = -ALN_GAP_EXTENDING_COST,
@@ -95,7 +95,7 @@ TEST_F(SimpleCorrectnessTest, UseAssemblyVertex) {
     .ambiguityValue = -ALN_AMBIGUITY_COST,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::assembly});
+  }, {numWorkers, strlen, numCmps, vertexBufferSize, ipu::VertexType::assembly});
 
   driver.compare_local(queries, refs);
   auto aln_results = driver.get_result();
@@ -104,10 +104,10 @@ TEST_F(SimpleCorrectnessTest, UseAssemblyVertex) {
 
 TEST_F(SimpleCorrectnessTest, UseCppVertex) {
   auto driver = ipu::batchaffine::SWAlgorithm({}, {
-    .tilesUsed = 2,
-    .maxAB = 300,
-    .maxBatches = 20,
-    .bufsize = 3000,
+    .numVertices = 2,
+    .maxSequenceLength = 300,
+    .maxComparisonsPerVertex = 20,
+    .vertexBufferSize = 3000,
     .vtype = ipu::VertexType::cpp,
     .fillAlgo = ipu::Algorithm::roundRobin
   });
@@ -119,10 +119,10 @@ TEST_F(SimpleCorrectnessTest, UseCppVertex) {
 
 TEST_F(SimpleCorrectnessTest, UseCppMultiVertex) {
   auto driver = ipu::batchaffine::SWAlgorithm({}, {
-    .tilesUsed = 2,
-    .maxAB = 300,
-    .maxBatches = 20,
-    .bufsize = 3000,
+    .numVertices = 2,
+    .maxSequenceLength = 300,
+    .maxComparisonsPerVertex = 20,
+    .vertexBufferSize = 3000,
     .vtype = ipu::VertexType::multi,
     .fillAlgo = ipu::Algorithm::roundRobin
   });
@@ -134,10 +134,10 @@ TEST_F(SimpleCorrectnessTest, UseCppMultiVertex) {
 
 TEST_F(SimpleCorrectnessTest, UseAsmMultiVertex) {
   auto driver = ipu::batchaffine::SWAlgorithm({}, {
-    .tilesUsed = 2,
-    .maxAB = 300,
-    .maxBatches = 20,
-    .bufsize = 3000,
+    .numVertices = 2,
+    .maxSequenceLength = 300,
+    .maxComparisonsPerVertex = 20,
+    .vertexBufferSize = 3000,
     .vtype = ipu::VertexType::multiasm,
     .fillAlgo = ipu::Algorithm::roundRobin
   });
@@ -149,10 +149,10 @@ TEST_F(SimpleCorrectnessTest, UseAsmMultiVertex) {
 
 TEST_F(SimpleCorrectnessTest, useMNComparisons) {
   auto driver = ipu::batchaffine::SWAlgorithm({}, {
-    .tilesUsed = 4,
-    .maxAB = 300,
-    .maxBatches = 5,
-    .bufsize = 3000,
+    .numVertices = 4,
+    .maxSequenceLength = 300,
+    .maxComparisonsPerVertex = 5,
+    .vertexBufferSize = 3000,
     .vtype = ipu::VertexType::cpp,
     .fillAlgo = ipu::Algorithm::roundRobin
   });
@@ -174,7 +174,7 @@ TEST_F(SimpleCorrectnessTest, prepareTest) {
   int numWorkers = 1;
   int numCmps = 30;
   int strlen = 20;
-  int bufsize = 1000;
+  int vertexBufferSize = 1000;
   ipu::SWConfig swconfig = {
     .gapInit = 0,
     .gapExtend = -ALN_GAP_EXTENDING_COST,
@@ -184,7 +184,7 @@ TEST_F(SimpleCorrectnessTest, prepareTest) {
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
   };
-  ipu::IPUAlgoConfig algoconfig = {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::assembly};
+  ipu::IPUAlgoConfig algoconfig = {numWorkers, strlen, numCmps, vertexBufferSize, ipu::VertexType::assembly};
 
   std::vector<int32_t> inputs(algoconfig.getInputBufferSize32b());
   std::vector<int> mapping(queries.size(), 0);
@@ -193,24 +193,24 @@ TEST_F(SimpleCorrectnessTest, prepareTest) {
 }
 
 TEST(PrepareTest, simple) {
-  int tilesUsed = 10;
-  int maxBatches = 2;
-  int maxAB = 10;
-  int bufsize = maxBatches * maxAB * 2;
+  int numVertices = 10;
+  int maxComparisonsPerVertex = 2;
+  int maxSequenceLength = 10;
+  int vertexBufferSize = maxComparisonsPerVertex * maxSequenceLength * 2;
   ipu::SWConfig swconfig = {};
   ipu::IPUAlgoConfig config = {
-    .tilesUsed = tilesUsed,
-    .maxAB = maxAB,
-    .maxBatches = maxBatches,
-    .bufsize = bufsize,
+    .numVertices = numVertices,
+    .maxSequenceLength = maxSequenceLength,
+    .maxComparisonsPerVertex = maxComparisonsPerVertex,
+    .vertexBufferSize = vertexBufferSize,
     .vtype = ipu::VertexType::cpp,
     .fillAlgo = ipu::Algorithm::fillFirst
   };
 
   std::vector<std::string> A, B;
-  for (int i = 0; i < tilesUsed * maxBatches; ++i) {
-    A.push_back(std::string(maxAB, 'A'));
-    B.push_back(std::string(maxAB, 'A'));
+  for (int i = 0; i < numVertices * maxComparisonsPerVertex; ++i) {
+    A.push_back(std::string(maxSequenceLength, 'A'));
+    B.push_back(std::string(maxSequenceLength, 'A'));
   }
 
   std::vector<int32_t> inputs(config.getInputBufferSize32b() + 2);
@@ -227,24 +227,24 @@ TEST(PrepareTest, simple) {
 }
 
 TEST(LargerTest, simple) {
-  int tilesUsed = 10;
-  int maxBatches = 2;
-  int maxAB = 10;
-  int bufsize = maxBatches * maxAB * 2;
+  int numVertices = 10;
+  int maxComparisonsPerVertex = 2;
+  int maxSequenceLength = 10;
+  int vertexBufferSize = maxComparisonsPerVertex * maxSequenceLength * 2;
   ipu::SWConfig swconfig = {};
   ipu::IPUAlgoConfig config = {
-    .tilesUsed = tilesUsed,
-    .maxAB = maxAB,
-    .maxBatches = maxBatches,
-    .bufsize = bufsize,
+    .numVertices = numVertices,
+    .maxSequenceLength = maxSequenceLength,
+    .maxComparisonsPerVertex = maxComparisonsPerVertex,
+    .vertexBufferSize = vertexBufferSize,
     .vtype = ipu::VertexType::assembly,
     .fillAlgo = ipu::Algorithm::fillFirst
   };
 
   std::vector<std::string> A, B;
   for (int i = 0; i < 2; ++i) {
-    A.push_back(std::string(maxAB, 'A'));
-    B.push_back("TTTT" + std::string(maxAB, 'A'));
+    A.push_back(std::string(maxSequenceLength, 'A'));
+    B.push_back("TTTT" + std::string(maxSequenceLength, 'A'));
   }
   auto driver = ipu::batchaffine::SWAlgorithm(swconfig, config);
   driver.compare_local(A, B);

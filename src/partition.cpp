@@ -96,8 +96,8 @@ namespace partition {
   }
 
   BatchMapping::BatchMapping(IPUAlgoConfig config) {
-    for (int i = 0; i < config.tilesUsed; ++i) {
-      buckets.push_back(Bucket(i, config.bufsize, config.maxBatches));
+    for (int i = 0; i < config.numVertices; ++i) {
+      buckets.push_back(Bucket(i, config.vertexBufferSize, config.maxComparisonsPerVertex));
     }
   }
 

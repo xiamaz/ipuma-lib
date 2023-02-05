@@ -208,8 +208,8 @@ void Job::join() {
 /**
  * Streamable IPU graph for SW
  */
-std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigned long activeTiles, unsigned long maxAB,
-                                         unsigned long bufSize, unsigned long maxBatches,
+std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigned long activeTiles, unsigned long maxSequenceLength,
+                                         unsigned long bufSize, unsigned long maxComparisonsPerVertex,
                                          const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt,
                                          bool forward_only, int ioTiles,
                                          int xDrop, double bandPercentageXDrop
@@ -229,7 +229,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     Tensor Seqs = graph.addVariable(INT, {activeTiles, seq_scaled_size}, "Seqs");
 
     // Metadata structure
-    Tensor CompMeta = graph.addVariable(INT, {activeTiles, maxBatches * 4}, "CompMeta");
+    Tensor CompMeta = graph.addVariable(INT, {activeTiles, maxComparisonsPerVertex * 4}, "CompMeta");
 
     auto [m, n] = similarityData.shape();
 
@@ -289,9 +289,9 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     // }
     // free(similarityBuffer);
 
-    Tensor Scores = graph.addVariable(INT, {activeTiles, maxBatches}, "Scores");
-    Tensor ARanges = graph.addVariable(INT, {activeTiles, maxBatches}, "ARanges");
-    Tensor BRanges = graph.addVariable(INT, {activeTiles, maxBatches}, "BRanges");
+    Tensor Scores = graph.addVariable(INT, {activeTiles, maxComparisonsPerVertex}, "Scores");
+    Tensor ARanges = graph.addVariable(INT, {activeTiles, maxComparisonsPerVertex}, "ARanges");
+    Tensor BRanges = graph.addVariable(INT, {activeTiles, maxComparisonsPerVertex}, "BRanges");
 
     graph.setTileMapping(similarity, 0);
     if (ioTiles != 0) {
@@ -336,31 +336,31 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
                                           {"bufSize", bufSize},
                                           {"gapInit", gapInit},
                                           {"gapExt", gapExt},
-                                          {"maxNPerTile", maxBatches},
+                                          {"maxNPerTile", maxComparisonsPerVertex},
                                           {"Seqs", Seqs[i]},
                                           {"Meta", CompMeta[i]},
                                           {"score", Scores[i]},
                                       });
 
       if (vtype == VertexType::xdrop) {
-        auto k_T = graph.addVariable(sType, {3, (maxAB+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
+        auto k_T = graph.addVariable(sType, {3, (maxSequenceLength+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
         graph.setTileMapping(k_T, tileIndex);
-        graph.connect(vtx["maxAB"], maxAB);
+        graph.connect(vtx["maxSequenceLength"], maxSequenceLength);
         graph.connect(vtx["K1"], k_T[0]);
         graph.connect(vtx["K2"], k_T[1]);
         graph.connect(vtx["K3"], k_T[2]);
         graph.connect(vtx["simMatrix"], similarity);
       } else if (vtype == VertexType::multixdrop) {
-        auto k_T = graph.addVariable(sType, {2, (maxAB+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
-        graph.connect(vtx["maxAB"], maxAB);
+        auto k_T = graph.addVariable(sType, {2, (maxSequenceLength+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
+        graph.connect(vtx["maxSequenceLength"], maxSequenceLength);
         graph.setTileMapping(k_T, tileIndex);
         graph.connect(vtx["K1"], k_T[0]);
         graph.connect(vtx["K2"], k_T[1]);
         graph.connect(vtx["simMatrix"], similarity);
       } else if (vtype == VertexType::multibandxdrop) {
-        int scaledMaxAB = maxAB * bandPercentageXDrop;
+        int scaledMaxAB = maxSequenceLength * bandPercentageXDrop;
         auto k_T = graph.addVariable(sType, {2, ((size_t)scaledMaxAB+2+2) * (size_t) workerMultiplier}, "K[" + std::to_string(i) + "]");
-        graph.connect(vtx["maxAB"], scaledMaxAB);
+        graph.connect(vtx["maxSequenceLength"], scaledMaxAB);
         graph.setTileMapping(k_T, tileIndex);
         graph.connect(vtx["K1"], k_T[0]);
         graph.connect(vtx["K2"], k_T[1]);
@@ -371,29 +371,29 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         int X = 10;
         int xdrop_offset = ((X + mat / 2) / (mat - mis)) + 1;
 
-        graph.connect(vtx["maxAB"], maxAB);
-        Tensor R0 = graph.addVariable(INT, {2 * maxAB});
+        graph.connect(vtx["maxSequenceLength"], maxSequenceLength);
+        Tensor R0 = graph.addVariable(INT, {2 * maxSequenceLength});
         graph.setTileMapping(R0, tileIndex);
-        Tensor R1 = graph.addVariable(INT, {2 * maxAB});
+        Tensor R1 = graph.addVariable(INT, {2 * maxSequenceLength});
         graph.setTileMapping(R1, tileIndex);
-        Tensor T = graph.addVariable(INT, {maxAB+maxAB+xdrop_offset+1});
+        Tensor T = graph.addVariable(INT, {maxSequenceLength+maxSequenceLength+xdrop_offset+1});
         graph.setTileMapping(T, tileIndex);
         graph.connect(vtx["VTR0"], R0);
         graph.connect(vtx["VTR1"], R1);
         graph.connect(vtx["VTT"], T);
       } else {
-        graph.connect(vtx["maxAB"], maxAB);
+        graph.connect(vtx["maxSequenceLength"], maxSequenceLength);
         graph.connect(vtx["ARange"], ARanges[i]);
         graph.connect(vtx["BRange"], BRanges[i]);
         graph.connect(vtx["forwardOnly"], forward_only);
-        // graph.setFieldSize(vtx["C"], maxAB * workerMultiplier);
-        auto C_T = graph.addVariable(sType, {maxAB * workerMultiplier}, "C[" + std::to_string(i) + "]");
+        // graph.setFieldSize(vtx["C"], maxSequenceLength * workerMultiplier);
+        auto C_T = graph.addVariable(sType, {maxSequenceLength * workerMultiplier}, "C[" + std::to_string(i) + "]");
         graph.setTileMapping(C_T, tileIndex);
         graph.connect(vtx["C"], C_T);
         // undef.add(program::WriteUndef(C_T));
 
-        // graph.setFieldSize(vtx["bG"], maxAB * workerMultiplier);
-        auto bG_T = graph.addVariable(sType, {maxAB * workerMultiplier}, "bG[" + std::to_string(i) + "]");
+        // graph.setFieldSize(vtx["bG"], maxSequenceLength * workerMultiplier);
+        auto bG_T = graph.addVariable(sType, {maxSequenceLength * workerMultiplier}, "bG[" + std::to_string(i) + "]");
         graph.setTileMapping(bG_T, tileIndex);
         graph.connect(vtx["bG"], bG_T);
         graph.connect(vtx["simMatrix"], similarity);
@@ -457,10 +457,10 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
   std::vector<program::Program> programs = buildGraph(
     graph,
     algoconfig.vtype,
-    algoconfig.tilesUsed,
-    algoconfig.maxAB,
-    algoconfig.bufsize,
-    algoconfig.maxBatches,
+    algoconfig.numVertices,
+    algoconfig.maxSequenceLength,
+    algoconfig.vertexBufferSize,
+    algoconfig.maxComparisonsPerVertex,
     similarityMatrix,
     config.gapInit,
     config.gapExtend,
@@ -484,18 +484,18 @@ SWAlgorithm::SWAlgorithm(ipu::SWConfig config, IPUAlgoConfig algoconfig)
     : SWAlgorithm::SWAlgorithm(config, algoconfig, 0) {}
 
 void SWAlgorithm::checkSequenceSizes(const IPUAlgoConfig& algoconfig, const RawSequences& Seqs) {
-  if (Seqs.size() > algoconfig.maxBatches * algoconfig.tilesUsed) {
+  if (Seqs.size() > algoconfig.maxComparisonsPerVertex * algoconfig.numVertices) {
     PLOGW << "Sequence has more elements than the maxBatchsize";
     PLOGW << "Seq.size() = " << Seqs.size();
-    PLOGW << "max comparisons = " << algoconfig.tilesUsed << " * " << algoconfig.maxBatches;
+    PLOGW << "max comparisons = " << algoconfig.numVertices << " * " << algoconfig.maxComparisonsPerVertex;
     throw std::runtime_error("Input sequence (A) is over the max length.");
   }
 
   std::vector<int> seqSizes;
   for (const auto& sequence : Seqs) {
     const auto size = sequence.size();
-    if (size > algoconfig.maxAB) {
-      PLOGW << "Sequence size in seq " << size << " > " << algoconfig.maxAB;
+    if (size > algoconfig.maxSequenceLength) {
+      PLOGW << "Sequence size in seq " << size << " > " << algoconfig.maxSequenceLength;
       exit(1);
     }
   }
@@ -561,7 +561,7 @@ void SWAlgorithm::blocking_join(Job& job) {
   // release_slot(slot_token);
 
 #ifdef IPUMA_DEBUG
-  computeJobMetrics(job, getTileClockFrequency(), algoconfig.tilesUsed);
+  computeJobMetrics(job, getTileClockFrequency(), algoconfig.numVertices);
 #endif
 }
 
@@ -590,7 +590,7 @@ std::vector<Batch> SWAlgorithm::create_batches(const RawSequences& seqs, const C
 
     for (const auto& bucketMapping : map.buckets) {
       const size_t offsetSequence = bucketMapping.bucketIndex * algoconfig.getBufsize32b() * 4;
-      const size_t offsetMeta = bucketMapping.bucketIndex * algoconfig.maxBatches * 4;
+      const size_t offsetMeta = bucketMapping.bucketIndex * algoconfig.maxComparisonsPerVertex * 4;
 
       auto* bucketSeq = seqInput + offsetSequence;
       auto* bucketMeta = metaInput + offsetMeta;

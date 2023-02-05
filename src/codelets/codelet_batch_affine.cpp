@@ -26,7 +26,7 @@ public:
     poplar::Input<int> gapInit;
     poplar::Input<int> gapExt;
     poplar::Input<int> bufSize;
-    poplar::Input<int> maxAB;
+    poplar::Input<int> maxSequenceLength;
     poplar::Input<bool> forwardOnly;
     poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Seqs;
     poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Meta;
@@ -59,8 +59,8 @@ public:
 
             if (a_len == 0 || b_len == 0) break;
 
-            memset(&(C[0]), 0, maxAB * sizeof(int));
-            memset(&(bG[0]), 0, maxAB * sizeof(int));
+            memset(&(C[0]), 0, maxSequenceLength * sizeof(int));
+            memset(&(bG[0]), 0, maxSequenceLength * sizeof(int));
 
             // forward pass
             for (int i = 0; i < b_len; ++i) {
@@ -89,8 +89,8 @@ public:
             if (!forwardOnly) {
                 s = 0;
 
-                memset(&(C[0]), 0, maxAB * sizeof(int));
-                memset(&(bG[0]), 0, maxAB * sizeof(int));
+                memset(&(C[0]), 0, maxSequenceLength * sizeof(int));
+                memset(&(bG[0]), 0, maxSequenceLength * sizeof(int));
 
                 // reverse pass
                 for (int i = Bend; i >= 0; --i) {

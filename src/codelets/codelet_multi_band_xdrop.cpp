@@ -37,7 +37,7 @@ class MultiBandXDrop : public poplar::MultiVertex {
   poplar::Input<int> gapInit;
   poplar::Input<int> gapExt;
   poplar::Input<int> bufSize;
-  poplar::Input<int> maxAB;
+  poplar::Input<int> maxSequenceLength;
   poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Seqs;
   poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Meta;
   poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> score;
@@ -75,7 +75,7 @@ class MultiBandXDrop : public poplar::MultiVertex {
 
       if (a_len == 0 || b_len == 0) break;
 
-      int ma = maxAB;
+      int ma = maxSequenceLength;
       sType* k1 = &K1[workerId * (ma+2+2)];
       sType* k2 = &K2[workerId * (ma+2+2)];
 
@@ -107,7 +107,7 @@ class MultiBandXDrop : public poplar::MultiVertex {
         int k = 0;
         do {
           // if ((int)U-(int)L >= (int)ma) {
-          //   printf("L=%d,U=%d ::span=%d,maxAB=%d, SeqV=%d SeqH=%d\n", L, U, U-L, ma, a_len, b_len);
+          //   printf("L=%d,U=%d ::span=%d,maxSequenceLength=%d, SeqV=%d SeqH=%d\n", L, U, U-L, ma, a_len, b_len);
           //   break;
           // }
           // assert(U-L < klen);

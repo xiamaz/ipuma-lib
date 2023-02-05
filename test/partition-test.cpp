@@ -16,16 +16,16 @@ protected:
  * 
  */
 TEST_F(PartitioningTest, fullFillFirst) {
-  size_t sequence_length = 100;
+  int sequence_length = 100;
   config = {
     3 /*Tiles used*/,
-    1000 /*maxAB*/,
+    1000 /*maxSequenceLength*/,
     200000,
     sequence_length * 2 * 10,
     ipu::VertexType::multixdrop,
     ipu::Algorithm::fillFirst,
   };
-  size_t totalBufsize = config.bufsize * config.tilesUsed;
+  size_t totalBufsize = config.vertexBufferSize * config.numVertices;
   size_t numberCmps = totalBufsize / (sequence_length * 2);
   for (int i = 0; i < numberCmps; ++i) {
     Seqs.push_back(std::string("A", sequence_length));
@@ -42,13 +42,13 @@ TEST_F(PartitioningTest, fullGreedy) {
   size_t sequence_length = 100;
   config = {
     3 /*Tiles used*/,
-    1000 /*maxAB*/,
+    1000 /*maxSequenceLength*/,
     200000,
     sequence_length * 2 * 10,
     ipu::VertexType::multixdrop,
     ipu::Algorithm::greedy,
   };
-  size_t totalBufsize = config.bufsize * config.tilesUsed;
+  size_t totalBufsize = config.vertexBufferSize * config.numVertices;
   size_t numberCmps = totalBufsize / (sequence_length * 2);
   for (int i = 0; i < numberCmps; ++i) {
     Seqs.push_back(std::string("A", sequence_length));

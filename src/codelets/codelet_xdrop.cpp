@@ -33,7 +33,7 @@ class XDrop : public poplar::Vertex {
   poplar::Input<int> gapInit;
   poplar::Input<int> gapExt;
   poplar::Input<int> bufSize;
-  poplar::Input<int> maxAB;
+  poplar::Input<int> maxSequenceLength;
   poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Seqs;
   poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Meta;
   poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> score;
@@ -71,9 +71,9 @@ class XDrop : public poplar::Vertex {
         int* k1 = &K1[0];
         int* k2 = &K2[0];
         int* k3 = &K3[0];
-        memset(k1, 0, (maxAB + 2) * sizeof(int));
-        memset(k2, 0, (maxAB + 2) * sizeof(int));
-        memset(k3, 0, (maxAB + 2) * sizeof(int));
+        memset(k1, 0, (maxSequenceLength + 2) * sizeof(int));
+        memset(k2, 0, (maxSequenceLength + 2) * sizeof(int));
+        memset(k3, 0, (maxSequenceLength + 2) * sizeof(int));
         k1 = &k1[1];
         k2 = &k2[1];
         k3 = &k3[1];

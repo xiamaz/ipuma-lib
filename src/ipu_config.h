@@ -19,10 +19,10 @@ struct SWConfig {
 };
 
 struct IPUAlgoConfig {
-  int tilesUsed = 1; // number of active vertices
-  int maxAB = 300; // maximum length of a single comparison
-  int maxBatches = 20; // maximum number of comparisons in a single batch
-  int bufsize = 3000; // total size of buffer for A and B individually
+  int numVertices = 1; // number of active vertices
+  int maxSequenceLength = 300; // maximum length of a single comparison
+  int maxComparisonsPerVertex = 20; // maximum number of comparisons in a single batch
+  int vertexBufferSize = 3000; // total size of buffer for A and B individually
   VertexType vtype = VertexType::cpp;
   Algorithm fillAlgo = Algorithm::fillFirst;
   bool forwardOnly = false; // do not calculate the start position of a match, this should approx 2x performance, as no reverse pass is needed
