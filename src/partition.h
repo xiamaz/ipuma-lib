@@ -34,6 +34,9 @@ namespace ipu { namespace partition {
 
     size_t longestLength;
     size_t totalSequenceLength;
+
+    uint64_t totalCells;
+
     std::vector<SequenceMapping> seqs;
     std::vector<ComparisonMapping> cmps;
 

@@ -76,6 +76,7 @@ namespace partition {
 
       totalSequenceLength = newTotalLength;
       longestLength = std::max({longestLength, sizeA, sizeB});
+      totalCells += sizeA * sizeB;
       return true;
     }
     return false;
@@ -162,9 +163,10 @@ namespace partition {
   class BucketCompare {
   public:
     bool operator() (const Bucket& a, const Bucket& b) {
-      auto a_remaining = a.sequenceCapacity - a.totalSequenceLength;
-      auto b_remaining = b.sequenceCapacity - b.totalSequenceLength;
-      return a_remaining <= b_remaining;
+      // auto a_remaining = a.sequenceCapacity - a.totalSequenceLength;
+      // auto b_remaining = b.sequenceCapacity - b.totalSequenceLength;
+      // return a_remaining <= b_remaining;
+      return a.totalCells > b.totalCells;
     }
   };
 
@@ -179,7 +181,6 @@ namespace partition {
     }
 
     BatchMapping& createBatch() override {
-      PLOGW << "Greedy Create";
       mappings.push_back(BatchMapping(config));
       BatchMapping& m = mappings.back();
       std::make_heap(m.buckets.begin(), m.buckets.end(), cmp);
