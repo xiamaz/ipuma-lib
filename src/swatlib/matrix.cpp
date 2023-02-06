@@ -136,7 +136,7 @@ std::vector<std::vector<T>> swatlib::Matrix<T>::toVector() {
     for (int i = 0; i < m; ++i) {
         v[i] = std::vector<T>(n);
         for (int j = 0; j < n; ++j) {
-            v[i][j] = operator()(m, n);
+            v[i][j] = operator()(i, j);
         }
     }
     return v;
