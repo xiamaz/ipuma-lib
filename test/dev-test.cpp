@@ -12,7 +12,7 @@ TEST(IPUDev, DISABLED_TestMultiStriping) {
   int numWorkers = 1;
   int numCmps = 6;
   int strlen = 6;
-  int bufsize = 6;
+  int vertexBufferSize = 6;
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = 0,
     .gapExtend = -ALN_GAP_EXTENDING_COST,
@@ -21,7 +21,7 @@ TEST(IPUDev, DISABLED_TestMultiStriping) {
     .ambiguityValue = -ALN_AMBIGUITY_COST,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::multiasm});
+  }, {numWorkers, strlen, numCmps, vertexBufferSize, ipu::VertexType::multiasm});
 
   vector<string> queries, refs;
   for (int i = 0; i < 1; ++i) {
@@ -46,7 +46,7 @@ TEST(IPUDev, DISABLED_TestStripingAsm) {
   int numWorkers = 1;
   int numCmps = 6;
   int strlen = 6;
-  int bufsize = 6;
+  int vertexBufferSize = 6;
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = 0,
     .gapExtend = -ALN_GAP_EXTENDING_COST,
@@ -55,7 +55,7 @@ TEST(IPUDev, DISABLED_TestStripingAsm) {
     .ambiguityValue = -ALN_AMBIGUITY_COST,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::multiasm});
+  }, {numWorkers, strlen, numCmps, vertexBufferSize, ipu::VertexType::multiasm});
 
   vector<string> queries, refs;
   for (int i = 0; i < 1; ++i) {
@@ -80,7 +80,7 @@ TEST(IPUDev, DISABLED_MultiVertexSeparate) {
   int numWorkers = 1;
   int numCmps = 30;
   int strlen = 20;
-  int bufsize = 1000;
+  int vertexBufferSize = 1000;
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = 0,
     .gapExtend = -ALN_GAP_EXTENDING_COST,
@@ -89,7 +89,7 @@ TEST(IPUDev, DISABLED_MultiVertexSeparate) {
     .ambiguityValue = -ALN_AMBIGUITY_COST,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::multiasm});
+  }, {numWorkers, strlen, numCmps, vertexBufferSize, ipu::VertexType::multiasm});
 
   vector<string> queries, refs;
   for (int i = 0; i < 6; ++i) {

@@ -3,13 +3,13 @@
 using json = nlohmann::json;
 
 namespace ipu {
-int IPUAlgoConfig::getBufsize32b() const { return std::ceil(static_cast<double>(bufsize) / 4.0); }
+int IPUAlgoConfig::getBufsize32b() const { return std::ceil(static_cast<double>(vertexBufferSize) / 4.0); }
 
-int IPUAlgoConfig::getTotalNumberOfComparisons() const { return tilesUsed * maxBatches; }
+int IPUAlgoConfig::getTotalNumberOfComparisons() const { return numVertices * maxComparisonsPerVertex; }
 
 int IPUAlgoConfig::getMetaBufferSize32b() const { return getTotalNumberOfComparisons() * 4; };
 
-int IPUAlgoConfig::getTotalBufsize32b() const { return tilesUsed * getBufsize32b(); }
+int IPUAlgoConfig::getTotalBufsize32b() const { return numVertices * getBufsize32b(); }
 
 int IPUAlgoConfig::getInputBufferSize32b() const { return getTotalBufsize32b() + getMetaBufferSize32b(); }
 
@@ -61,10 +61,10 @@ void to_json(json& j, const VertexType& t) {
 
 void to_json(json& j, const IPUAlgoConfig& c) {
         j = json{
-                {"tilesUsed", c.tilesUsed},
-                {"maxAB", c.maxAB},
-                {"maxBatches", c.maxBatches},
-                {"bufsize", c.bufsize},
+                {"numVertices", c.numVertices},
+                {"maxSequenceLength", c.maxSequenceLength},
+                {"maxComparisonsPerVertex", c.maxComparisonsPerVertex},
+                {"vertexBufferSize", c.vertexBufferSize},
                 {"vtype", c.vtype},
                 {"fillAlgo", c.fillAlgo},
                 {"forwardOnly", c.forwardOnly},
@@ -75,10 +75,10 @@ void to_json(json& j, const IPUAlgoConfig& c) {
 }
 
 void from_json(const json& j, IPUAlgoConfig& c) {
-        j.at("tilesUsed").get_to(c.tilesUsed);
-        j.at("maxAB").get_to(c.maxAB);
-        j.at("maxBatches").get_to(c.maxBatches);
-        j.at("bufsize").get_to(c.bufsize);
+        j.at("numVertices").get_to(c.numVertices);
+        j.at("maxSequenceLength").get_to(c.maxSequenceLength);
+        j.at("maxComparisonsPerVertex").get_to(c.maxComparisonsPerVertex);
+        j.at("vertexBufferSize").get_to(c.vertexBufferSize);
         j.at("vtype").get_to(c.vtype);
         j.at("fillAlgo").get_to(c.fillAlgo);
         j.at("forwardOnly").get_to(c.forwardOnly);

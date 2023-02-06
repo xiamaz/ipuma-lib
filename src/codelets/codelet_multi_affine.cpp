@@ -26,7 +26,7 @@ public:
     poplar::Input<int> gapInit;
     poplar::Input<int> gapExt;
     poplar::Input<int> bufSize;
-    poplar::Input<int> maxAB;
+    poplar::Input<int> maxSequenceLength;
     poplar::Input<bool> forwardOnly;
     poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Seqs;
     poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Meta;
@@ -38,8 +38,8 @@ public:
         int gI = *gapInit;
         int gE = *gapExt;
 
-        auto* wC = &(C[0]) + workerId * maxAB;
-        auto* wbG = &(bG[0]) + workerId * maxAB;
+        auto* wC = &(C[0]) + workerId * maxSequenceLength;
+        auto* wbG = &(bG[0]) + workerId * maxSequenceLength;
 
         uint8_t* cSeqs = (uint8_t*) &(Seqs[0]);
 
@@ -61,8 +61,8 @@ public:
 
             if (a_len == 0 || b_len == 0) break;
 
-            memset(&(wC[0]), 0, maxAB * sizeof(int));
-            memset(&(wbG[0]), 0, maxAB * sizeof(int));
+            memset(&(wC[0]), 0, maxSequenceLength * sizeof(int));
+            memset(&(wbG[0]), 0, maxSequenceLength * sizeof(int));
 
             // forward pass
             for (int i = 0; i < b_len; ++i) {
@@ -90,8 +90,8 @@ public:
             s = 0;
 
             if (!forwardOnly) {
-                memset(&(wC[0]), 0, maxAB * sizeof(int));
-                memset(&(wbG[0]), 0, maxAB * sizeof(int));
+                memset(&(wC[0]), 0, maxSequenceLength * sizeof(int));
+                memset(&(wbG[0]), 0, maxSequenceLength * sizeof(int));
 
                 // reverse pass
                 for (int i = Bend; i >= 0; --i) {

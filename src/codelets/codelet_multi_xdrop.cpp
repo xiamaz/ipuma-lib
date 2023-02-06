@@ -38,7 +38,7 @@ class MultiXDrop : public poplar::MultiVertex {
   poplar::Input<int> gapInit;
   poplar::Input<int> gapExt;
   poplar::Input<int> bufSize;
-  poplar::Input<int> maxAB;
+  poplar::Input<int> maxSequenceLength;
   poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Seqs;
   poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Meta;
   poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> score;
@@ -77,8 +77,8 @@ class MultiXDrop : public poplar::MultiVertex {
 
       if (a_len == 0 || b_len == 0) break;
 
-      sType* k1 = &K1[workerId * (maxAB+2)];
-      sType* k2 = &K2[workerId * (maxAB+2)];
+      sType* k1 = &K1[workerId * (maxSequenceLength+2)];
+      sType* k2 = &K2[workerId * (maxSequenceLength+2)];
 
       memset(k1, 0, (maxAB + 2) * sizeof(sType));
       memset(k2, 0, (maxAB + 2) * sizeof(sType));
@@ -88,6 +88,7 @@ class MultiXDrop : public poplar::MultiVertex {
 
 
       // Algo begin
+<<<<<<< HEAD
       // int T = 0, T_prime = 0;
       // {
       //   unsigned L = 0, U = 0;
@@ -160,6 +161,78 @@ class MultiXDrop : public poplar::MultiVertex {
 
       // Right hand side
       sType T = ipumacore::xdrop::xdrop_doubleband<X, GAP_PENALTY, false, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(a, a_len, b, b_len, simMatrix, k1, k2);
+=======
+      int T = 0, T_prime = 0;
+      {
+        unsigned L = 0, U = 0;
+
+        memset(k1, 0, (maxSequenceLength + 2) * sizeof(sType));
+        memset(k2, 0, (maxSequenceLength + 2) * sizeof(sType));
+        k1 = &k1[1];
+        k2 = &k2[1];
+
+        auto cell_update = [&](int i, int j, sType* k1, sType* k2, int z, sType &lastval) {
+          sType new_lastval = k1[z];
+          int score = max(k2[z] - GAP_PENALTY, k2[z - 1] - GAP_PENALTY);
+          score = max(score, lastval + simMatrix[a[i]][b[j]]);
+          lastval = new_lastval;
+
+          if (score < T - X) {
+            score = neginf;
+          }
+          k1[z] = score;
+          return score;
+        };
+
+        auto rotate = [&]() {
+          sType* t;  // 1->3, 2->1, 3->2
+          t = k1;
+          k1 = k2;
+          k2 = t;
+        };
+
+        int k = 0;
+        do {
+          k = k + 1;
+          sType lastval = k1[L-1];
+          for (size_t i = L; i < U + 1; i++) {
+            auto j = k - i - 1;
+            int score = cell_update(i, j, k1, k2, i, lastval);
+            T_prime = max(T_prime, score);
+          }
+
+          int minL = 99999;
+          for (unsigned i = L; i < U + 1; i++) {
+            int s = k1[i];
+            if (s > neginf) {
+              minL = i;
+              break;
+            }
+          }
+
+          int maxU = 0;
+          for (unsigned i = L; i < U + 1; i++) {
+            int s = k1[i];
+            if (s > neginf) {
+              maxU = i;
+            }
+          }
+
+          if (cut) {
+            L = minL;
+            U = maxU + 1;
+          } else {
+            L = 0;
+            U = U + 1;
+          }
+
+          L = max(L, k + 1 - N);
+          U = min(U, M - 1);
+          T = T_prime;
+          rotate();
+        } while (L <= U + 1);
+      }
+>>>>>>> e65d6a93894fe9a69548be5c4409987472c55af4
       score[n] = T;
       // This operation can cause raise conditions, but that will not produce
       // incurrect results. However, double work can be done, which we accept.

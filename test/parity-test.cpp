@@ -155,7 +155,7 @@ TEST_F(ParityTest, UseAssembly) {
   int numWorkers = 10;
   int numCmps = 10;
   int strlen = 120;
-  int bufsize = 1000;
+  int vertexBufferSize = 1000;
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = -(gapOpening-gapExtend),
     .gapExtend = -gapExtend,
@@ -164,7 +164,7 @@ TEST_F(ParityTest, UseAssembly) {
     .ambiguityValue = -ambiguityCost,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::assembly, ipu::Algorithm::greedy});
+  }, {numWorkers, strlen, numCmps, vertexBufferSize, ipu::VertexType::assembly, ipu::Algorithm::greedy});
 
   std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
   test_aligns_ipu(alns_ipu, refs, queries, driver);
@@ -176,7 +176,7 @@ TEST_F(ParityTest, UseMultiAssembly) {
   int numWorkers = 10;
   int numCmps = 10;
   int strlen = 120;
-  int bufsize = 1000;
+  int vertexBufferSize = 1000;
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = -(gapOpening-gapExtend),
     .gapExtend = -gapExtend,
@@ -185,7 +185,7 @@ TEST_F(ParityTest, UseMultiAssembly) {
     .ambiguityValue = -ambiguityCost,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::multiasm, ipu::Algorithm::greedy});
+  }, {numWorkers, strlen, numCmps, vertexBufferSize, ipu::VertexType::multiasm, ipu::Algorithm::greedy});
 
   std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
   test_aligns_ipu(alns_ipu, refs, queries, driver);
@@ -197,7 +197,7 @@ TEST_F(ParityTest, UseMNComparison) {
   int numWorkers = 10;
   int numCmps = 10;
   int strlen = 120;
-  int bufsize = 1000;
+  int vertexBufferSize = 1000;
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = -(gapOpening-gapExtend),
     .gapExtend = -gapExtend,
@@ -206,7 +206,7 @@ TEST_F(ParityTest, UseMNComparison) {
     .ambiguityValue = -ambiguityCost,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::multiasm, ipu::Algorithm::greedy});
+  }, {numWorkers, strlen, numCmps, vertexBufferSize, ipu::VertexType::multiasm, ipu::Algorithm::greedy});
 
   std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
   test_aligns_ipu_mn(alns_ipu, refs, queries, driver);
@@ -219,7 +219,7 @@ TEST_F(ParityTest, UseGapOpeningCostMultiAsm) {
   int numWorkers = 10;
   int numCmps = 10;
   int strlen = 120;
-  int bufsize = 1000;
+  int vertexBufferSize = 1000;
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = -(gapOpening-gapExtend),
     .gapExtend = -gapExtend,
@@ -228,7 +228,7 @@ TEST_F(ParityTest, UseGapOpeningCostMultiAsm) {
     .ambiguityValue = -ambiguityCost,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::multiasm, ipu::Algorithm::greedy});
+  }, {numWorkers, strlen, numCmps, vertexBufferSize, ipu::VertexType::multiasm, ipu::Algorithm::greedy});
 
   std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
   test_aligns_ipu(alns_ipu, refs, queries, driver);
@@ -319,7 +319,7 @@ TEST_F(AAParityTest, UseCppVertex) {
   int numWorkers = 1;
   int numCmps = 10;
   int strlen = 120;
-  int bufsize = 1000;
+  int vertexBufferSize = 1000;
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = -(gapOpening-gapExtend),
     .gapExtend = -gapExtend,
@@ -328,7 +328,7 @@ TEST_F(AAParityTest, UseCppVertex) {
     .ambiguityValue = -ambiguityCost,
     .similarity = swatlib::Similarity::blosum50,
     .datatype = swatlib::DataType::aminoAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::cpp, ipu::Algorithm::greedy});
+  }, {numWorkers, strlen, numCmps, vertexBufferSize, ipu::VertexType::cpp, ipu::Algorithm::greedy});
 
   std::vector<StripedSmithWaterman::Alignment> alns_ipu(queries.size());
   test_aligns_ipu(alns_ipu, refs, queries, driver);

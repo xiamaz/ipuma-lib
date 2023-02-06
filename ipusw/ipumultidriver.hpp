@@ -98,7 +98,7 @@ class IPUMultiDriver {
         static_cast<double>(dataCount) / totalTransferSize * 100;
     auto transferBandwidth = totalTransferSize / transferTime / 1e6;
     auto transferBandwidthPerVertex =
-        transferBandwidth / config.ipuconfig.tilesUsed;
+        transferBandwidth / config.ipuconfig.numVertices;
 
     json log = {
         {"tag", "batch_perf"},

@@ -32,7 +32,7 @@ class GreedyXDrop : public poplar::Vertex {
   poplar::Input<int> gapInit;
   poplar::Input<int> gapExt;
   poplar::Input<int> bufSize;
-  poplar::Input<int> maxAB;
+  poplar::Input<int> maxSequenceLength;
   poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Seqs;
   poplar::Input<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> Meta;
   poplar::Output<poplar::Vector<int, poplar::VectorLayout::ONE_PTR>> score;

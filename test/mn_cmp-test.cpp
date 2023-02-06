@@ -15,7 +15,7 @@ using MN_PartitioningDeath = MN_Partitioning;
 TEST_F(MN_Partitioning, checkMappingSimple) {
   // ipu::batchaffine::IPUAlgoConfig algoconfig = {2, 30, 10, 1000};
   // std::vector<std::string> seqs = {"AAAA", "TTTT", "GGGG", "CCCC"};
-  ipu::partition::BucketMap map(algoconfig.tilesUsed, algoconfig.maxBatches, algoconfig.bufsize);
+  ipu::partition::BucketMap map(algoconfig.numVertices, algoconfig.maxComparisonsPerVertex, algoconfig.vertexBufferSize);
   ipu::batchaffine::SWAlgorithm::fillMNBuckets(algoconfig.fillAlgo, map, seqs, comparisons);
   EXPECT_EQ(map.numBuckets, 2);
   EXPECT_EQ(map.buckets[0].cmps.size(), 1);
@@ -42,12 +42,12 @@ TEST(MN_Test, CompareAll) {
   int numWorkers = 1;
   int numCmps = 30;
   int strlen = 20;
-  int bufsize = 1000;
+  int vertexBufferSize = 1000;
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = 0, .gapExtend = -1, .matchValue = 1, .mismatchValue = -1, .ambiguityValue = -1,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::assembly});
+  }, {numWorkers, strlen, numCmps, vertexBufferSize, ipu::VertexType::assembly});
   driver.compare_mn_local(seqs, comparisons);
   auto result = driver.get_result();
   EXPECT_EQ(result.scores[0], 1);
@@ -72,12 +72,12 @@ TEST(MN_Test, CompareAllRR) {
   int numWorkers = 1;
   int numCmps = 30;
   int strlen = 20;
-  int bufsize = 1000;
+  int vertexBufferSize = 1000;
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = 0, .gapExtend = -1, .matchValue = 1, .mismatchValue = -1, .ambiguityValue = -1,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::assembly, ipu::Algorithm::roundRobin});
+  }, {numWorkers, strlen, numCmps, vertexBufferSize, ipu::VertexType::assembly, ipu::Algorithm::roundRobin});
   driver.compare_mn_local(seqs, comparisons);
   auto result = driver.get_result();
   EXPECT_EQ(result.scores[0], 1);
@@ -102,12 +102,12 @@ TEST(MN_Test, CompareAllGreedy) {
   int numWorkers = 1;
   int numCmps = 30;
   int strlen = 20;
-  int bufsize = 1000;
+  int vertexBufferSize = 1000;
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = 0, .gapExtend = -1, .matchValue = 1, .mismatchValue = -1, .ambiguityValue = -1,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {numWorkers, strlen, numCmps, bufsize, ipu::VertexType::assembly, ipu::Algorithm::greedy});
+  }, {numWorkers, strlen, numCmps, vertexBufferSize, ipu::VertexType::assembly, ipu::Algorithm::greedy});
   driver.compare_mn_local(seqs, comparisons);
   auto result = driver.get_result();
   EXPECT_EQ(result.scores[0], 1);
