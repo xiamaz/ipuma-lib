@@ -126,10 +126,10 @@ namespace partition {
     }
 
     bool addComparison(const ComparisonData& cmpData) {
-      BatchMapping& curMapping = mappings.back();
-      if (!addComparison(cmpData, curMapping)) {
-        curMapping = createBatch();
-        if (!addComparison(cmpData, curMapping)) {
+      BatchMapping* curMapping = &mappings.back();
+      if (!addComparison(cmpData, *curMapping)) {
+        curMapping = &createBatch();
+        if (!addComparison(cmpData, *curMapping)) {
           throw std::runtime_error("Could not insert data into a new batch");
         }
       }
