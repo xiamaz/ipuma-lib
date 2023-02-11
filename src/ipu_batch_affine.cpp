@@ -212,7 +212,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
                                          unsigned long bufSize, unsigned long maxComparisonsPerVertex,
                                          const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt,
                                          bool forward_only, int ioTiles,
-                                         int xDrop, double bandPercentageXDrop
+                                         int xDrop, double bandPercentageXDrop, int seedLength
                                          ) {
   // TODO: remove transmissionPrograms
   int buffers = 1;
@@ -229,7 +229,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     Tensor Seqs = graph.addVariable(INT, {activeTiles, seq_scaled_size}, "Seqs");
 
     // Metadata structure
-    Tensor CompMeta = graph.addVariable(INT, {activeTiles, maxComparisonsPerVertex * 4}, "CompMeta");
+    Tensor CompMeta = graph.addVariable(INT, {activeTiles, maxComparisonsPerVertex * (vtype == VertexType::xdropseedextend ? 6 : 4)}, "CompMeta");
 
     auto [m, n] = similarityData.shape();
 
@@ -263,12 +263,17 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         sType = INT; 
         workerMultiplier = target.getNumWorkerContexts();
         break;
+      case VertexType::xdropseedextend:
+        // This ok?
+        sType = INT; 
+        workerMultiplier = target.getNumWorkerContexts();
+        break;
       case VertexType::greedyxdrop:
         // This ok?
         sType = INT; 
         break;
       default:
-        PLOGF.printf("Unknown vtype $d", vtype);
+        PLOGF.printf("Unknown vtype %d", vtype);
         throw "Unknown vtype";
     }
 
@@ -325,6 +330,8 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     if (vtype == VertexType::multibandxdrop) {
       label += "<" + std::to_string(xDrop) + ">";
     } else if (vtype == VertexType::multixdrop) {
+      label += "<" + std::to_string(xDrop) + ">"; 
+    } else if (vtype == VertexType::xdropseedextend) {
       label += "<" + std::to_string(xDrop) + ">";
     }
     PLOGD.printf("Use Vertex class: %s", label.c_str());
@@ -352,6 +359,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         graph.connect(vtx["K2"], k_T[1]);
         graph.connect(vtx["K3"], k_T[2]);
         graph.connect(vtx["simMatrix"], similarity);
+        PLOGE << "OUTDATED";
       } else if (vtype == VertexType::multixdrop) {
         auto k_T = graph.addVariable(sType, {2, (maxSequenceLength+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
         graph.connect(vtx["maxSequenceLength"], maxSequenceLength);
@@ -359,6 +367,14 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         graph.connect(vtx["K1"], k_T[0]);
         graph.connect(vtx["K2"], k_T[1]);
         graph.connect(vtx["simMatrix"], similarity);
+      } else if (vtype == VertexType::xdropseedextend) {
+        auto k_T = graph.addVariable(sType, {2, (maxSequenceLength+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
+        graph.connect(vtx["maxSequenceLength"], maxSequenceLength);
+        graph.setTileMapping(k_T, tileIndex);
+        graph.connect(vtx["K1"], k_T[0]);
+        graph.connect(vtx["K2"], k_T[1]);
+        graph.connect(vtx["simMatrix"], similarity);
+        graph.connect(vtx["seedLength"], seedLength);
       } else if (vtype == VertexType::multibandxdrop) {
         int scaledMaxAB = maxSequenceLength * bandPercentageXDrop;
         auto k_T = graph.addVariable(sType, {2, ((size_t)scaledMaxAB+2+2) * (size_t) workerMultiplier}, "K[" + std::to_string(i) + "]");
@@ -367,6 +383,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         graph.connect(vtx["K1"], k_T[0]);
         graph.connect(vtx["K2"], k_T[1]);
         graph.connect(vtx["simMatrix"], similarity);
+        PLOGE << "OUTDATED";
       } else if (vtype == VertexType::greedyxdrop) {
         int mis = -2;
         int mat = 2;
@@ -469,7 +486,8 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
     algoconfig.forwardOnly,
     algoconfig.ioTiles,
     algoconfig.xDrop,
-    algoconfig.bandPercentageXDrop
+    algoconfig.bandPercentageXDrop,
+    algoconfig.seedLength
   );
 
   std::hash<std::string> hasher;
@@ -553,6 +571,7 @@ void computeJobMetrics(const Job& job, double tileFrequency, size_t numberVertic
     {"transfer_bandwidth", transferBandwidth},
     {"transfer_bandwidth_per_vertex", transferBandwidthPerVertex},
     {"transfer_info_ratio", transferInfoRatio},
+    {"cell_count", job.batch->cellCount},
   };
 
   PLOGD << "JOBLOG: " << logData.dump();
@@ -577,6 +596,12 @@ std::vector<Batch> SWAlgorithm::create_batches(const RawSequences& seqs, const C
   std::vector<Batch> batches;
   const auto inputBufferSize = algoconfig.getInputBufferSize32b();
   auto encodeTable = swatlib::getEncoder(config.datatype).getCodeTable();
+  int metavals = 4;
+  const bool isSeeded = algoconfig.vtype == ipu::VertexType::xdropseedextend;
+  if (isSeeded) {
+    metavals = 6;
+  }
+  
 
   stageTimers[2].tick();
   for (const auto& map : mappings) {
@@ -607,10 +632,14 @@ std::vector<Batch> SWAlgorithm::create_batches(const RawSequences& seqs, const C
 
       for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
         const auto& comparison = bucketMapping.cmps[i];
-        bucketMeta[i * 4] = comparison.sizeA;
-        bucketMeta[i * 4 + 1] = comparison.offsetA;
-        bucketMeta[i * 4 + 2] = comparison.sizeB;
-        bucketMeta[i * 4 + 3] = comparison.offsetB;
+        bucketMeta[i * metavals] = comparison.sizeA;
+        bucketMeta[i * metavals + 1] = comparison.offsetA;
+        bucketMeta[i * metavals + 2] = comparison.sizeB;
+        bucketMeta[i * metavals + 3] = comparison.offsetB;
+        if (isSeeded) {
+          bucketMeta[i * metavals + 4] = comparison.seedAStartPos;
+          bucketMeta[i * metavals + 5] = comparison.seedBStartPos;
+        }
 
         batch.origin_comparison_index[i] = comparison.comparisonIndex;
 

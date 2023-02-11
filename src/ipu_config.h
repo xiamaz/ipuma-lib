@@ -31,6 +31,7 @@ struct IPUAlgoConfig {
   // Optional: XDrop
   int xDrop = 10;
   double bandPercentageXDrop = 0.5;
+  int seedLength = -1;
 
   // this is maxbatches * num_vertices and is the maximum number of comparisons in a single batch
   int getTotalNumberOfComparisons() const;

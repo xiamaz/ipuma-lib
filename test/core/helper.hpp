@@ -11,7 +11,8 @@
 #include <seqan/seeds.h>
 #include <seqan/sequence.h>
 
-int alignFullSSW(const std::string cpp_seqH, const std::string cpp_seqV) {
+
+inline int alignFullSSW(const std::string cpp_seqH, const std::string cpp_seqV) {
     StripedSmithWaterman::Aligner ssw_aligner(1, 1, 1, 1, 1);
 
     StripedSmithWaterman::Filter ssw_filter;
@@ -20,7 +21,7 @@ int alignFullSSW(const std::string cpp_seqH, const std::string cpp_seqV) {
     return aln.sw_score;
 }
 
-int alignSeqSeqan(const std::string cpp_seqH, const std::string cpp_seqV, const int XDrop) {
+inline int alignSeqSeqan(const std::string cpp_seqH, const std::string cpp_seqV, const int XDrop) {
     using namespace seqan;
     // The horizontal and vertical sequence (subject and query sequences).
     Dna5String seqH = cpp_seqH;
@@ -59,7 +60,7 @@ inline std::string aln2string(StripedSmithWaterman::Alignment &aln) {
   return ss.str();
 }
 
-std::string initerstring(int minlen) {
+inline std::string initerstring(int minlen) {
   std::string x = "";
   srand(0);
   std::vector bp{"C", "A", "T", "G"};

@@ -17,7 +17,7 @@
 
 
 int alignSingleOnIpu(ipu::batchaffine::SWAlgorithm& algo, const std::string& seqH, const std::string& seqV) {
-  auto batches = algo.create_batches({seqH, seqV}, {{0, 1}});
+  auto batches = algo.create_batches({seqH, seqV}, {{0, 1, 1, 1}});
   auto job = algo.async_submit(&batches[0]);
   algo.blocking_join(*job);
   return job->batch->get_result().scores[0];
@@ -100,11 +100,23 @@ protected:
 };
 
 TEST_F(ParityIntegrationTest, XDropToSSW) {
-auto algo = ipu::batchaffine::SWAlgorithm({
-    .gapInit = 0, .gapExtend = -1, .matchValue = 1, .mismatchValue = -1, .ambiguityValue = -1,
+  auto algo = ipu::batchaffine::SWAlgorithm({
+    .gapInit = 0,
+    .gapExtend = -1,
+    .matchValue = 1,
+    .mismatchValue = -1,
+    .ambiguityValue = -1,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {1, 1000, 10, 10000, ipu::VertexType::multixdrop});
+  }, {
+    .numVertices = 1,
+    .maxSequenceLength = 1000,
+    .maxComparisonsPerVertex = 10,
+    .vertexBufferSize = 10000,
+    .vtype = ipu::VertexType::multixdrop,
+    .fillAlgo = ipu::Algorithm::fillFirst,
+    .seedLength = 2,
+  });
 
 
   const int drop = 1000;

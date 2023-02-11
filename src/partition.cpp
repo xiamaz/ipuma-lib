@@ -44,7 +44,7 @@ namespace partition {
     return ss.str();
   }
 
-  bool Bucket::addComparison(int comparisonIndex, int indexA, int indexB, size_t sizeA, size_t sizeB) {
+  bool Bucket::addComparison(int comparisonIndex, int indexA, int indexB, size_t sizeA, size_t sizeB, size_t seedAStartPos, size_t seedBStartPos) {
     size_t newTotalLength = totalSequenceLength + sizeA + sizeB;
     size_t newTotalCmps = cmps.size() + 1;
 
@@ -67,6 +67,8 @@ namespace partition {
         .offsetA = offsetA,
         .sizeB = sizeB,
         .offsetB = offsetB,
+        .seedAStartPos = seedAStartPos,
+        .seedBStartPos = seedBStartPos,
       });
 
       totalSequenceLength = newTotalLength;
@@ -107,6 +109,8 @@ namespace partition {
     int indexB;
     size_t sizeA;
     size_t sizeB;
+    int seedAStartPos;
+    int seedBStartPos;
   };
 
   class PartitioningAlgorithm {
@@ -151,7 +155,7 @@ namespace partition {
     bool addComparison(const ComparisonData& cmpData, BatchMapping& curMapping) override {
       for (; bucketIndex < curMapping.buckets.size(); ++bucketIndex) {
         Bucket& bucket = curMapping.buckets[bucketIndex];
-        if (bucket.addComparison(cmpData.comparisonIndex, cmpData.indexA, cmpData.indexB, cmpData.sizeA, cmpData.sizeB)) {
+        if (bucket.addComparison(cmpData.comparisonIndex, cmpData.indexA, cmpData.indexB, cmpData.sizeA, cmpData.sizeB, cmpData.seedAStartPos, cmpData.seedBStartPos)) {
           return true;
         }
       }
@@ -176,7 +180,7 @@ namespace partition {
       BatchMapping& m = mappings.back();
       std::pop_heap(m.buckets.begin(), m.buckets.end(), cmp);
       Bucket& b = m.buckets.back();
-      auto success = b.addComparison(cmpData.comparisonIndex, cmpData.indexA, cmpData.indexB, cmpData.sizeA, cmpData.sizeB);
+      auto success = b.addComparison(cmpData.comparisonIndex, cmpData.indexA, cmpData.indexB, cmpData.sizeA, cmpData.sizeB, cmpData.seedAStartPos, cmpData.seedBStartPos);
       std::push_heap(m.buckets.begin(), m.buckets.end(), cmp);
       return success;
     }
@@ -218,6 +222,8 @@ namespace partition {
       .indexB = cmp.indexB,
       .sizeA = seqs[cmp.indexA].size(),
       .sizeB = seqs[cmp.indexB].size(),
+      .seedAStartPos = cmp.seedAStartPos,
+      .seedBStartPos = cmp.seedBStartPos,
     };
   }
 

@@ -2,8 +2,10 @@
 
 #ifndef __POPC__
 #include <plog/Log.h>
-#include "../src/swatlib/swatlib.h"
+
 #include <iostream>
+
+#include "../src/swatlib/swatlib.h"
 using namespace swatlib;
 #include <string>
 #include <vector>
@@ -12,23 +14,22 @@ using namespace swatlib;
 #include <algorithm>
 #include <limits>
 
-
-template<typename T>
+template <typename T>
 inline T max(T a, T b) {
   return a > b ? a : b;
 }
 
-template<typename T>
+template <typename T>
 inline T max(T a, T b, T c) {
   return max<T>(max<T>(a, b), c);
 }
 
-template<typename T>
+template <typename T>
 inline T min(T a, T b) {
   return a > b ? b : a;
 }
 
-template<typename T>
+template <typename T>
 inline T min(T a, T b, T c) {
   return min<T>(min<T>(a, c), c);
 }
@@ -140,7 +141,10 @@ int xdrop(const std::string& query, const std::string& reference, bool cut) {
 #endif
 
 template <int X, int GAP_PENALTY, bool reversed, typename simT, typename sType>
-inline int xdrop_doubleband(const uint8_t* query, int N, const uint8_t* reference, int M, simT sim, sType* k1, sType* k2) {
+inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* query, int N, const uint8_t* reference, int M, simT sim, sType* k1, sType* k2) {
+  if (N == 0 || M == 0) {
+    return 0;
+  }
   int L = 0, U = 0;
   sType T_prime = 0, T = 0;
 
@@ -154,8 +158,8 @@ inline int xdrop_doubleband(const uint8_t* query, int N, const uint8_t* referenc
   auto cell_update = [&](int i, int j, sType* k1, sType* k2, int z, sType& lastval) {
     sType new_lastval = k1[z];
     sType score = max<sType>(k2[z] - GAP_PENALTY,
-                     k2[z - 1] - GAP_PENALTY,
-                     lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
+                             k2[z - 1] - GAP_PENALTY,
+                             lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
 #ifdef PRINT_DEBUG
     PLOGW.printf("i %d, j %d, k1[z - 1] (%d) + sim(reference[i] (%c), query[j] (%c)) (%d) => %d", i, j, k1[z - 1], reference[adrREF(i)], query[adrQER(j)], sim(reference[adrREF(i)], query[adrQER(j)]), score);
 #endif
@@ -335,7 +339,7 @@ int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* refe
 
 #ifndef __POPC__
 template <int X, int GAP_PENALTY, int klen>
-int xdrop_doubleband_restricted_cpu(const std::vector<uint8_t>& query, const std::vector<uint8_t>& reference,  Matrix<int8_t> sim) {
+int xdrop_doubleband_restricted_cpu(const std::vector<uint8_t>& query, const std::vector<uint8_t>& reference, Matrix<int8_t> sim) {
   int M = reference.size();
   int N = query.size();
   int* t1 = &((int*)calloc(klen + 5, sizeof(int)))[1];
@@ -344,6 +348,78 @@ int xdrop_doubleband_restricted_cpu(const std::vector<uint8_t>& query, const std
   free(&t2[-1]);
   free(&t1[-1]);
   return score;
+}
+#endif
+
+template <int X, int GAP_PENALTY, typename simT, typename sType>
+inline __attribute__((always_inline)) sType xdrop_extend_right(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2) {
+  return xdrop_doubleband<X, GAP_PENALTY, false, simT, sType>(
+      a + seedLength + a_seed_begin, a_len - seedLength - a_seed_begin,
+      b + seedLength + b_seed_begin, b_len - seedLength - b_seed_begin,
+      sim, k1, k2);
+}
+
+template <int X, int GAP_PENALTY, typename simT, typename sType>
+inline __attribute__((always_inline)) sType xdrop_extend_left(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2) {
+  return xdrop_doubleband<X, GAP_PENALTY, true, simT, sType>(
+      a + a_seed_begin, a_seed_begin,
+      b + b_seed_begin, b_seed_begin,
+      sim, k1, k2);
+}
+
+#ifndef __POPC__
+namespace debug {
+template <int X, int GAP_PENALTY, int seedLength>
+int seed_extend_cpu(const std::vector<uint8_t>& query, int querySeedBeginPos, const std::vector<uint8_t>& reference, int referenceSeedBeginPos, Matrix<int8_t> sim) {
+  auto decoder = swatlib::getEncoder(DataType::nucleicAcid);
+  PLOGW << decoder.decode(query);
+  PLOGW << decoder.decode(reference);
+  PLOGD << querySeedBeginPos << ", " << referenceSeedBeginPos;
+  auto leftH = std::vector<uint8_t>(query.begin(), query.begin() + querySeedBeginPos);
+  auto leftV = std::vector<uint8_t>(reference.begin(), reference.begin() + referenceSeedBeginPos);
+
+  PLOGW << decoder.decode(leftH);
+  PLOGW << decoder.decode(leftV);
+  auto scoreLeft = xdrop_doubleband_cpu<X, GAP_PENALTY, true>(
+      leftH,
+      leftV,
+      sim);
+
+  auto rightH = std::vector<uint8_t>(query.begin() + querySeedBeginPos + seedLength, query.end());
+  auto rightV = std::vector<uint8_t>(reference.begin() + referenceSeedBeginPos + seedLength, reference.end());
+  PLOGW << decoder.decode(rightH);
+  PLOGW << decoder.decode(rightV);
+  auto scoreRight = xdrop_doubleband_cpu<X, GAP_PENALTY, false>(
+      rightH,
+      rightV,
+      sim);
+  PLOGE << scoreLeft << "," << scoreRight;
+  return scoreLeft + scoreRight + seedLength;
+}
+}  // namespace debug
+
+template <int X, int GAP_PENALTY>
+int seed_extend_cpu(const std::vector<uint8_t>& query, int querySeedBeginPos, const std::vector<uint8_t>& reference, int referenceSeedBeginPos, int seedLength, Matrix<int8_t> sim) {
+  int M = reference.size();
+  int N = query.size();
+  // Can also be malloc with: k1[0] = 0, k2[0:2] = 0
+  int* k1 = &((int*)malloc((M + 2) * sizeof(int)))[0];
+  int* k2 = &((int*)malloc((M + 2) * sizeof(int)))[0];
+  int* _k1 = &k1[1];
+  int* _k2 = &k2[1];
+
+  memset(k1, 0, sizeof(int) * M + 2);
+  memset(k2, 0, sizeof(int) * M + 2);
+  auto score_right = xdrop_extend_right<X, GAP_PENALTY, std::vector<std::vector<int8_t>>, int>(query.data(), N, querySeedBeginPos, reference.data(), M, referenceSeedBeginPos, seedLength, sim.toVector(), _k1, _k2);
+
+  memset(k1, 0, sizeof(int) * M + 2);
+  memset(k2, 0, sizeof(int) * M + 2);
+  auto score_left = xdrop_extend_left<X, GAP_PENALTY, std::vector<std::vector<int8_t>>, int>(query.data(), N, querySeedBeginPos, reference.data(), M, referenceSeedBeginPos, seedLength, sim.toVector(), _k1, _k2);
+
+  free(&k2[0]);
+  free(&k1[0]);
+
+  return score_right + score_left + seedLength;
 }
 #endif
 

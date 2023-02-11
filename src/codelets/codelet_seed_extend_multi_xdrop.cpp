@@ -26,7 +26,7 @@ typedef int sType;
 #define GAP_PENALTY 1
 
 template<int X>
-class MultiXDrop : public poplar::MultiVertex {
+class SeedExtendXDrop : public poplar::MultiVertex {
  private:
   poplar::Output<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>> K1;
   poplar::Output<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>> K2;
@@ -35,6 +35,7 @@ class MultiXDrop : public poplar::MultiVertex {
   // Fields
   poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>> simMatrix;
   poplar::Input<size_t> maxNPerTile;
+  poplar::Input<int> seedLength;
   poplar::Input<int> gapInit;
   poplar::Input<int> gapExt;
   poplar::Input<int> bufSize;
@@ -65,12 +66,12 @@ class MultiXDrop : public poplar::MultiVertex {
       const int n = myN;
       int lastNoGap, prevNoGap;
 
-      auto a_len =   Meta[4 * n];
-      int j_offset = Meta[4 * n + 1];
-      auto b_len =   Meta[4 * n + 2];
-      int i_offset = Meta[4 * n + 3];
-      // int a_seed_begin = Meta[6 * n + 4];
-      // int b_seed_begin  = Meta[6 * n + 5];
+      auto a_len =   Meta[6 * n];
+      int j_offset = Meta[6 * n + 1];
+      auto b_len =   Meta[6 * n + 2];
+      int i_offset = Meta[6 * n + 3];
+      int a_seed_begin = Meta[6 * n + 4];
+      int b_seed_begin  = Meta[6 * n + 5];
 
       int M = a_len;
       int N = b_len;
@@ -91,14 +92,23 @@ class MultiXDrop : public poplar::MultiVertex {
       // Right hand side
       memset(k1, 0, (maxSequenceLength + 2) * sizeof(sType));
       memset(k2, 0, (maxSequenceLength + 2) * sizeof(sType));
-      sType T = ipumacore::xdrop::xdrop_doubleband<X, GAP_PENALTY, false, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
-        a, a_len,
-        b, b_len,
+      sType TRight = ipumacore::xdrop::xdrop_extend_right<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
+        a, a_len, a_seed_begin,
+        b, b_len, b_seed_begin,
+        seedLength,
         simMatrix, _k1, _k2
       );
 
+      memset(k1, 0, (maxSequenceLength + 2) * sizeof(sType));
+      memset(k2, 0, (maxSequenceLength + 2) * sizeof(sType));
+      sType TLeft = ipumacore::xdrop::xdrop_extend_left<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
+        a, a_len, a_seed_begin,
+        b, b_len, b_seed_begin,
+        seedLength,
+        simMatrix, _k1, _k2
+      );
 
-      score[n] = T;
+      score[n] = TRight + seedLength + TLeft;
       // This operation can cause raise conditions, but that will not produce
       // incurrect results. However, double work can be done, which we accept.
       myN = *globalN;
@@ -108,7 +118,7 @@ class MultiXDrop : public poplar::MultiVertex {
   }
 };
 
-template class MultiXDrop<10>;
-template class MultiXDrop<20>;
-template class MultiXDrop<50>;
-template class MultiXDrop<100>;
+template class SeedExtendXDrop<10>;
+template class SeedExtendXDrop<20>;
+template class SeedExtendXDrop<50>;
+template class SeedExtendXDrop<100>;

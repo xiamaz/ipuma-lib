@@ -7,15 +7,19 @@ int IPUAlgoConfig::getBufsize32b() const { return std::ceil(static_cast<double>(
 
 int IPUAlgoConfig::getTotalNumberOfComparisons() const { return numVertices * maxComparisonsPerVertex; }
 
-int IPUAlgoConfig::getMetaBufferSize32b() const { return getTotalNumberOfComparisons() * 4; };
+int IPUAlgoConfig::getMetaBufferSize32b() const { 
+        if (this->vtype == VertexType::xdropseedextend) {
+                return getTotalNumberOfComparisons() * 6;
+        } else {
+                return getTotalNumberOfComparisons() * 4;
+        }
+};
 
 int IPUAlgoConfig::getTotalBufsize32b() const { return numVertices * getBufsize32b(); }
 
 int IPUAlgoConfig::getInputBufferSize32b() const { return getTotalBufsize32b() + getMetaBufferSize32b(); }
 
-size_t IPUAlgoConfig::getOffsetInputSequence() const {
-        return 0;
-}
+size_t IPUAlgoConfig::getOffsetInputSequence() const { return 0; }
 
 size_t IPUAlgoConfig::getOffsetMetadata() const {
         return getTotalBufsize32b();
@@ -70,7 +74,8 @@ void to_json(json& j, const IPUAlgoConfig& c) {
                 {"forwardOnly", c.forwardOnly},
                 {"ioTiles", c.ioTiles},
                 {"xDrop", c.xDrop},
-                {"bandPercentageXDrop", c.bandPercentageXDrop}
+                {"bandPercentageXDrop", c.bandPercentageXDrop},
+                {"seedLength", c.seedLength}
         };
 }
 
@@ -85,5 +90,6 @@ void from_json(const json& j, IPUAlgoConfig& c) {
         j.at("ioTiles").get_to(c.ioTiles);
         j.at("xDrop").get_to(c.xDrop);
         j.at("bandPercentageXDrop").get_to(c.bandPercentageXDrop);
+        j.at("seedLength").get_to(c.seedLength);
 }
 }

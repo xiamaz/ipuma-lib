@@ -13,6 +13,7 @@ add_gp_library(
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_greedy_xdrop.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_multi_band_xdrop.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_multi_xdrop.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_seed_extend_multi_xdrop.cpp
   HEADERS
 )
 

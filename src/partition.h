@@ -15,6 +15,8 @@ namespace ipu { namespace partition {
     size_t offsetA;
     size_t sizeB;
     size_t offsetB;
+    size_t seedAStartPos;
+    size_t seedBStartPos;
 
     std::string toString() const;
   };
@@ -42,7 +44,7 @@ namespace ipu { namespace partition {
 
     Bucket(int bucketIndex, size_t sequenceCapacity, size_t comparisonCapacity);
 
-    bool addComparison(int comparisonIndex, int indexA, int indexB, size_t sizeA, size_t sizeB);
+    bool addComparison(int comparisonIndex, int indexA, int indexB, size_t sizeA, size_t sizeB, size_t seedAStartPos, size_t seedBStartPos);
 
     std::string toString() const;
   };
