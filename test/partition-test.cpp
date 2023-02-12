@@ -39,7 +39,7 @@ TEST_F(PartitioningTest, fullFillFirst) {
 }
 
 TEST_F(PartitioningTest, fullGreedy) {
-  size_t sequence_length = 100;
+  int sequence_length = 100;
   config = {
     3 /*Tiles used*/,
     1000 /*maxSequenceLength*/,

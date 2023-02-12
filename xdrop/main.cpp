@@ -101,17 +101,6 @@ int main(int argc, char** argv) {
 
   PLOGE << "NUMBER OF COMPARISONS: " << refs.size();
 
-  // std::vector<std::string> refs{};
-  // std::vector<std::string> qers{};
-
-  // for (int j =0 ; j<10;j++) {
-  //   refs.emplace_back(TEST_refs[10]);
-  //   qers.emplace_back(TEST_queries[10]);
-  // }
-
-
-
-
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = -1,
     .gapExtend = -1,
@@ -120,12 +109,20 @@ int main(int argc, char** argv) {
     .ambiguityValue = -1,
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
-  }, {1472 /*Tiles used*/, 1000 /*maxAB*/, 200 , 200 * 20, ipu::VertexType::multixdrop, ipu::Algorithm::fillFirst});
+  }, {
+    1472 /*Tiles used*/,
+    1000 /*maxSequenceLength*/,
+    200,
+    200 * 20,
+    ipu::VertexType::multixdrop,
+    ipu::Algorithm::greedy
+  });
 
   std::vector<ipu::batchaffine::Batch> batches = driver.create_batches(sequences, comparisons);
   std::vector<ipu::batchaffine::BlockAlignmentResults> results;
   for (auto& batch : batches) {
     PLOGI << "NEW BATCH =======================================================";
+    PLOGI << batch.toString();
     ipu::batchaffine::Job* j = driver.async_submit(&batch);
     assert(batch.cellCount > 0);
     assert(batch.dataCount > 0);

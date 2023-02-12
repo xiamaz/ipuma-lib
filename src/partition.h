@@ -28,6 +28,20 @@ namespace ipu { namespace partition {
     std::string toString() const;
   };
 
+  struct ComparisonData {
+    int comparisonIndex;
+    int indexA;
+    int indexB;
+    size_t sizeA;
+    size_t sizeB;
+    int seedAStartPos;
+    int seedBStartPos;
+
+    size_t complexity;
+
+    bool operator<(const ComparisonData& other) const;
+  };
+
   struct Bucket {
     int bucketIndex;
 
@@ -45,6 +59,7 @@ namespace ipu { namespace partition {
     Bucket(int bucketIndex, size_t sequenceCapacity, size_t comparisonCapacity);
 
     bool addComparison(int comparisonIndex, int indexA, int indexB, size_t sizeA, size_t sizeB, size_t seedAStartPos, size_t seedBStartPos);
+    bool addComparison(const ComparisonData&);
 
     std::string toString() const;
   };

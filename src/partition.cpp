@@ -44,6 +44,10 @@ namespace partition {
     return ss.str();
   }
 
+  bool Bucket::addComparison(const ComparisonData& d) {
+    addComparison(d.comparisonIndex, d.indexA, d.indexB, d.sizeA, d.sizeB, d.seedAStartPos, d.seedBStartPos);
+  }
+
   bool Bucket::addComparison(int comparisonIndex, int indexA, int indexB, size_t sizeA, size_t sizeB, size_t seedAStartPos, size_t seedBStartPos) {
     size_t newTotalLength = totalSequenceLength + sizeA + sizeB;
     size_t newTotalCmps = cmps.size() + 1;
@@ -102,16 +106,6 @@ namespace partition {
       buckets.push_back(Bucket(i, config.vertexBufferSize, config.maxComparisonsPerVertex));
     }
   }
-
-  struct ComparisonData {
-    int comparisonIndex;
-    int indexA;
-    int indexB;
-    size_t sizeA;
-    size_t sizeB;
-    int seedAStartPos;
-    int seedBStartPos;
-  };
 
   class PartitioningAlgorithm {
   protected:
@@ -216,25 +210,39 @@ namespace partition {
   }
 
   ComparisonData createCmpData(int i, const Comparison& cmp, const RawSequences& seqs) {
+    auto sizeA = seqs[cmp.indexA].size();
+    auto sizeB = seqs[cmp.indexB].size();
     return {
       .comparisonIndex = i,
       .indexA = cmp.indexA,
       .indexB = cmp.indexB,
-      .sizeA = seqs[cmp.indexA].size(),
-      .sizeB = seqs[cmp.indexB].size(),
+      .sizeA = sizeA,
+      .sizeB = sizeB,
       .seedAStartPos = cmp.seedAStartPos,
       .seedBStartPos = cmp.seedBStartPos,
+      .complexity = sizeA * sizeB,
     };
+  }
+
+  bool ComparisonData::operator<(const ComparisonData& other) const {
+    return this->complexity < other.complexity;
   }
 
   std::list<BatchMapping> mapBatches(IPUAlgoConfig config, const RawSequences& Seqs, const Comparisons& Cmps) {
 
     PLOGD << "Mapping " << Cmps.size() << " comparisons to batches";
+    std::vector<ComparisonData> cmpDatas(Cmps.size());
+    for (int i = 0; i < Cmps.size(); ++i) {
+      cmpDatas[i] = createCmpData(i, Cmps[i], Seqs);
+    }
 
+    PLOGD << "Sorting " << cmpDatas.size() << " comparison datas";
+    std::sort(cmpDatas.rbegin(), cmpDatas.rend());
+
+    PLOGD << "Partitioning " << cmpDatas.size() << " comparison datas";
     auto Partitioner = createPartitioner(config);
     for (int i = 0; i < Cmps.size(); ++i) {
-      ComparisonData cmpData = createCmpData(i, Cmps[i], Seqs);
-      Partitioner->addComparison(cmpData);
+      Partitioner->addComparison(cmpDatas[i]);
     }
     PLOGD << "Created " << Partitioner->mappings.size() << " batches";
     return Partitioner->getMappings();

@@ -171,6 +171,12 @@ class RecvCallback final : public poplar::StreamCallback {
   JobMap& resultTable;
 };
 
+std::string Batch::toString() const {
+  std::stringstream ss;
+  ss << "Batch[" << this->numComparisons << " size: " << this->dataCount << "]";
+  return ss.str();
+}
+
 BlockAlignmentResults Batch::get_result() {
   std::vector<int32_t> scores(numComparisons);
   std::vector<int32_t> a_range_result(numComparisons);

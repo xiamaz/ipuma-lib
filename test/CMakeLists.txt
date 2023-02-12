@@ -7,14 +7,8 @@ endif()
 
 set(BINARY ipuma-test)
 
-add_executable(${BINARY}
-  main.cpp
-  #simple-test.cpp
-  #parity-test.cpp 
-  partition-test.cpp 
-  #dev-test.cpp 
-  #mn_cmp-test.cpp
-)
+# add_executable(${BINARY} main.cpp simple-test.cpp parity-test.cpp partition-test.cpp dev-test.cpp mn_cmp-test.cpp)
+add_executable(${BINARY} main.cpp partition-test.cpp)
 target_include_directories(ipuma-test PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/extern/include")
 
 
