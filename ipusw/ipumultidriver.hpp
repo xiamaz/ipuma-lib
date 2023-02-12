@@ -73,7 +73,7 @@ class IPUMultiDriver {
     auto timeInner = static_cast<double>(cyclesInner) / clockFrequency;
 
     int32_t *meta_input =
-        job->sb.inputs_begin + config.ipuconfig.getTotalBufsize32b();
+        job->sb.inputs_begin + config.ipuconfig.getVertexBufsize32b();
 
     // GCUPS computation
     uint64_t cellCount = 0;

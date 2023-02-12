@@ -87,11 +87,13 @@ namespace partition {
     std::stringstream ss;
     uint64_t totalSequenceSize = 0;
     uint64_t sequenceCapacity = 0;
+    int totalCmps = 0;
     for (const auto& b : buckets) {
+      totalCmps += b.cmps.size();
       sequenceCapacity += b.sequenceCapacity;
       totalSequenceSize += b.totalSequenceLength;
     }
-    ss << "BMap[" << buckets.size() << "] " << totalSequenceSize << "/" << sequenceCapacity;
+    ss << "BMap[" << totalCmps << " cmps " << buckets.size() << " buckets] " << totalSequenceSize << "/" << sequenceCapacity;
     return ss.str();
   }
 

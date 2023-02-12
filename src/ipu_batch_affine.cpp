@@ -171,39 +171,6 @@ class RecvCallback final : public poplar::StreamCallback {
   JobMap& resultTable;
 };
 
-std::string Batch::toString() const {
-  std::stringstream ss;
-  ss << "Batch[" << this->numComparisons << " size: " << this->dataCount << "]";
-  return ss.str();
-}
-
-BlockAlignmentResults Batch::get_result() {
-  std::vector<int32_t> scores(numComparisons);
-  std::vector<int32_t> a_range_result(numComparisons);
-  std::vector<int32_t> b_range_result(numComparisons);
-
-  // TODO this should not be hardcoded here but passed as a config to make layout changes easier.
-  int aOffset = results.size() / 3;
-  int bOffset = aOffset * 2;
-
-  // mapping is now responsibility of the caller
-  for (int i = 0; i < numComparisons; ++i) {
-    int aindex = i + aOffset;
-    int bindex = i + bOffset;
-    scores[i] = results[i];
-    a_range_result[i] = results[aindex];
-    b_range_result[i] = results[bindex];
-  }
-
-  return {scores, a_range_result, b_range_result};
-}
-
-void Batch::resize(size_t inputBufferSize, size_t maxComparisons) {
-  inputs.resize(inputBufferSize);
-  results.resize(maxComparisons * 3);
-  origin_comparison_index.resize(maxComparisons);
-}
-
 void Job::join() {
   for (auto done : *done_signal) {
     throw std::runtime_error("done_signal should be closed");
@@ -218,7 +185,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
                                          unsigned long bufSize, unsigned long maxComparisonsPerVertex,
                                          const swatlib::Matrix<int8_t> similarityData, int gapInit, int gapExt,
                                          bool forward_only, int ioTiles,
-                                         int xDrop, double bandPercentageXDrop, int seedLength
+                                         int xDrop, double bandPercentageXDrop, int seedLength, int metaSize
                                          ) {
   // TODO: remove transmissionPrograms
   int buffers = 1;
@@ -235,7 +202,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     Tensor Seqs = graph.addVariable(INT, {activeTiles, seq_scaled_size}, "Seqs");
 
     // Metadata structure
-    Tensor CompMeta = graph.addVariable(INT, {activeTiles, maxComparisonsPerVertex * (vtype == VertexType::xdropseedextend ? 6 : 4)}, "CompMeta");
+    Tensor CompMeta = graph.addVariable(INT, {activeTiles, maxComparisonsPerVertex * (metaSize)}, "CompMeta");
 
     auto [m, n] = similarityData.shape();
 
@@ -493,8 +460,8 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
     algoconfig.ioTiles,
     algoconfig.xDrop,
     algoconfig.bandPercentageXDrop,
-    algoconfig.seedLength
-  );
+    algoconfig.seedLength,
+    algoconfig.getMetaStructSize32b());
 
   std::hash<std::string> hasher;
   auto s = json{algoconfig, config};
@@ -593,80 +560,7 @@ void SWAlgorithm::blocking_join(Job& job) {
 }
 
 std::vector<Batch> SWAlgorithm::create_batches(const RawSequences& seqs, const Comparisons& cmps) {
-  std::vector<swatlib::TickTock> stageTimers(3);
-  stageTimers[0].tick();
-  stageTimers[1].tick();
-  std::list<partition::BatchMapping> mappings = partition::mapBatches(algoconfig, seqs, cmps);
-  stageTimers[1].tock();
-
-  std::vector<Batch> batches;
-  const auto inputBufferSize = algoconfig.getInputBufferSize32b();
-  auto encodeTable = swatlib::getEncoder(config.datatype).getCodeTable();
-  int metavals = 4;
-  const bool isSeeded = algoconfig.vtype == ipu::VertexType::xdropseedextend;
-  if (isSeeded) {
-    metavals = 6;
-  }
-  
-
-  stageTimers[2].tick();
-  for (const auto& map : mappings) {
-    batches.push_back({});
-    Batch& batch = batches.back();
-    batch.resize(inputBufferSize, algoconfig.getTotalNumberOfComparisons());
-
-    int8_t* seqInput = (int8_t*)batch.inputs.data();
-    int32_t* metaInput = batch.inputs.data() + algoconfig.getOffsetMetadata();
-    auto& cellCount = batch.cellCount;
-    auto& dataCount = batch.dataCount;
-    auto& comparisonCount = batch.numComparisons;
-
-    for (const auto& bucketMapping : map.buckets) {
-      const size_t offsetSequence = bucketMapping.bucketIndex * algoconfig.getBufsize32b() * 4;
-      const size_t offsetMeta = bucketMapping.bucketIndex * algoconfig.maxComparisonsPerVertex * 4;
-
-      auto* bucketSeq = seqInput + offsetSequence;
-      auto* bucketMeta = metaInput + offsetMeta;
-      for (const auto& sequenceMapping : bucketMapping.seqs) {
-        const char *seq = seqs[sequenceMapping.index].data();
-        size_t seqSize = seqs[sequenceMapping.index].size();
-        for (int j = 0; j < seqSize; ++j) {
-          bucketSeq[sequenceMapping.offset + j] = encodeTable[seq[j]];
-        }
-        dataCount += seqSize;
-      }
-
-      for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
-        const auto& comparison = bucketMapping.cmps[i];
-        bucketMeta[i * metavals] = comparison.sizeA;
-        bucketMeta[i * metavals + 1] = comparison.offsetA;
-        bucketMeta[i * metavals + 2] = comparison.sizeB;
-        bucketMeta[i * metavals + 3] = comparison.offsetB;
-        if (isSeeded) {
-          bucketMeta[i * metavals + 4] = comparison.seedAStartPos;
-          bucketMeta[i * metavals + 5] = comparison.seedBStartPos;
-        }
-
-        batch.origin_comparison_index[i] = comparison.comparisonIndex;
-
-        cellCount += comparison.sizeA * comparison.sizeB;
-        comparisonCount++;
-      }
-    }
-  }
-  stageTimers[2].tock();
-
-
-  stageTimers[0].tock();
-  json logData = {
-    {"sequences_count", seqs.size() },
-    {"comparisons_count", cmps.size() },
-    {"batches_created", batches.size()},
-    {"time_total", stageTimers[0].seconds()},
-    {"time_partition", stageTimers[1].seconds()},
-    {"time_copy_inputs", stageTimers[2].seconds()},
-  };
-  PLOGD << "BATCHCREATE: " << logData.dump();
+  auto batches = ipu::create_batches(seqs, cmps, algoconfig, config);
   return batches;
 }
 

@@ -19,7 +19,7 @@ add_gp_library(
 
 add_subdirectory(swatlib)
 
-add_library(IPUMA_LIBRARY "ipu_batch_affine.cpp" "ipu_base.cpp" "driver.cpp" "partition.cpp" "types.cpp" "ipu_config.cpp")
+add_library(IPUMA_LIBRARY "batching.cpp" "ipu_batch_affine.cpp" "ipu_base.cpp" "driver.cpp" "partition.cpp" "types.cpp" "ipu_config.cpp")
 
 find_package(OpenMP REQUIRED)
 if(OPENMP_FOUND OR OpenMP_CXX_FOUND)

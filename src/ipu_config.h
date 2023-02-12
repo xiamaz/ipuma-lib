@@ -38,10 +38,12 @@ struct IPUAlgoConfig {
 
   // size of the sequence buffer with 32bits
   int getBufsize32b() const;
-  int getTotalBufsize32b() const;
+  int getVertexBufsize32b() const;
   int getMetaBufferSize32b() const;
   int getLenBufferSize32b() const;
   int getInputBufferSize32b() const;
+
+  int getMetaStructSize32b() const;
 
   size_t getOffsetInputSequence() const;
   size_t getOffsetMetadata() const;

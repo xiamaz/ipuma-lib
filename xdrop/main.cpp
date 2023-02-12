@@ -118,8 +118,8 @@ int main(int argc, char** argv) {
     ipu::Algorithm::greedy
   });
 
-  std::vector<ipu::batchaffine::Batch> batches = driver.create_batches(sequences, comparisons);
-  std::vector<ipu::batchaffine::BlockAlignmentResults> results;
+  auto batches = driver.create_batches(sequences, comparisons);
+  std::vector<ipu::BlockAlignmentResults> results;
   for (auto& batch : batches) {
     PLOGI << "NEW BATCH =======================================================";
     PLOGI << batch.toString();

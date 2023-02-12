@@ -10,6 +10,7 @@
 
 #include "ipu_base.h"
 #include "ipu_config.h"
+#include "batching.h"
 #include "partition.h"
 #include "msd/channel.hpp"
 
@@ -19,33 +20,6 @@ namespace ipu {
 namespace batchaffine {
 
 using JobId = long;
-struct BlockAlignmentResults {
-  std::vector<int32_t> scores;
-  std::vector<int32_t> a_range_result;
-  std::vector<int32_t> b_range_result;
-};
-
-struct Batch {
-  std::vector<int32_t> inputs;
-  std::vector<int32_t> results;
-  std::vector<int32_t> origin_comparison_index;
-
-  void resize(size_t inputBufferSize, size_t maxComparisons);
-
-  size_t numComparisons;
-
-  // metrics kept for computing performance
-  uint64_t cellCount;
-  uint64_t dataCount;
-
-  swatlib::TickTock tick;
-
-  std::string toString() const;
-
-  BlockAlignmentResults get_result();
-  static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end);
-  static void transferResults(int32_t* results_begin, int32_t* results_end, int* mapping_begin, int* mapping_end, int32_t* scores_begin, int32_t* scores_end, int32_t* arange_begin, int32_t* arange_end, int32_t* brange_begin, int32_t* brange_end, int numComparisons);
-};
 
 struct Job {
   Job(): tick({}) {};

@@ -3,26 +3,36 @@
 using json = nlohmann::json;
 
 namespace ipu {
-int IPUAlgoConfig::getBufsize32b() const { return std::ceil(static_cast<double>(vertexBufferSize) / 4.0); }
+int get32bSize(int size8b) {
+        return std::ceil(static_cast<double>(size8b) / 4.0);
+}
+int IPUAlgoConfig::getBufsize32b() const { return get32bSize(vertexBufferSize); }
 
 int IPUAlgoConfig::getTotalNumberOfComparisons() const { return numVertices * maxComparisonsPerVertex; }
 
 int IPUAlgoConfig::getMetaBufferSize32b() const { 
-        if (this->vtype == VertexType::xdropseedextend) {
-                return getTotalNumberOfComparisons() * 6;
-        } else {
-                return getTotalNumberOfComparisons() * 4;
-        }
+        return getTotalNumberOfComparisons() * getMetaStructSize32b();
 };
 
-int IPUAlgoConfig::getTotalBufsize32b() const { return numVertices * getBufsize32b(); }
+int IPUAlgoConfig::getMetaStructSize32b() const {
+        switch(this->vtype) {
+        case VertexType::xdropseedextend:
+                return get32bSize(sizeof(XDropMeta));
+                break;
+        default:
+                return get32bSize(sizeof(SWMeta));
+                break;
+        }
+}
 
-int IPUAlgoConfig::getInputBufferSize32b() const { return getTotalBufsize32b() + getMetaBufferSize32b(); }
+int IPUAlgoConfig::getVertexBufsize32b() const { return numVertices * getBufsize32b(); }
+
+int IPUAlgoConfig::getInputBufferSize32b() const { return getVertexBufsize32b() + getMetaBufferSize32b(); }
 
 size_t IPUAlgoConfig::getOffsetInputSequence() const { return 0; }
 
 size_t IPUAlgoConfig::getOffsetMetadata() const {
-        return getTotalBufsize32b();
+        return getVertexBufsize32b();
 }
 
 void to_json(json& j, const SWConfig& c) {
