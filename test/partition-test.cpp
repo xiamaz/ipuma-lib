@@ -28,8 +28,8 @@ TEST_F(PartitioningTest, fullFillFirst) {
   size_t totalBufsize = config.vertexBufferSize * config.numVertices;
   size_t numberCmps = totalBufsize / (sequence_length * 2);
   for (int i = 0; i < numberCmps; ++i) {
-    Seqs.push_back(std::string("A", sequence_length));
-    Seqs.push_back(std::string("B", sequence_length));
+    Seqs.push_back(std::string(sequence_length, 'A'));
+    Seqs.push_back(std::string(sequence_length, 'B'));
     Cmps.push_back({.indexA = i * 2, .indexB = i * 2 + 1});
   }
 
@@ -51,8 +51,8 @@ TEST_F(PartitioningTest, fullGreedy) {
   size_t totalBufsize = config.vertexBufferSize * config.numVertices;
   size_t numberCmps = totalBufsize / (sequence_length * 2);
   for (int i = 0; i < numberCmps; ++i) {
-    Seqs.push_back(std::string("A", sequence_length));
-    Seqs.push_back(std::string("B", sequence_length));
+    Seqs.push_back(std::string(sequence_length, 'A'));
+    Seqs.push_back(std::string(sequence_length, 'B'));
     Cmps.push_back({.indexA = i * 2, .indexB = i * 2 + 1});
   }
 
@@ -80,8 +80,8 @@ TEST_F(PartitioningTest, MultiBatchSizedCount) {
   size_t totalBufsize = config.vertexBufferSize * config.numVertices;
   size_t numberCmps = totalBufsize / (sequence_length * 2);
   for (int i = 0; i < numberCmps * batches_count; ++i) {
-    Seqs.push_back(std::string("A", sequence_length));
-    Seqs.push_back(std::string("B", sequence_length));
+    Seqs.push_back(std::string(sequence_length, 'A'));
+    Seqs.push_back(std::string(sequence_length, 'B'));
     Cmps.push_back({.indexA = i * 2, .indexB = i * 2 + 1});
   }
 
