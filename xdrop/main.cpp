@@ -39,9 +39,20 @@ vector<tuple<string, string>> INPUT_BATCHS = {
   {basepath + "batch_2_A.txt", basepath + "batch_2_B.txt"},
 };
 
-// vector<tuple<string, string>> RR_ERROR_BATCHS = {
-//   {basepath + "rr_As.txt", basepath + "rr_Bs.txt"},
-// };
+const std::string SEQ_H = basepath + "seqs_seed_H.txt";
+const std::string SEED_H = basepath + "seeds_H.txt";
+const std::string SEQ_V = basepath + "seqs_seed_V.txt";
+const std::string SEED_V = basepath + "seeds_V.txt";
+
+std::vector<size_t> loadSeedpos(const std::string& path) {
+  std::ifstream file(path);
+  int i;
+  std::vector<size_t> seeds;
+  while (file >> i) {
+    seeds.push_back(i);
+  }
+  return seeds;
+}
 
 std::vector<std::string> loadSequences(const std::string& path) {
   std::vector<std::string> sequences;
@@ -53,53 +64,46 @@ std::vector<std::string> loadSequences(const std::string& path) {
   return sequences;
 }
 
+// std::tuple<ipu::RawSequences, ipu::Comparisons> prepareComparisons(ipu::RawSequences seqH, ipu::RawSequences seqV, std::vector<size_t> seedH, std::vector<size_t> seedV) {
+std::tuple<ipu::RawSequences, ipu::Comparisons> prepareComparisons(std::string seqH, std::string seqV, std::string seedH, std::string seedV) {
+  // ipu::RawSequences seqs(seqV.size() + seqH.size());
+  // ipu::Comparisons cmps(seqV.size());
+  ipu::RawSequences seqs;
+  ipu::Comparisons cmps;
+
+  std::ifstream fileH(seqH);
+  std::ifstream fileV(seqV);
+  std::ifstream fileHs(seedH);
+  std::ifstream fileVs(seedV);
+  int sH, sV;
+  std::string lH, lV;
+  int i = 0;
+  while (std::getline(fileH, lH) && std::getline(fileV, lV) && (fileHs >> sH) && (fileVs >> sV)) {
+    seqs.push_back(lH);
+    seqs.push_back(lV);
+    cmps.push_back({
+      .indexA = (int) (2 * i),
+      .indexB = (int) (2 * i + 1),
+      .seedAStartPos = (int) sH,
+      .seedBStartPos = (int) sV,
+    });
+    i++;
+  }
+
+  return {std::move(seqs), std::move(cmps)};
+}
+
 int main(int argc, char** argv) {
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
   plog::init(plog::verbose, &consoleAppender);
 
-  //    0 1 2 3 4 5 6 7 n
-  // 0 [0,0,0,0,0,0,0,0,0]
-  // 1 [0,1,1,0,0,1,0,1,1]
-  // 2 [0,1,2,1,0,1,0,1,2]
-  // 3 [0,0,1,3,2,1,0,0,1]
-  // 4 [0,0,0,2,4,3,2,1,0]
-  // m [0,1,1,1,3,5,4,3,2]
-  // const std::string query{"AATGAGAA"};
-  // const std::string reference{"AATGA"};
-  // const std::string query{"AATGAGAATTTTTTTTTTTTTTTTT"};
-  // const std::string reference{"AATGAAAAAAAAAAAAAAAAAA"};
-  // int score = xdrop(query, reference, true);
-
-  // int i = 12;
-  // const std::string query = TEST_queries[i];
-  // const std::string reference = TEST_refs[i];
-  // int score = xdrop(query, reference, true);
-  // std::cout <<  score << std::endl;
-
-  // Tests  
-  std::vector<std::string> refs = TEST_refs;
-  std::vector<std::string> qers = TEST_queries;
-
-  for (auto& [path_a, path_b] : INPUT_BATCHS) {
-    auto refsnew = loadSequences(path_a);
-    auto queriesnew = loadSequences(path_b);
-    refs.insert(refs.end(), refsnew.begin(), refsnew.end());
-    qers.insert(qers.end(), queriesnew.begin(), queriesnew.end());
-  }
-  // std::vector<std::string> sequences(refs.size() + qers.size());
-  // std::vector<ipu::Comparison> comparisons(refs.size());
-  std::vector<std::string> sequences(2*refs.size());
-  std::vector<ipu::Comparison> comparisons(1*refs.size());
-  for (int i = 0; i < refs.size(); ++i) {
-    sequences[2*i] = refs[i];
-    sequences[2*i+1] = qers[i];
-    comparisons[i] = {
-      2*i, 2*i+1
-    };
-    // break;
-  }
-
-  PLOGE << "NUMBER OF COMPARISONS: " << refs.size();
+  std::vector<swatlib::TickTock> loadTimers(3);
+  loadTimers[0].tick();
+  PLOGE << "PREPARING COMPARISONS";
+  auto [seqs, cmps] = prepareComparisons(SEQ_H, SEQ_V, SEED_H, SEED_V);
+  loadTimers[0].tock();
+  PLOGE << "TOOK " << loadTimers[0].duration() / 1000 << " seconds";
+  PLOGE << "NUMBER OF COMPARISONS: " << cmps.size();
 
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = -1,
@@ -118,7 +122,12 @@ int main(int argc, char** argv) {
     ipu::Algorithm::greedy
   });
 
-  auto batches = driver.create_batches(sequences, comparisons);
+  PLOGE << "CREATE BATCHES";
+  loadTimers[1].tick();
+  auto batches = driver.create_batches(seqs, cmps);
+  loadTimers[1].tock();
+  PLOGE << "TOOK " << loadTimers[1].duration() / 1000 << " seconds";
+  return 1;
   std::vector<ipu::BlockAlignmentResults> results;
   for (auto& batch : batches) {
     PLOGI << "NEW BATCH =======================================================";
