@@ -362,8 +362,8 @@ inline __attribute__((always_inline)) sType xdrop_extend_right(const uint8_t* a,
 template <int X, int GAP_PENALTY, typename simT, typename sType>
 inline __attribute__((always_inline)) sType xdrop_extend_left(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2) {
   return xdrop_doubleband<X, GAP_PENALTY, true, simT, sType>(
-      a + a_seed_begin, a_seed_begin,
-      b + b_seed_begin, b_seed_begin,
+      a, a_seed_begin,
+      b, b_seed_begin,
       sim, k1, k2);
 }
 
@@ -402,9 +402,10 @@ template <int X, int GAP_PENALTY>
 int seed_extend_cpu(const std::vector<uint8_t>& query, int querySeedBeginPos, const std::vector<uint8_t>& reference, int referenceSeedBeginPos, int seedLength, Matrix<int8_t> sim) {
   int M = reference.size();
   int N = query.size();
+  assert(M >= N);
   // Can also be malloc with: k1[0] = 0, k2[0:2] = 0
-  int* k1 = &((int*)malloc((M + 2) * sizeof(int)))[0];
-  int* k2 = &((int*)malloc((M + 2) * sizeof(int)))[0];
+  int* k1 = &((int*) malloc((M + 2) * sizeof(int)))[0];
+  int* k2 = &((int*) malloc((M + 2) * sizeof(int)))[0];
   int* _k1 = &k1[1];
   int* _k2 = &k2[1];
 
