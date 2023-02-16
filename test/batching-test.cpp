@@ -30,6 +30,7 @@ TEST(BatchingTest, testValidNumberCmps) {
   auto batches = ipu::create_batches(Seqs, Cmps, config, swconfig);
 
   int validCmps = 0;
+  uint64_t cellCount = 0;
   for (auto batch : batches) {
     ipu::XDropMeta* m = reinterpret_cast<ipu::XDropMeta*>(batch.getMetaBuffer());
     for (int i = 0; i < batch.origin_comparison_index.size(); ++i) {
@@ -40,8 +41,10 @@ TEST(BatchingTest, testValidNumberCmps) {
         validCmps += 1;
       }
     }
+    cellCount += batch.cellCount;
   }
   ASSERT_EQ(validCmps, Cmps.size());
+  ASSERT_EQ(cellCount, numberCmps * batches_count * sequence_length * sequence_length);
 }
 
 TEST(BatchingTest, testUniformCorrectness) {
