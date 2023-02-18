@@ -19,7 +19,21 @@ int8_t* Batch::getMetaBuffer() {
   return (int8_t*) (inputs.data() + metaOffset);
 }
 
-Batch::Batch(IPUAlgoConfig config) : inputs(config.getInputBufferSize32b(), 0), results(config.getTotalNumberOfComparisons() * 3, 0), origin_comparison_index(config.getTotalNumberOfComparisons(), -1), metaOffset(config.getOffsetMetadata()), numComparisons{0}, cellCount{0}, dataCount{0} {
+Batch::Batch() {
+}
+
+Batch::Batch(IPUAlgoConfig config) {
+  initialize(config);
+}
+
+void Batch::initialize(IPUAlgoConfig config) {
+  inputs.resize(config.getInputBufferSize32b(), 0);
+  results.resize(config.getTotalNumberOfComparisons() * 3, 0);
+  origin_comparison_index.resize(config.getTotalNumberOfComparisons(), -1);
+  metaOffset = config.getOffsetMetadata();
+  numComparisons = 0;
+  cellCount = 0;
+  dataCount = 0;
 }
 
 BlockAlignmentResults Batch::get_result() {
@@ -50,20 +64,24 @@ std::vector<Batch> create_batches(const RawSequences& seqs, const Comparisons& c
   auto mappings = partition::mapBatches(algoconfig, seqs, cmps);
   stageTimers[1].tock();
 
-  std::vector<Batch> batches(mappings.size(), {algoconfig});
+  std::vector<Batch> batches(mappings.size());
   const auto inputBufferSize = algoconfig.getInputBufferSize32b();
   auto encodeTable = swatlib::getEncoder(config.datatype).getCodeTable();
   const bool isSeeded = algoconfig.vtype == ipu::VertexType::xdropseedextend;
-  
 
   stageTimers[2].tick();
   size_t vertexMetaSize = algoconfig.maxComparisonsPerVertex * sizeof(SWMeta);
   if (isSeeded) {
     vertexMetaSize = algoconfig.maxComparisonsPerVertex * sizeof(XDropMeta);
   }
+
+  swatlib::TickTock seqT;
+  swatlib::TickTock cmpT;
+  #pragma omp parallel for num_threads(8)
   for (int mi = 0; mi < mappings.size(); ++mi) {
     const auto& map = mappings[mi];
     Batch& batch = batches[mi];
+    batch.initialize(algoconfig);
 
     int8_t* seqInput = batch.getSequenceBuffer();
     int8_t* metaInput = batch.getMetaBuffer();
@@ -75,6 +93,7 @@ std::vector<Batch> create_batches(const RawSequences& seqs, const Comparisons& c
       const size_t offsetSequence = bucketMapping.bucketIndex * algoconfig.getBufsize32b() * 4;
 
       auto* bucketSeq = seqInput + offsetSequence;
+      seqT.tick();
       for (const auto& sequenceMapping : bucketMapping.seqs) {
         const char *seq = seqs[sequenceMapping.index].data();
         size_t seqSize = seqs[sequenceMapping.index].size();
@@ -83,7 +102,9 @@ std::vector<Batch> create_batches(const RawSequences& seqs, const Comparisons& c
         }
         dataCount += seqSize;
       }
+      seqT.tock();
 
+      cmpT.tick();
       for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
         const auto& comparison = bucketMapping.cmps[i];
         if (isSeeded) {
@@ -113,10 +134,10 @@ std::vector<Batch> create_batches(const RawSequences& seqs, const Comparisons& c
         cellCount += comparison.sizeA * comparison.sizeB;
         comparisonCount++;
       }
+      cmpT.tock();
     }
   }
   stageTimers[2].tock();
-
 
   stageTimers[0].tock();
   json logData = {
@@ -126,6 +147,8 @@ std::vector<Batch> create_batches(const RawSequences& seqs, const Comparisons& c
     {"time_total", stageTimers[0].seconds()},
     {"time_partition", stageTimers[1].seconds()},
     {"time_copy_inputs", stageTimers[2].seconds()},
+    {"time_sequence", seqT.accumulate_microseconds() / 1e6},
+    {"time_cmp", cmpT.accumulate_microseconds() / 1e6},
   };
   PLOGD << "BATCHCREATE: " << logData.dump();
   return batches;

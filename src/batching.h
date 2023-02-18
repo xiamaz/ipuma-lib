@@ -15,7 +15,10 @@ struct Batch {
   std::vector<int32_t> results;
   std::vector<int32_t> origin_comparison_index;
 
+  Batch();
   Batch(IPUAlgoConfig config);
+
+  void initialize(IPUAlgoConfig config);
 
   size_t numComparisons;
   size_t metaOffset;
