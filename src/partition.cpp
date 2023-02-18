@@ -45,7 +45,7 @@ namespace partition {
   }
 
   bool Bucket::addComparison(const ComparisonData& d) {
-    addComparison(d.comparisonIndex, d.indexA, d.indexB, d.sizeA, d.sizeB, d.seedAStartPos, d.seedBStartPos);
+    return addComparison(d.comparisonIndex, d.indexA, d.indexB, d.sizeA, d.sizeB, d.seedAStartPos, d.seedBStartPos);
   }
 
   bool Bucket::addComparison(int comparisonIndex, int indexA, int indexB, size_t sizeA, size_t sizeB, size_t seedAStartPos, size_t seedBStartPos) {
@@ -115,13 +115,13 @@ namespace partition {
 
     virtual BatchMapping& createBatch() = 0;
   public:
-    std::list<BatchMapping> mappings;
+    std::vector<BatchMapping> mappings;
 
     PartitioningAlgorithm(const IPUAlgoConfig& config) : config(config), mappings{BatchMapping(config)} {
     }
     virtual bool addComparison(const ComparisonData& cmpData, BatchMapping& curMapping) = 0;
 
-    std::list<BatchMapping> getMappings() {
+    std::vector<BatchMapping> getMappings() {
       return std::move(mappings);
     }
 
@@ -230,7 +230,7 @@ namespace partition {
     return this->complexity < other.complexity;
   }
 
-  std::list<BatchMapping> mapBatches(IPUAlgoConfig config, const RawSequences& Seqs, const Comparisons& Cmps) {
+  std::vector<BatchMapping> mapBatches(IPUAlgoConfig config, const RawSequences& Seqs, const Comparisons& Cmps) {
 
     PLOGD << "Mapping " << Cmps.size() << " comparisons to batches";
     std::vector<ComparisonData> cmpDatas(Cmps.size());

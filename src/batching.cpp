@@ -1,5 +1,6 @@
 #include "batching.h"
 #include <plog/Log.h>
+#include <omp.h>
 
 #include "partition.h"
 
@@ -49,7 +50,7 @@ std::vector<Batch> create_batches(const RawSequences& seqs, const Comparisons& c
   auto mappings = partition::mapBatches(algoconfig, seqs, cmps);
   stageTimers[1].tock();
 
-  std::vector<Batch> batches;
+  std::vector<Batch> batches(mappings.size(), {algoconfig});
   const auto inputBufferSize = algoconfig.getInputBufferSize32b();
   auto encodeTable = swatlib::getEncoder(config.datatype).getCodeTable();
   const bool isSeeded = algoconfig.vtype == ipu::VertexType::xdropseedextend;
@@ -60,9 +61,9 @@ std::vector<Batch> create_batches(const RawSequences& seqs, const Comparisons& c
   if (isSeeded) {
     vertexMetaSize = algoconfig.maxComparisonsPerVertex * sizeof(XDropMeta);
   }
-  for (const auto& map : mappings) {
-    batches.push_back({algoconfig});
-    Batch& batch = batches.back();
+  for (int mi = 0; mi < mappings.size(); ++mi) {
+    const auto& map = mappings[mi];
+    Batch& batch = batches[mi];
 
     int8_t* seqInput = batch.getSequenceBuffer();
     int8_t* metaInput = batch.getMetaBuffer();

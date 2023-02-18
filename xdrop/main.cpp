@@ -31,18 +31,14 @@ using std::string;
 using std::vector;
 using std::tuple;
 
-// const std::string basepath = "/Users/lbb/git/ipuma-lib/xdrop/data/inputs_ab/";
 const std::string basepath = "/global/D1/projects/ipumer/inputs_ab/";
-vector<tuple<string, string>> INPUT_BATCHS = {
-  {basepath + "batch_0_A.txt", basepath + "batch_0_B.txt"},
-  {basepath + "batch_1_A.txt", basepath + "batch_1_B.txt"},
-  {basepath + "batch_2_A.txt", basepath + "batch_2_B.txt"},
-};
 
 const std::string SEQ_H = basepath + "seqs_seed_H.txt";
 const std::string SEED_H = basepath + "seeds_H.txt";
 const std::string SEQ_V = basepath + "seqs_seed_V.txt";
 const std::string SEED_V = basepath + "seeds_V.txt";
+
+using json = nlohmann::json;
 
 std::vector<size_t> loadSeedpos(const std::string& path) {
   std::ifstream file(path);
@@ -64,10 +60,7 @@ std::vector<std::string> loadSequences(const std::string& path) {
   return sequences;
 }
 
-// std::tuple<ipu::RawSequences, ipu::Comparisons> prepareComparisons(ipu::RawSequences seqH, ipu::RawSequences seqV, std::vector<size_t> seedH, std::vector<size_t> seedV) {
 std::tuple<ipu::RawSequences, ipu::Comparisons> prepareComparisons(std::string seqH, std::string seqV, std::string seedH, std::string seedV) {
-  // ipu::RawSequences seqs(seqV.size() + seqH.size());
-  // ipu::Comparisons cmps(seqV.size());
   ipu::RawSequences seqs;
   ipu::Comparisons cmps;
 
@@ -93,6 +86,21 @@ std::tuple<ipu::RawSequences, ipu::Comparisons> prepareComparisons(std::string s
   return {std::move(seqs), std::move(cmps)};
 }
 
+void getDatasetStats(const ipu::RawSequences& seqs, const ipu::Comparisons& cmps) {
+  auto numComparisons = cmps.size();
+  size_t maxSequenceLength = 0;
+  for (const auto& s : seqs) {
+    maxSequenceLength = std::max(maxSequenceLength, s.size());
+  }
+
+  json stats = {
+    {"numComparisons", numComparisons},
+    {"maxSequenceLength", maxSequenceLength},
+  };
+
+  PLOGI << "COMPARISON STATS: " << stats.dump();
+}
+
 int main(int argc, char** argv) {
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
   plog::init(plog::verbose, &consoleAppender);
@@ -103,7 +111,8 @@ int main(int argc, char** argv) {
   auto [seqs, cmps] = prepareComparisons(SEQ_H, SEQ_V, SEED_H, SEED_V);
   loadTimers[0].tock();
   PLOGE << "TOOK " << loadTimers[0].duration() / 1000 << " seconds";
-  PLOGE << "NUMBER OF COMPARISONS: " << cmps.size();
+
+  getDatasetStats(seqs, cmps);
 
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = -1,
@@ -114,12 +123,12 @@ int main(int argc, char** argv) {
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
   }, {
-    1472 /*Tiles used*/,
-    1000 /*maxSequenceLength*/,
-    200,
-    200 * 20,
-    ipu::VertexType::multixdrop,
-    ipu::Algorithm::greedy
+    .numVertices = 1472,
+    .maxSequenceLength = 10000,
+    .maxComparisonsPerVertex = 100,
+    .vertexBufferSize = 10000 * 2 * 6,
+    .vtype = ipu::VertexType::multixdrop,
+    .fillAlgo = ipu::Algorithm::greedy
   });
 
   PLOGE << "CREATE BATCHES";
@@ -127,7 +136,7 @@ int main(int argc, char** argv) {
   auto batches = driver.create_batches(seqs, cmps);
   loadTimers[1].tock();
   PLOGE << "TOOK " << loadTimers[1].duration() / 1000 << " seconds";
-  return 1;
+  return 0;
   std::vector<ipu::BlockAlignmentResults> results;
   for (auto& batch : batches) {
     PLOGI << "NEW BATCH =======================================================";
