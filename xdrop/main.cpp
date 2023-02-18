@@ -136,11 +136,8 @@ int main(int argc, char** argv) {
   auto batches = driver.create_batches(seqs, cmps);
   loadTimers[1].tock();
   PLOGE << "TOOK " << loadTimers[1].duration() / 1000 << " seconds";
-  return 0;
   std::vector<ipu::BlockAlignmentResults> results;
   for (auto& batch : batches) {
-    PLOGI << "NEW BATCH =======================================================";
-    PLOGI << batch.toString();
     ipu::batchaffine::Job* j = driver.async_submit(&batch);
     assert(batch.cellCount > 0);
     assert(batch.dataCount > 0);
