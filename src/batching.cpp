@@ -67,7 +67,7 @@ std::vector<Batch> create_batches(const RawSequences& seqs, const Comparisons& c
   std::vector<Batch> batches(mappings.size());
   const auto inputBufferSize = algoconfig.getInputBufferSize32b();
   auto encodeTable = swatlib::getEncoder(config.datatype).getCodeTable();
-  const bool isSeeded = algoconfig.vtype == ipu::VertexType::xdropseedextend;
+  const bool isSeeded = algoconfig.vtype == ipu::VertexType::xdropseedextend || algoconfig.vtype == VertexType::xdroprestrictedseedextend;
 
   stageTimers[2].tick();
   size_t vertexMetaSize = algoconfig.maxComparisonsPerVertex * sizeof(SWMeta);

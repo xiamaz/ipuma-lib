@@ -30,9 +30,9 @@ struct __attribute__((__packed__)) XDropMeta : public SWMeta {
 
 typedef std::vector<Comparison> Comparisons;
 
-enum class VertexType { cpp, assembly, multi, multiasm, xdrop, multixdrop, greedyxdrop, multibandxdrop, xdropseedextend};
-static const std::vector<std::string> vertexTypeNames = {"cpp", "assembly", "multi", "multiasm", "xdrop", "multixdrop", "greedyxdrop", "multibandxdrop", "xdropseedextend"};
-static const std::string typeLabels[] = {"SWAffine", "SWAffineAsm", "MultiSWAffine", "MultiSWAffineAsm", "XDrop", "MultiXDrop", "GreedyXDrop", "MultiBandXDrop", "SeedExtendXDrop"};
+enum class VertexType { cpp, assembly, multi, multiasm, xdrop, multixdrop, greedyxdrop, multibandxdrop, xdropseedextend, xdroprestrictedseedextend};
+static const std::vector<std::string> vertexTypeNames = {"cpp", "assembly", "multi", "multiasm", "xdrop", "multixdrop", "greedyxdrop", "multibandxdrop", "xdropseedextend", "xdroprestrictedseedextend"};
+static const std::string typeLabels[] = {"SWAffine", "SWAffineAsm", "MultiSWAffine", "MultiSWAffineAsm", "XDrop", "MultiXDrop", "GreedyXDrop", "MultiBandXDrop", "SeedExtendXDrop", "SeedExtendRestrictedXDrop"};
 
 enum class Algorithm {fillFirst, roundRobin, greedy};
 static const std::vector<std::string> algoNames = {"fillfirst", "roundrobin", "greedy"};

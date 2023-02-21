@@ -243,9 +243,10 @@ int xdrop_doubleband_cpu(const std::vector<uint8_t>& query, const std::vector<ui
 }
 #endif
 
-template <int X, int GAP_PENALTY, int klen, typename simT>
-int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* reference, int M, simT sim, int* t1, int* t2) {
-  int T_prime = 0, T = 0, L = 0, U = 0;
+template <int X, int GAP_PENALTY, bool reversed, typename simT, typename sType>
+int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* reference, int M, simT sim, sType* t1, sType* t2) {
+  sType T_prime = 0, T = 0;
+  int L = 0, U = 0;
   int L1inc = 0, L2inc = 0;
 
 #ifdef PRINT_DEBUG
@@ -253,9 +254,11 @@ int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* refe
   Matrix<int> C(M + 1, N + 1, 0);  // DEBUG
 #endif
 
+#define adrREF(zzz) ((!reversed) ? zzz : (M - 1) - zzz)
+#define adrQER(zzz) ((!reversed) ? zzz : (N - 1) - zzz)
   auto cell_update = [&](int i, int j, int* _t1, int* __t1, int* _t2, int z, int& lastval, int L) {
-    int new_lastval = _t1[z];
-    int tscore = max(_t2[z] - GAP_PENALTY, _t2[z - 1] - GAP_PENALTY, lastval + sim(reference[i], query[j]));
+    sType new_lastval = _t1[z];
+    sType tscore = max(_t2[z] - GAP_PENALTY, _t2[z - 1] - GAP_PENALTY, lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
 
     lastval = new_lastval;
     if (tscore < T - X) {
@@ -275,19 +278,19 @@ int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* refe
     //   printf("SeqV=%d SeqH=%d\n", query.length(), reference.length());
     // }
 #ifndef __POPC__
-    assert(U - L < klen);
+    // assert(U - L < klen);
 #endif
 
     k = k + 1;
     // int lastval = k1[L-1];
-    int* _t2 = t2 + (-L + L2inc);
-    int* _t1 = t1 + (-L + L2inc + L1inc);
-    int* __t1 = t1 + (-L);
+    sType* _t2 = t2 + (-L + L2inc);
+    sType* _t1 = t1 + (-L + L2inc + L1inc);
+    sType* __t1 = t1 + (-L);
 
-    int lastval = _t1[L - 1];
+    sType lastval = _t1[L - 1];
     for (size_t i = L; i < U + 1; i++) {
       auto j = k - i - 1;
-      int score = cell_update(i, j, _t1, __t1, _t2, i, lastval, L);
+      sType score = cell_update(i, j, _t1, __t1, _t2, i, lastval, L);
 #ifdef PRINT_DEBUG
       C(i + 1, j + 1) = 1;  // DEBUG
 #endif
@@ -319,7 +322,7 @@ int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* refe
     L1inc = L - oldL;
 
     // Rotate
-    int* t;  // 1->3, 2->1, 3->2
+    sType* t;  // 1->3, 2->1, 3->2
     t = t1;
     t1 = t2;
     t2 = t;
@@ -338,13 +341,13 @@ int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* refe
 }
 
 #ifndef __POPC__
-template <int X, int GAP_PENALTY, int klen>
+template <int X, int GAP_PENALTY, int klen, bool reversed>
 int xdrop_doubleband_restricted_cpu(const std::vector<uint8_t>& query, const std::vector<uint8_t>& reference, Matrix<int8_t> sim) {
   int M = reference.size();
   int N = query.size();
   int* t1 = &((int*)calloc(klen + 5, sizeof(int)))[1];
   int* t2 = &((int*)calloc(klen + 5, sizeof(int)))[1];
-  auto score = xdrop_doubleband_restricted<X, GAP_PENALTY, klen, Matrix<int8_t>>(query.data(), N, reference.data(), M, sim, t1, t2);
+  auto score = xdrop_doubleband_restricted<X, GAP_PENALTY, reversed, Matrix<int8_t>>(query.data(), N, reference.data(), M, sim, t1, t2);
   free(&t2[-1]);
   free(&t1[-1]);
   return score;
@@ -362,6 +365,22 @@ inline __attribute__((always_inline)) sType xdrop_extend_right(const uint8_t* a,
 template <int X, int GAP_PENALTY, typename simT, typename sType>
 inline __attribute__((always_inline)) sType xdrop_extend_left(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2) {
   return xdrop_doubleband<X, GAP_PENALTY, true, simT, sType>(
+      a, a_seed_begin,
+      b, b_seed_begin,
+      sim, k1, k2);
+}
+
+template <int X, int GAP_PENALTY, typename simT, typename sType>
+inline __attribute__((always_inline)) sType xdrop_restricted_extend_right(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2) {
+  return xdrop_doubleband_restricted<X, GAP_PENALTY, false, simT, sType>(
+      a + seedLength + a_seed_begin, a_len - seedLength - a_seed_begin,
+      b + seedLength + b_seed_begin, b_len - seedLength - b_seed_begin,
+      sim, k1, k2);
+}
+
+template <int X, int GAP_PENALTY, typename simT, typename sType>
+inline __attribute__((always_inline)) sType xdrop_restricted_extend_left(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2) {
+  return xdrop_doubleband_restricted<X, GAP_PENALTY, true, simT, sType>(
       a, a_seed_begin,
       b, b_seed_begin,
       sim, k1, k2);

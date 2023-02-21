@@ -241,6 +241,11 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         sType = INT; 
         workerMultiplier = target.getNumWorkerContexts();
         break;
+      case VertexType::xdroprestrictedseedextend:
+        // This ok?
+        sType = INT; 
+        workerMultiplier = target.getNumWorkerContexts();
+        break;
       case VertexType::greedyxdrop:
         // This ok?
         sType = INT; 
@@ -306,6 +311,8 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
       label += "<" + std::to_string(xDrop) + ">"; 
     } else if (vtype == VertexType::xdropseedextend) {
       label += "<" + std::to_string(xDrop) + ">";
+    } else if (vtype == VertexType::xdroprestrictedseedextend) {
+      label += "<" + std::to_string(xDrop) + ">";
     }
     PLOGD.printf("Use Vertex class: %s", label.c_str());
     OptionFlags streamOptions({});
@@ -343,6 +350,16 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
       } else if (vtype == VertexType::xdropseedextend) {
         auto k_T = graph.addVariable(sType, {2, (maxSequenceLength+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
         graph.connect(vtx["maxSequenceLength"], maxSequenceLength);
+        graph.setTileMapping(k_T, tileIndex);
+        graph.connect(vtx["K1"], k_T[0]);
+        graph.connect(vtx["K2"], k_T[1]);
+        graph.connect(vtx["simMatrix"], similarity);
+        graph.connect(vtx["seedLength"], seedLength);
+      } else if (vtype == VertexType::xdroprestrictedseedextend) {
+        int scaledMaxAB = maxSequenceLength * bandPercentageXDrop;
+        auto k_T = graph.addVariable(sType, {2, ((size_t)scaledMaxAB+2+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
+        graph.connect(vtx["restrictedSize"], scaledMaxAB);
+        // graph.connect(vtx["maxSequenceLength"], maxSequenceLength);
         graph.setTileMapping(k_T, tileIndex);
         graph.connect(vtx["K1"], k_T[0]);
         graph.connect(vtx["K2"], k_T[1]);
