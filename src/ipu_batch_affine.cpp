@@ -87,7 +87,7 @@ class FillCallback final : public poplar::StreamCallback {
     assert(inputBuffer.size() > 0);
     size_t inputSize = inputBuffer.size() * sizeof(inputBuffer[0]);
 
-    PLOGD << "Input buffer size " << inputSize << " defined size is " << size;
+    PLOGV << "Input buffer size " << inputSize << " defined size is " << size;
     memcpy(p, inputBuffer.data(), inputSize);
 
     // insert job ID at the end of the transfer buffer
@@ -409,7 +409,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     auto host_stream_concat = graph.addHostToDeviceFIFO(HOST_STREAM_CONCAT_N(buffer_share), INT, inputs_tensor.numElements() + 1, ReplicatedStreamMode::REPLICATE, {{"splitLimit", std::to_string(264 * 1024 * 1024)}, {"bufferingDepth", "1"}});
     device_stream_concat = graph.addDeviceToHostFIFO(STREAM_CONCAT_ALL_N(buffer_share), INT, Scores.numElements() + ARanges.numElements() + BRanges.numElements() + 1 + 2 + 2);
     auto inT = concat({inputs_tensor.flatten(), slotT.flatten()});
-    PLOGE.printf("Input Buffer size = %lu bytes", inT.numElements() * 4);
+    PLOGD.printf("Input Buffer size = %lu bytes", inT.numElements() * 4);
     h2d_prog_concat.add(poplar::program::Copy(host_stream_concat, inT));
 
     program::Sequence main_prog;
