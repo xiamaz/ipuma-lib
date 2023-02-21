@@ -509,7 +509,7 @@ Job* SWAlgorithm::async_submit(Batch* batch) {
   return nullptr;
 }
 
-void computeJobMetrics(const Job& job, double tileFrequency, size_t numberVertices) {
+void computeJobMetrics(const Job& job, double tileFrequency, size_t numberVertices, size_t maxComparisonsPerVertex) {
   auto cyclesOuter = job.h2dCycles + job.innerCycles;
   auto cyclesInner = job.innerCycles;
   auto timeOuter = static_cast<double>(cyclesOuter) / tileFrequency;
@@ -545,6 +545,7 @@ void computeJobMetrics(const Job& job, double tileFrequency, size_t numberVertic
     {"transfer_bandwidth_per_vertex", transferBandwidthPerVertex},
     {"transfer_info_ratio", transferInfoRatio},
     {"cell_count", job.batch->cellCount},
+    {"comparison_occupancy", job.batch->numComparisons / (double) (numberVertices * maxComparisonsPerVertex) * 100.0},
   };
 
   PLOGD << "JOBLOG: " << logData.dump();
@@ -555,7 +556,7 @@ void SWAlgorithm::blocking_join(Job& job) {
   // release_slot(slot_token);
 
 #ifdef IPUMA_DEBUG
-  computeJobMetrics(job, getTileClockFrequency(), algoconfig.numVertices);
+  computeJobMetrics(job, getTileClockFrequency(), algoconfig.numVertices, algoconfig.maxComparisonsPerVertex);
 #endif
 }
 

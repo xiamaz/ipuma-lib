@@ -35,7 +35,7 @@ struct Job {
 };
 using JobMap = std::map<JobId, Job*>;
 
-void computeJobMetrics(const Job&, double, size_t);
+void computeJobMetrics(const Job&, double, size_t, size_t);
 
 /**
  * Workflow:
