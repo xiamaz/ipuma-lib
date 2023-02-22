@@ -81,6 +81,7 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
 
       // printf("a_seed_begin %d, b_seed_begin %d\n", a_seed_begin, b_seed_begin);
 
+      int klen = restrictedSize+2+2;
       sType* k1 = &K1[workerId * (restrictedSize+2+2)];
       sType* k2 = &K2[workerId * (restrictedSize+2+2)];
 
@@ -90,11 +91,11 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
       // Right hand side
       memset(k1, 0, (restrictedSize + 2 + 2) * sizeof(sType));
       memset(k2, 0, (restrictedSize + 2 + 2) * sizeof(sType));
-      sType TRight = ipumacore::xdrop::xdrop_extend_right<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
+      sType TRight = ipumacore::xdrop::xdrop_restricted_extend_right<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
         a, a_len, a_seed_begin,
         b, b_len, b_seed_begin,
         seedLength,
-        simMatrix, _k1, _k2
+        simMatrix, _k1, _k2, klen
       );
 
       memset(k1, 0, (restrictedSize + 2 + 2) * sizeof(sType));
@@ -103,7 +104,7 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
         a, a_len, a_seed_begin,
         b, b_len, b_seed_begin,
         seedLength,
-        simMatrix, _k1, _k2
+        simMatrix, _k1, _k2, klen
       );
       // int x = seedLength;
       // printf("%d %d %d\n", TRight, x, TLeft);
@@ -119,6 +120,6 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
 };
 
 template class SeedExtendRestrictedXDrop<10>;
-template class SeedExtendRestrictedXDrop<20>;
-template class SeedExtendRestrictedXDrop<50>;
-template class SeedExtendRestrictedXDrop<100>;
+// template class SeedExtendRestrictedXDrop<20>;
+// template class SeedExtendRestrictedXDrop<50>;
+// template class SeedExtendRestrictedXDrop<100>;

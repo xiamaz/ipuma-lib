@@ -19,6 +19,9 @@ int IPUAlgoConfig::getMetaStructSize32b() const {
         case VertexType::xdropseedextend:
                 return get32bSize(sizeof(XDropMeta));
                 break;
+        case VertexType::xdroprestrictedseedextend:
+                return get32bSize(sizeof(XDropMeta));
+                break;
         default:
                 return get32bSize(sizeof(SWMeta));
                 break;

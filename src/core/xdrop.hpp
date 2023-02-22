@@ -244,7 +244,8 @@ int xdrop_doubleband_cpu(const std::vector<uint8_t>& query, const std::vector<ui
 #endif
 
 template <int X, int GAP_PENALTY, bool reversed, typename simT, typename sType>
-int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* reference, int M, simT sim, sType* t1, sType* t2) {
+int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* reference, int M, simT sim, sType* t1, sType* t2, int klen) {
+  if (M == 0 || N == 0) return 0;
   sType T_prime = 0, T = 0;
   int L = 0, U = 0;
   int L1inc = 0, L2inc = 0;
@@ -273,12 +274,12 @@ int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* refe
 
   int k = 0;
   do {
-    // if (U - L >= klen) {
-    //   printf("L=%d,U=%d ::span=%d\n", L, U, U - L);
-    //   printf("SeqV=%d SeqH=%d\n", query.length(), reference.length());
-    // }
 #ifndef __POPC__
-    // assert(U - L < klen);
+    if (U - L >= klen) {
+      printf("L=%d,U=%d ::span=%d\n", L, U, U - L);
+      printf("SeqV=%d SeqH=%d\n", N, M);
+    }
+    assert(U - L < klen);
 #endif
 
     k = k + 1;
@@ -347,14 +348,14 @@ int xdrop_doubleband_restricted_cpu(const std::vector<uint8_t>& query, const std
   int N = query.size();
   int* t1 = &((int*)calloc(klen + 5, sizeof(int)))[1];
   int* t2 = &((int*)calloc(klen + 5, sizeof(int)))[1];
-  auto score = xdrop_doubleband_restricted<X, GAP_PENALTY, reversed, Matrix<int8_t>>(query.data(), N, reference.data(), M, sim, t1, t2);
+  auto score = xdrop_doubleband_restricted<X, GAP_PENALTY, reversed, Matrix<int8_t>, klen>(query.data(), N, reference.data(), M, sim, t1, t2);
   free(&t2[-1]);
   free(&t1[-1]);
   return score;
 }
 #endif
 
-template <int X, int GAP_PENALTY, typename simT, typename sType>
+template <int X, int GAP_PENALTY, typename simT, typename sType, int klen>
 inline __attribute__((always_inline)) sType xdrop_extend_right(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2) {
   return xdrop_doubleband<X, GAP_PENALTY, false, simT, sType>(
       a + seedLength + a_seed_begin, a_len - seedLength - a_seed_begin,
@@ -371,19 +372,19 @@ inline __attribute__((always_inline)) sType xdrop_extend_left(const uint8_t* a, 
 }
 
 template <int X, int GAP_PENALTY, typename simT, typename sType>
-inline __attribute__((always_inline)) sType xdrop_restricted_extend_right(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2) {
+inline __attribute__((always_inline)) sType xdrop_restricted_extend_right(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2, int klen) {
   return xdrop_doubleband_restricted<X, GAP_PENALTY, false, simT, sType>(
       a + seedLength + a_seed_begin, a_len - seedLength - a_seed_begin,
       b + seedLength + b_seed_begin, b_len - seedLength - b_seed_begin,
-      sim, k1, k2);
+      sim, k1, k2, klen);
 }
 
 template <int X, int GAP_PENALTY, typename simT, typename sType>
-inline __attribute__((always_inline)) sType xdrop_restricted_extend_left(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2) {
+inline __attribute__((always_inline)) sType xdrop_restricted_extend_left(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2, int klen) {
   return xdrop_doubleband_restricted<X, GAP_PENALTY, true, simT, sType>(
       a, a_seed_begin,
       b, b_seed_begin,
-      sim, k1, k2);
+      sim, k1, k2, klen);
 }
 
 #ifndef __POPC__
@@ -435,6 +436,32 @@ int seed_extend_cpu(const std::vector<uint8_t>& query, int querySeedBeginPos, co
   memset(k1, 0, sizeof(int) * M + 2);
   memset(k2, 0, sizeof(int) * M + 2);
   auto score_left = xdrop_extend_left<X, GAP_PENALTY, std::vector<std::vector<int8_t>>, int>(query.data(), N, querySeedBeginPos, reference.data(), M, referenceSeedBeginPos, seedLength, sim.toVector(), _k1, _k2);
+
+  free(&k2[0]);
+  free(&k1[0]);
+
+  return score_right + score_left + seedLength;
+}
+
+template <int X, int GAP_PENALTY>
+int seed_extend_restricted_cpu(const std::vector<uint8_t>& query, int querySeedBeginPos, const std::vector<uint8_t>& reference, int referenceSeedBeginPos, int seedLength, Matrix<int8_t> sim, int klen) {
+  int M = reference.size();
+  int N = query.size();
+  assert(M >= N);
+  // Can also be malloc with: k1[0] = 0, k2[0:2] = 0
+  size_t buflen = klen + 4 + 4 ;
+  int* k1 = &((int*) malloc((buflen) * sizeof(int)))[0];
+  int* k2 = &((int*) malloc((buflen) * sizeof(int)))[0];
+  int* _k1 = &k1[4];
+  int* _k2 = &k2[4];
+
+  memset(k1, 0, sizeof(int) * buflen);
+  memset(k2, 0, sizeof(int) * buflen);
+  auto score_right = xdrop_restricted_extend_right<X, GAP_PENALTY, std::vector<std::vector<int8_t>>, int>(query.data(), N, querySeedBeginPos, reference.data(), M, referenceSeedBeginPos, seedLength, sim.toVector(), _k1, _k2, klen);
+
+  memset(k1, 0, sizeof(int) * buflen);
+  memset(k2, 0, sizeof(int) * buflen);
+  auto score_left = xdrop_restricted_extend_left<X, GAP_PENALTY, std::vector<std::vector<int8_t>>, int>(query.data(), N, querySeedBeginPos, reference.data(), M, referenceSeedBeginPos, seedLength, sim.toVector(), _k1, _k2, klen);
 
   free(&k2[0]);
   free(&k1[0]);
