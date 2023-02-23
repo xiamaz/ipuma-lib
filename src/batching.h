@@ -20,6 +20,7 @@ struct Batch {
 
   void initialize(IPUAlgoConfig config);
 
+  size_t maxComparisons;
   size_t numComparisons;
   size_t metaOffset;
 

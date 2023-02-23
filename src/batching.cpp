@@ -31,22 +31,23 @@ void Batch::initialize(IPUAlgoConfig config) {
   results.resize(config.getTotalNumberOfComparisons() * 3, 0);
   origin_comparison_index.resize(config.getTotalNumberOfComparisons(), -1);
   metaOffset = config.getOffsetMetadata();
+  maxComparisons = config.getTotalNumberOfComparisons();
   numComparisons = 0;
   cellCount = 0;
   dataCount = 0;
 }
 
 BlockAlignmentResults Batch::get_result() {
-  std::vector<int32_t> scores(numComparisons);
-  std::vector<int32_t> a_range_result(numComparisons);
-  std::vector<int32_t> b_range_result(numComparisons);
+  std::vector<int32_t> scores(maxComparisons);
+  std::vector<int32_t> a_range_result(maxComparisons);
+  std::vector<int32_t> b_range_result(maxComparisons);
 
   // TODO this should not be hardcoded here but passed as a config to make layout changes easier.
   int aOffset = results.size() / 3;
   int bOffset = aOffset * 2;
 
   // mapping is now responsibility of the caller
-  for (int i = 0; i < numComparisons; ++i) {
+  for (int i = 0; i < maxComparisons; ++i) {
     int aindex = i + aOffset;
     int bindex = i + bOffset;
     scores[i] = results[i];
