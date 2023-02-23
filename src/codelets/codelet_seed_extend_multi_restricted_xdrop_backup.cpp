@@ -61,9 +61,9 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
     volatile int *globalN = &currentN;
     *globalN = 6;
 
-    for (; myN < maxNPerTile*2;) {
-      const int n = myN>>1;
-      const int isLeft = myN % 2 == 0;
+    for (; myN < maxNPerTile;) {
+      const int n = myN;
+      int lastNoGap, prevNoGap;
 
       auto a_len =   Meta[6 * n];
       int j_offset = Meta[6 * n + 1];
@@ -89,32 +89,29 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
       int* _k1 = &k1[2];
       int* _k2 = &k2[2];
 
-      sType partscore = 0;
-      if (isLeft) {
-        memset(k1, 0, (klen) * sizeof(sType));
-        memset(k2, 0, (klen) * sizeof(sType));
-        partscore = ipumacore::xdrop::xdrop_smart_restricted_extend_left<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
-          a, a_len, a_seed_begin,
-          b, b_len, b_seed_begin,
-          seedLength,
-          simMatrix, _k1, _k2, klen
-        ) + seedLength;
-        // int x = seedLength;
-        // printf("partscore left %d %d = %d\n", partscore - x, x, partscore);
-      } else {
-        // Right hand side
-        memset(k1, 0, (klen) * sizeof(sType));
-        memset(k2, 0, (klen) * sizeof(sType));
-        partscore = ipumacore::xdrop::xdrop_smart_restricted_extend_right<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
-          a, a_len, a_seed_begin,
-          b, b_len, b_seed_begin,
-          seedLength,
-          simMatrix, _k1, _k2, klen
-        );
-        // printf("partscore right %d = %d\n", partscore, partscore);
-      }
+      // Right hand side
+      memset(k1, 0, (klen) * sizeof(sType));
+      memset(k2, 0, (klen) * sizeof(sType));
+      sType TRight = ipumacore::xdrop::xdrop_restricted_extend_right<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
+        a, a_len, a_seed_begin,
+        b, b_len, b_seed_begin,
+        seedLength,
+        simMatrix, _k1, _k2, klen
+      );
 
-      score[n] += partscore;
+      memset(k1, 0, (klen) * sizeof(sType));
+      memset(k2, 0, (klen) * sizeof(sType));
+      sType TLeft = ipumacore::xdrop::xdrop_restricted_extend_left<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
+        a, a_len, a_seed_begin,
+        b, b_len, b_seed_begin,
+        seedLength,
+        simMatrix, _k1, _k2, klen
+      );
+      int x = seedLength;
+      int scor = TRight + seedLength + TLeft;
+      printf("%d %d %d = %d\n", TRight, x, TLeft, scor);
+
+      score[n] = scor;
       // This operation can cause raise conditions, but that will not produce
       // incurrect results. However, double work can be done, which we accept.
       myN = *globalN;
@@ -122,7 +119,7 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
     }
 
     // if (workerId == 0)
-    //   for (int i = 0; i < 5; i++) {
+    //   for (int i = 0; i < 1; i++) {
     //     printf("Score[%d] = %d\n", i, score[i]);
     //   }
     return true;
