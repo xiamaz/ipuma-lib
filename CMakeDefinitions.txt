@@ -4,13 +4,17 @@ add_definitions(-DALN_MISMATCH_COST=1)
 add_definitions(-DALN_GAP_OPENING_COST=1)
 add_definitions(-DALN_GAP_EXTENDING_COST=1)
 add_definitions(-DALN_AMBIGUITY_COST=1)
+add_definitions(-DALN_SIMILARITY="na")
+add_definitions(-DALN_DATATYPE="na")
 
 # IPU parameters
-add_definitions(-DKLIGN_IPU_TILES=8832)
-add_definitions(-DKLIGN_IPU_BUFSIZE=41000)
-add_definitions(-DKLIGN_IPU_MAXAB_SIZE=400)
-add_definitions(-DKLIGN_IPU_MAX_BATCHES=150)
-add_definitions(-DKLIGN_IPUS_LOCAL=13)
+add_definitions(-DKLIGN_IPU_NUM_VERTICES=1472)
+add_definitions(-DKLIGN_IPU_MAX_SEQUENCE_LENGTH=10000)
+add_definitions(-DKLIGN_IPU_MAX_CMPS_PER_VERTEX=200)
+add_definitions(-DKLIGN_IPU_VERTEX_BUFFER_SIZE=120000)
+add_definitions(-DKLIGN_IPUS_LOCAL=1)
+add_definitions(-DKLIGN_IPU_VTYPE="multixdrop")
+add_definitions(-DKLIGN_IPU_PARTITION_ALGO="greedy")
 
 # debug params
 add_definitions(-DIPUMA_DEBUG)

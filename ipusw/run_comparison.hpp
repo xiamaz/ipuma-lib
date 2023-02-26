@@ -17,53 +17,6 @@
 
 using json = nlohmann::json;
 
-using Fastas = std::vector<swatlib::Fasta>;
-
-void loadSequences(const std::string &path, std::vector<std::string> &sequences) {
-  std::ifstream seqFile(path);
-  if (!seqFile.good()) {
-    PLOGF << "File not found: " << path;
-    exit(1);
-  }
-  std::string line;
-  while (std::getline(seqFile, line)) {
-    sequences.push_back(line);
-  }
-}
-
-void load_data(const std::string &path, std::vector<std::string> &seqs, int count = 0) {
-  if (std::equal(path.end() - 4, path.end(), ".txt")) {
-    PLOGI << "Loading all entries from " << path;
-    loadSequences(path, seqs);
-  } else {
-    if (count > 0) {
-      PLOGI << "Loading " << count << " entries from " << path;
-    } else {
-      PLOGI << "Loading all entries from " << path;
-    }
-    std::ifstream is;
-    is.open(path);
-    if (is.fail()) {
-      throw std::runtime_error("Opening file at " + path + " failed.");
-    }
-    swatlib::Fasta f;
-    int i = 0;
-    while (!(count) || i < count) {
-      if (is >> f) {
-        seqs.push_back(f.sequence);
-      } else {
-        seqs.push_back(f.sequence);
-        break;
-      }
-      ++i;
-    }
-  }
-}
-
-void init_driver(IPUMultiDriver& driver) {
-  driver.init();
-}
-
 void run_comparison(IpuSwConfig config, std::string referencePath, std::string queryPath) {
   auto driver = IPUMultiDriver(config);
   std::vector<std::string> references, queries;

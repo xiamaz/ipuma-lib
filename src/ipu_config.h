@@ -4,27 +4,79 @@
 #include "types.h"
 #include "nlohmann/json.hpp"
 
+#ifndef KLIGN_IPU_MAX_SEQUENCE_LENGTH
+#define KLIGN_IPU_MAX_SEQUENCE_LENGTH 10000
+#endif
+
+#ifndef KLIGN_IPU_NUM_VERTICES
+#define KLIGN_IPU_NUM_VERTICES 1472
+#endif
+
+#ifndef KLIGN_IPU_MAX_CMPS_PER_VERTEX
+#define KLIGN_IPU_MAX_CMPS_PER_VERTEX 200
+#endif
+
+#ifndef KLIGN_IPU_VERTEX_BUFFER_SIZE
+#define KLIGN_IPU_VERTEX_BUFFER_SIZE 120000
+#endif
+
+#ifndef KLIGN_IPU_VTYPE
+#define KLIGN_IPU_VTYPE "multixdrop"
+#endif
+
+#ifndef KLIGN_IPU_PARTITION_ALGO
+#define KLIGN_IPU_PARTITION_ALGO "greedy"
+#endif
+
+#ifndef ALN_GAP_OPENING_COST
+#define ALN_GAP_OPENING_COST 1
+#endif
+
+#ifndef ALN_GAP_EXTENDING_COST
+#define ALN_GAP_EXTENDING_COST 1
+#endif
+
+#ifndef ALN_MATCH_SCORE
+#define ALN_MATCH_SCORE 1
+#endif
+
+#ifndef ALN_MISMATCH_COST
+#define ALN_MISMATCH_COST 1
+#endif
+
+#ifndef ALN_AMBIGUITY_COST
+#define ALN_AMBIGUITY_COST 1
+#endif
+
+#ifndef ALN_SIMILARITY
+#define ALN_SIMILARITY "na"
+#endif
+
+#ifndef ALN_DATATYPE
+#define ALN_DATATYPE "na"
+#endif
+
 namespace ipu {
 
 using json = nlohmann::json;
 
 struct SWConfig {
-        int gapInit = 0;
-        int gapExtend = -1;
-        int matchValue = 1;
-        int mismatchValue = -1;
-        int ambiguityValue = -1;
-        swatlib::Similarity similarity = swatlib::Similarity::nucleicAcid;
-        swatlib::DataType datatype = swatlib::DataType::nucleicAcid;
+        int gapInit = -(ALN_GAP_OPENING_COST - ALN_GAP_EXTENDING_COST);
+        int gapExtend = -ALN_GAP_EXTENDING_COST;
+        int matchValue = ALN_MATCH_SCORE;
+        int mismatchValue = -ALN_MISMATCH_COST;
+        int ambiguityValue = -ALN_AMBIGUITY_COST;
+        swatlib::Similarity similarity = swatlib::strToSimilarity(ALN_SIMILARITY);
+        swatlib::DataType datatype = swatlib::strToDataType(ALN_DATATYPE);
 };
 
 struct IPUAlgoConfig {
-  int numVertices = 1; // number of active vertices
-  int maxSequenceLength = 300; // maximum length of a single comparison
-  int maxComparisonsPerVertex = 20; // maximum number of comparisons in a single batch
-  int vertexBufferSize = 3000; // total size of buffer for A and B individually
-  VertexType vtype = VertexType::cpp;
-  Algorithm fillAlgo = Algorithm::fillFirst;
+  int numVertices = KLIGN_IPU_NUM_VERTICES; // number of active vertices
+  int maxSequenceLength = KLIGN_IPU_MAX_SEQUENCE_LENGTH; // maximum length of a single comparison
+  int maxComparisonsPerVertex = KLIGN_IPU_MAX_CMPS_PER_VERTEX; // maximum number of comparisons in a single batch
+  int vertexBufferSize = KLIGN_IPU_VERTEX_BUFFER_SIZE; // total size of buffer for A and B individually
+  VertexType vtype = strToVertexType(KLIGN_IPU_VTYPE);
+  Algorithm fillAlgo = strToAlgorithm(KLIGN_IPU_PARTITION_ALGO);
   bool forwardOnly = false; // do not calculate the start position of a match, this should approx 2x performance, as no reverse pass is needed
   int ioTiles = 0;
 
