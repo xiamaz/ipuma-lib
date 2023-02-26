@@ -1,13 +1,14 @@
-#pragma once
-
 #include<tuple>
 #include<istream>
+#include<fstream>
 #include <nlohmann/json.hpp>
 
 #include <plog/Log.h>
 
-using json = nlohmann::json;
+#include "types.h"
 
+using json = nlohmann::json;
+namespace ipu {
 json getDatasetStats(const ipu::RawSequences& seqs, const ipu::Comparisons& cmps) {
   auto numComparisons = cmps.size();
   size_t maxSequenceLength = 0;
@@ -90,4 +91,5 @@ std::tuple<ipu::RawSequences, ipu::Comparisons> prepareComparisons(std::string s
   }
 
   return {std::move(seqs), std::move(cmps)};
+}
 }

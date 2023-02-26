@@ -8,7 +8,7 @@
 #include <plog/Formatters/TxtFormatter.h>
 
 #include "ipuswconfig.hpp"
-#include "load_sequences.hpp"
+#include "ipuma.h"
 
 using json = nlohmann::json;
 
@@ -114,8 +114,8 @@ int main(int argc, char** argv) {
 	PLOGI << "IPUSWCONFIG" << json{config}.dump();
 
 	// run_comparison(config, refPath, queryPath);
-	auto [seqs, cmps] = prepareComparisons(hPath, vPath, hSeedPath, vSeedPath);
-	PLOGI << getDatasetStats(seqs, cmps).dump();
+	auto [seqs, cmps] = ipu::prepareComparisons(hPath, vPath, hSeedPath, vSeedPath);
+	PLOGI << ipu::getDatasetStats(seqs, cmps).dump();
 
 	auto driver = ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, 0, config.numDevices);
 
