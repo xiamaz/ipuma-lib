@@ -8,7 +8,7 @@
 #include <plog/Formatters/TxtFormatter.h>
 
 #include "ipuswconfig.hpp"
-#include "run_comparison.hpp"
+#include "ipuma.h"
 
 using json = nlohmann::json;
 
@@ -74,14 +74,16 @@ int main(int argc, char** argv) {
 	cxxopts::Options options("ipusw", "IPU Smith Waterman Binary");
 
 	options.add_options()
-		("reference", "Reference File (either fa or txt)", cxxopts::value<std::string>())
-		("query", "Query File (either fa or txt)", cxxopts::value<std::string>())
+		("hSequencePath", "Sequences File (either fa or txt)", cxxopts::value<std::string>())
+		("vSequencePath", "Sequences File (either fa or txt)", cxxopts::value<std::string>())
+		("hSeedPath", "Seed Position File (txt)", cxxopts::value<std::string>())
+		("vSeedPath", "Seed Position File (txt)", cxxopts::value<std::string>())
 		("c,config", "Configuration file.", cxxopts::value<std::string>())
 		("h,help", "Print usage")
 		;
 
-	options.positional_help("[reference_file] [query_file]");
-	options.parse_positional({"reference", "query", ""});
+	options.positional_help("[hSequences] [vSequences] [hSeed] [vSeed]");
+	options.parse_positional({"hSequencePath", "vSequencePath", "hSeedPath", "vSeedPath"});
 
 	json configJson = IpuSwConfig();
 	addArguments(configJson, options, "");
@@ -104,8 +106,29 @@ int main(int argc, char** argv) {
 
 	IpuSwConfig config = configJson.get<IpuSwConfig>();
 
-	std::string refPath = result["reference"].as<std::string>();
-	std::string queryPath = result["query"].as<std::string>();
+	std::string hPath = result["hSequencePath"].as<std::string>();
+	std::string vPath = result["vSequencePath"].as<std::string>();
+	std::string hSeedPath = result["hSeedPath"].as<std::string>();
+	std::string vSeedPath = result["vSeedPath"].as<std::string>();
 
-	run_comparison(config, refPath, queryPath);
+	PLOGI << "IPUSWCONFIG" << json{config}.dump();
+
+	// run_comparison(config, refPath, queryPath);
+	auto [seqs, cmps] = ipu::prepareComparisons(hPath, vPath, hSeedPath, vSeedPath);
+	PLOGI << ipu::getDatasetStats(seqs, cmps).dump();
+
+	auto driver = ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, 0, config.numDevices);
+
+	auto batches = driver.create_batches(seqs, cmps);
+
+  std::vector<ipu::BlockAlignmentResults> results;
+  for (auto& batch : batches) {
+    ipu::batchaffine::Job* j = driver.async_submit(&batch);
+    assert(batch.cellCount > 0);
+    assert(batch.dataCount > 0);
+    driver.blocking_join(*j);
+    results.push_back(batch.get_result());
+    delete j;
+  }
+  return 0;
 }

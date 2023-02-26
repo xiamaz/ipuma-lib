@@ -16,7 +16,7 @@ struct IpuSwConfig {
 	int duplicationFactor = 0;
 	int repeat = 1; // number of repeated runs
 
-	IpuSwConfig() : swconfig(SW_CONFIGURATION), ipuconfig(ALGO_CONFIGURATION) {}
+	IpuSwConfig() {}
 
 	IpuSwConfig(ipu::SWConfig sw, ipu::IPUAlgoConfig ipu) : swconfig(sw), ipuconfig(ipu) {}
 
