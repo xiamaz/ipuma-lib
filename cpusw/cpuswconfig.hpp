@@ -8,7 +8,7 @@
 using json = nlohmann::json;
 
 namespace cpu {
-	static const std::vector<std::string> algoNames = {"stripedsw", "seqan3"};
+	static const std::vector<std::string> algoNames = {"genometools", "seqan"};
 	enum class Algo {stripedsw, seqan3};
 	void to_json(json& j, const Algo& a) {
 		j = algoNames.at(static_cast<int>(a));
