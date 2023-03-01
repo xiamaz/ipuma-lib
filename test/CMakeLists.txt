@@ -1,4 +1,4 @@
-add_subdirectory("${PROJECT_SOURCE_DIR}/googletest" "googletest")
+add_subdirectory("${PROJECT_SOURCE_DIR}/extern/googletest" "googletest")
 
 if(ENABLE_POPLAR)
   add_definitions(-DENABLE_IPUS)

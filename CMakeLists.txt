@@ -37,7 +37,7 @@ endif()
 
 
 
-include_directories("plog/include")
+include_directories("extern/plog/include")
 
 add_subdirectory("extern/include/ssw")
 list (APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/extern/seqan3/build_system")

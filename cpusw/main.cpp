@@ -10,40 +10,32 @@
 #include "cpuswconfig.hpp"
 #include "run_comparison.hpp"
 
+#include "ipuma.h"
+#include "cmd_arguments.hpp"
+#include "alignment_seqan.hpp"
+
 using json = nlohmann::json;
 
 int main(int argc, char** argv) {
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
   plog::init(plog::debug, &consoleAppender);
 
-	cxxopts::Options options("ipusw", "IPU Smith Waterman Binary");
+	cxxopts::Options options("cpusw", "CPU Xdrop implementation");
 
 	options.add_options()
-		("reference", "Reference File (either fa or txt)", cxxopts::value<std::string>())
-		("query", "Query File (either fa or txt)", cxxopts::value<std::string>())
+		("hSequencePath", "Sequences File (either fa or txt)", cxxopts::value<std::string>())
+		("vSequencePath", "Sequences File (either fa or txt)", cxxopts::value<std::string>())
+		("hSeedPath", "Seed Position File (txt)", cxxopts::value<std::string>())
+		("vSeedPath", "Seed Position File (txt)", cxxopts::value<std::string>())
 		("c,config", "Configuration file.", cxxopts::value<std::string>())
 		("h,help", "Print usage")
 		;
 
-	options.positional_help("[reference_file] [query_file]");
-	options.parse_positional({"reference", "query", ""});
+	options.positional_help("[hSequences] [vSequences] [hSeed] [vSeed]");
+	options.parse_positional({"hSequencePath", "vSequencePath", "hSeedPath", "vSeedPath"});
 
 	json configJson = CpuSwConfig();
-	for (const auto& [gname, gvalues] : configJson.items()) {
-		for (const auto& [optname, defaultValue] : gvalues.items()) {
-			switch (defaultValue.type()) {
-				case json::value_t::number_integer:
-					options.add_option(gname, "", optname, "", cxxopts::value<int>(), std::to_string(defaultValue.get<int>()));
-					break;
-				case json::value_t::string:
-					options.add_option(gname, "", optname, "", cxxopts::value<std::string>(), defaultValue);
-					break;
-				default:
-					throw std::runtime_error("unsupported type");
-					break;
-			}
-		}
-	}
+	addArguments(configJson, options, "");
 
 	auto result = options.parse(argc, argv);
 	if (result.count("help")) {
@@ -59,28 +51,19 @@ int main(int argc, char** argv) {
 		configJson = cj;
 	}
 
-	for (const auto& [gname, gvalues] : configJson.items()) {
-		for (const auto& [optName, optValue] : gvalues.items()) {
-			if (result.count(optName)) {
-				switch (optValue.type()) {
-					case json::value_t::number_integer:
-						configJson[gname][optName] = result[optName].as<int>();
-						break;
-					case json::value_t::string:
-						configJson[gname][optName] = result[optName].as<std::string>();
-						break;
-					default:
-						throw std::runtime_error("unsupported type");
-						break;
-				}
-			}
-		}
-	}
+	parseArguments(configJson, result);
 
 	CpuSwConfig config = configJson.get<CpuSwConfig>();
 
-	std::string refPath = result["reference"].as<std::string>();
-	std::string queryPath = result["query"].as<std::string>();
+	std::string hPath = result["hSequencePath"].as<std::string>();
+	std::string vPath = result["vSequencePath"].as<std::string>();
+	std::string hSeedPath = result["hSeedPath"].as<std::string>();
+	std::string vSeedPath = result["vSeedPath"].as<std::string>();
 
-	run_comparison(config, refPath, queryPath);
+	PLOGI << "CPUSWCONFIG" << json{config}.dump();
+
+	auto [seqs, cmps] = ipu::prepareComparisons(hPath, vPath, hSeedPath, vSeedPath);
+	PLOGI << ipu::getDatasetStats(seqs, cmps).dump();
+
+	runAlignment(seqs, cmps);
 }

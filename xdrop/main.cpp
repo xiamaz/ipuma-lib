@@ -60,47 +60,6 @@ std::vector<std::string> loadSequences(const std::string& path) {
   return sequences;
 }
 
-std::tuple<ipu::RawSequences, ipu::Comparisons> prepareComparisons(std::string seqH, std::string seqV, std::string seedH, std::string seedV) {
-  ipu::RawSequences seqs;
-  ipu::Comparisons cmps;
-
-  std::ifstream fileH(seqH);
-  std::ifstream fileV(seqV);
-  std::ifstream fileHs(seedH);
-  std::ifstream fileVs(seedV);
-  int sH, sV;
-  std::string lH, lV;
-  int i = 0;
-  while (std::getline(fileH, lH) && std::getline(fileV, lV) && (fileHs >> sH) && (fileVs >> sV)) {
-    seqs.push_back(lH);
-    seqs.push_back(lV);
-    cmps.push_back({
-      .indexA = (int) (2 * i),
-      .indexB = (int) (2 * i + 1),
-      .seedAStartPos = (int) sH,
-      .seedBStartPos = (int) sV,
-    });
-    i++;
-  }
-
-  return {std::move(seqs), std::move(cmps)};
-}
-
-void getDatasetStats(const ipu::RawSequences& seqs, const ipu::Comparisons& cmps) {
-  auto numComparisons = cmps.size();
-  size_t maxSequenceLength = 0;
-  for (const auto& s : seqs) {
-    maxSequenceLength = std::max(maxSequenceLength, s.size());
-  }
-
-  json stats = {
-    {"numComparisons", numComparisons},
-    {"maxSequenceLength", maxSequenceLength},
-  };
-
-  PLOGI << "COMPARISON STATS: " << stats.dump();
-}
-
 int main(int argc, char** argv) {
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
   plog::init(plog::verbose, &consoleAppender);
@@ -108,11 +67,11 @@ int main(int argc, char** argv) {
   std::vector<swatlib::TickTock> loadTimers(3);
   loadTimers[0].tick();
   PLOGE << "PREPARING COMPARISONS";
-  auto [seqs, cmps] = prepareComparisons(SEQ_H, SEQ_V, SEED_H, SEED_V);
+  auto [seqs, cmps] = ipu::prepareComparisons(SEQ_H, SEQ_V, SEED_H, SEED_V);
   loadTimers[0].tock();
   PLOGE << "TOOK " << loadTimers[0].duration() / 1000 << " seconds";
 
-  getDatasetStats(seqs, cmps);
+  ipu::getDatasetStats(seqs, cmps);
 
   auto driver = ipu::batchaffine::SWAlgorithm({
     .gapInit = -1,

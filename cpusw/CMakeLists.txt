@@ -10,6 +10,9 @@ if(OpenMP_CXX_FOUND)
 endif()
 
 target_compile_features(cpusw PRIVATE cxx_std_17)
-target_include_directories(cpusw PRIVATE ${IPUMA_BIN_INCLUDES} ${SEQAN3_INCLUDE_DIRS})
+target_include_directories(cpusw PRIVATE
+    ${IPUMA_BIN_INCLUDES}
+    "${PROJECT_SOURCE_DIR}/extern/seqan/include"
+)
 target_link_libraries (cpusw PRIVATE SSW_LIBRARY IPUMA_LIBRARY)
 set_target_properties(cpusw PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
