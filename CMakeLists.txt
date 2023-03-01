@@ -7,7 +7,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" )
 include(AddGPLibrary) 
 include(CMakeDefinitions.txt)
 
-set(POPLIBS_ENABLED_IPU_ARCH_NAMES "cpu;ipu2")
+set(POPLIBS_ENABLED_IPU_ARCH_NAMES "ipu2")
 # if(NOT DEFINED POPLIBS_ENABLED_IPU_ARCH_NAMES)
 #     set(POPLIBS_ENABLED_IPU_ARCH_NAMES "cpu;ipu1;ipu2" CACHE STRING
 #         "The architectures to build the poplibs library objects for")
@@ -67,8 +67,8 @@ endif()
 
 if(PACKAGE_TESTS)
   enable_testing()
-  add_subdirectory(test)
-  # add_subdirectory(test/core)
+  # add_subdirectory(test)
+  add_subdirectory(test/core)
 endif()
 
 #   - POPC_EXECUTABLE
