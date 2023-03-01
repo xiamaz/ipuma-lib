@@ -11,6 +11,11 @@ using namespace swatlib;
 #include <vector>
 #endif
 
+#ifdef __IPU__
+#include <ipu_memory_intrinsics>
+#include <ipu_vector_math>
+#endif
+
 #include <algorithm>
 #include <limits>
 
@@ -203,6 +208,18 @@ inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* quer
       }
     }
 
+#ifdef __IPU__
+    int maxU = 0;
+    const int* k_inc =reinterpret_cast<const int *>(&k1[L]);
+    const rptsize_t loopCount = U + 1-L;
+    for (unsigned i = 0; i < loopCount; i++) {
+      int s = ipu::load_postinc(&k_inc, 1);
+      maxU = max<int>(maxU, s);
+      // if (s > neginf) {
+      //   maxU = i;
+      // }
+    }
+#else
     int maxU = 0;
     for (size_t i = L; i < U + 1; i++) {
       int s = k1[i];
@@ -210,6 +227,7 @@ inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* quer
         maxU = i;
       }
     }
+#endif
 
     L = minL;
     U = maxU + 1;
@@ -357,7 +375,7 @@ int xdrop_doubleband_restricted_cpu(const std::vector<uint8_t>& query, const std
 
 
 // Double Band 
-template <int X, int GAP_PENALTY, typename simT, typename sType, int klen>
+template <int X, int GAP_PENALTY, typename simT, typename sType>
 inline __attribute__((always_inline)) sType xdrop_extend_right(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2) {
   return xdrop_doubleband<X, GAP_PENALTY, false, simT, sType>(
       a + seedLength + a_seed_begin, a_len - seedLength - a_seed_begin,

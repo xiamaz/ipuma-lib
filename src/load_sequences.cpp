@@ -66,10 +66,9 @@ std::tuple<ipu::RawSequences, ipu::Comparisons> prepareComparisons(std::string s
       seqs.push_back(lH);
       seqs.push_back(lV);
       cmps.push_back({
-        .indexA = (int) (2 * i),
-        .indexB = (int) (2 * i + 1),
-        .seedAStartPos = (int) sH,
-        .seedBStartPos = (int) sV,
+        (int) (2 * i),
+        (int) (2 * i + 1),
+        {{sH, sV}},
       });
       i++;
     } else {

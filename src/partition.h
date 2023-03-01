@@ -34,8 +34,7 @@ namespace ipu { namespace partition {
     int indexB;
     size_t sizeA;
     size_t sizeB;
-    int seedAStartPos;
-    int seedBStartPos;
+    std::vector<ipu::SeedPair> seeds;
 
     size_t complexity;
 
@@ -58,7 +57,6 @@ namespace ipu { namespace partition {
 
     Bucket(int bucketIndex, size_t sequenceCapacity, size_t comparisonCapacity);
 
-    bool addComparison(int comparisonIndex, int indexA, int indexB, size_t sizeA, size_t sizeB, size_t seedAStartPos, size_t seedBStartPos);
     bool addComparison(const ComparisonData&);
 
     std::string toString() const;

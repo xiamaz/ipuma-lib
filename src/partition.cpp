@@ -45,39 +45,40 @@ namespace partition {
   }
 
   bool Bucket::addComparison(const ComparisonData& d) {
-    return addComparison(d.comparisonIndex, d.indexA, d.indexB, d.sizeA, d.sizeB, d.seedAStartPos, d.seedBStartPos);
-  }
-
-  bool Bucket::addComparison(int comparisonIndex, int indexA, int indexB, size_t sizeA, size_t sizeB, size_t seedAStartPos, size_t seedBStartPos) {
-    size_t newTotalLength = totalSequenceLength + sizeA + sizeB;
-    size_t newTotalCmps = cmps.size() + 1;
+    size_t newTotalLength = totalSequenceLength + d.sizeA + d.sizeB;
+    size_t newTotalCmps = cmps.size() + NSEEDS;
 
     if (newTotalLength <= sequenceCapacity && newTotalCmps <= comparisonCapacity) {
       size_t offsetA = totalSequenceLength;
-      size_t offsetB = totalSequenceLength + sizeA;
+      size_t offsetB = totalSequenceLength + d.sizeA;
 
       seqs.push_back({
-        .index = indexA,
+        .index = d.indexA,
         .offset = offsetA,
       });
       seqs.push_back({
-        .index = indexB,
+        .index = d.indexB,
         .offset = offsetB,
       });
 
-      cmps.push_back({
-        .comparisonIndex = comparisonIndex,
-        .sizeA = sizeA,
-        .offsetA = offsetA,
-        .sizeB = sizeB,
-        .offsetB = offsetB,
-        .seedAStartPos = seedAStartPos,
-        .seedBStartPos = seedBStartPos,
-      });
+      if (d.seeds.size() != NSEEDS) {
+        throw std::runtime_error("Number of seeds needs to match NSEEDS");
+      }
+      for (size_t i = 0; i < NSEEDS; i++) {
+        cmps.push_back({
+          .comparisonIndex = d.comparisonIndex,
+          .sizeA = d.sizeA,
+          .offsetA = offsetA,
+          .sizeB = d.sizeB,
+          .offsetB = offsetB,
+          .seedAStartPos = (size_t) d.seeds[i].seedAStartPos,
+          .seedBStartPos = (size_t) d.seeds[i].seedBStartPos,
+        });
+      }
 
       totalSequenceLength = newTotalLength;
-      longestLength = std::max({longestLength, sizeA, sizeB});
-      totalCells += sizeA * sizeB;
+      longestLength = std::max({longestLength, d.sizeA, d.sizeB});
+      totalCells += d.sizeA * d.sizeB * NSEEDS;
       return true;
     }
     return false;
@@ -151,7 +152,7 @@ namespace partition {
     bool addComparison(const ComparisonData& cmpData, BatchMapping& curMapping) override {
       for (; bucketIndex < curMapping.buckets.size(); ++bucketIndex) {
         Bucket& bucket = curMapping.buckets[bucketIndex];
-        if (bucket.addComparison(cmpData.comparisonIndex, cmpData.indexA, cmpData.indexB, cmpData.sizeA, cmpData.sizeB, cmpData.seedAStartPos, cmpData.seedBStartPos)) {
+        if (bucket.addComparison(cmpData)) {
           return true;
         }
       }
@@ -176,7 +177,7 @@ namespace partition {
       BatchMapping& m = mappings.back();
       std::pop_heap(m.buckets.begin(), m.buckets.end(), cmp);
       Bucket& b = m.buckets.back();
-      auto success = b.addComparison(cmpData.comparisonIndex, cmpData.indexA, cmpData.indexB, cmpData.sizeA, cmpData.sizeB, cmpData.seedAStartPos, cmpData.seedBStartPos);
+      auto success = b.addComparison(cmpData);
       std::push_heap(m.buckets.begin(), m.buckets.end(), cmp);
       return success;
     }
@@ -220,8 +221,7 @@ namespace partition {
       .indexB = cmp.indexB,
       .sizeA = sizeA,
       .sizeB = sizeB,
-      .seedAStartPos = cmp.seedAStartPos,
-      .seedBStartPos = cmp.seedBStartPos,
+      .seeds = cmp.seeds,
       .complexity = sizeA * sizeB,
     };
   }

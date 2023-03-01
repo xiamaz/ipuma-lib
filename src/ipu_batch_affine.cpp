@@ -365,6 +365,8 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         graph.connect(vtx["K2"], k_T[1]);
         graph.connect(vtx["simMatrix"], similarity);
         graph.connect(vtx["seedLength"], seedLength);
+        graph.connect(vtx["ARange"], ARanges[i]);
+        graph.connect(vtx["BRange"], BRanges[i]);
       } else if (vtype == VertexType::multibandxdrop) {
         int scaledMaxAB = maxSequenceLength * bandPercentageXDrop;
         auto k_T = graph.addVariable(sType, {2, ((size_t)scaledMaxAB+2+2) * (size_t) workerMultiplier}, "K[" + std::to_string(i) + "]");

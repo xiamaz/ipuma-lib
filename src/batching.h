@@ -2,12 +2,13 @@
 
 #include <vector>
 #include "ipu_base.h"
+#include "types.h"
 
 namespace ipu {
 struct BlockAlignmentResults {
-  std::vector<int32_t> scores;
-  std::vector<int32_t> a_range_result;
-  std::vector<int32_t> b_range_result;
+  std::vector<std::array<int32_t, NSEEDS>> scores;
+  std::vector<uint32_t> a_range_result;
+  std::vector<uint32_t> b_range_result;
 };
 
 struct Batch {

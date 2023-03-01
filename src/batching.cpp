@@ -38,9 +38,9 @@ void Batch::initialize(IPUAlgoConfig config) {
 }
 
 BlockAlignmentResults Batch::get_result() {
-  std::vector<int32_t> scores(maxComparisons);
-  std::vector<int32_t> a_range_result(maxComparisons);
-  std::vector<int32_t> b_range_result(maxComparisons);
+  std::vector<std::array<int32_t, NSEEDS>> scores(maxComparisons);
+  std::vector<uint32_t> a_range_result(maxComparisons);
+  std::vector<uint32_t> b_range_result(maxComparisons);
 
   // TODO this should not be hardcoded here but passed as a config to make layout changes easier.
   int aOffset = results.size() / 3;
@@ -50,7 +50,9 @@ BlockAlignmentResults Batch::get_result() {
   for (int i = 0; i < maxComparisons; ++i) {
     int aindex = i + aOffset;
     int bindex = i + bOffset;
-    scores[i] = results[i];
+    for (size_t j = 0; j < NSEEDS; j++) {
+      scores[i][j] = results[i*NSEEDS + j];
+    }
     a_range_result[i] = results[aindex];
     b_range_result[i] = results[bindex];
   }
