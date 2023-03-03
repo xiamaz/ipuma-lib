@@ -215,6 +215,12 @@ namespace partition {
   ComparisonData createCmpData(int i, const Comparison& cmp, const RawSequences& seqs) {
     auto sizeA = seqs[cmp.indexA].size();
     auto sizeB = seqs[cmp.indexB].size();
+    size_t complexity = 0;
+    for (const auto &pair : cmp.seeds) {
+     int left = pair.seedAStartPos * pair.seedBStartPos;
+     int right = (sizeA - 17 - pair.seedAStartPos) * (sizeB - 17 - pair.seedBStartPos);
+     complexity += (pair.seedAStartPos != -1 ? 1 : 0) * (left + right);
+    }
     return {
       .comparisonIndex = i,
       .indexA = cmp.indexA,
@@ -222,7 +228,7 @@ namespace partition {
       .sizeA = sizeA,
       .sizeB = sizeB,
       .seeds = cmp.seeds,
-      .complexity = sizeA * sizeB,
+      .complexity = complexity,
     };
   }
 
