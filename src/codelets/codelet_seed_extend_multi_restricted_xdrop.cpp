@@ -119,8 +119,9 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
       const auto j_offset = meta.offsetA;
       const auto b_len = meta.sizeB;
       const auto i_offset = meta.offsetA;
-      const auto a_seed_begin = meta.seedAStartPos;
-      const auto b_seed_begin = meta.seedBStartPos;
+
+      const int32_t a_seed_begin = meta.seedAStartPos;
+      const int32_t b_seed_begin = meta.seedBStartPos;
 
       const uint8_t* a = cSeqs + j_offset;
       const uint8_t* b = cSeqs + i_offset;
@@ -140,19 +141,23 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
       // auto tt = TileTelemetry();
       memset(k1, 0, (klen) * sizeof(sType));
       memset(k2, 0, (klen) * sizeof(sType));
-      if (isLeft) {
-        partscore = ipumacore::xdrop::xdrop_smart_restricted_extend_left<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
-            a, a_len, a_seed_begin,
-            b, b_len, b_seed_begin,
-            seedLength,
-            simMatrix, _k1, _k2, klen);
+      if (a_seed_begin == -1) {
+       partscore = 0; 
       } else {
-        // Right hand side
-        partscore = ipumacore::xdrop::xdrop_smart_restricted_extend_right<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
-            a, a_len, a_seed_begin,
-            b, b_len, b_seed_begin,
-            seedLength,
-            simMatrix, _k1, _k2, klen);
+        if (isLeft) {
+          partscore = ipumacore::xdrop::xdrop_smart_restricted_extend_left<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
+              a, a_len, a_seed_begin,
+              b, b_len, b_seed_begin,
+              seedLength,
+              simMatrix, _k1, _k2, klen);
+        } else {
+          // Right hand side
+          partscore = ipumacore::xdrop::xdrop_smart_restricted_extend_right<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
+              a, a_len, a_seed_begin,
+              b, b_len, b_seed_begin,
+              seedLength,
+              simMatrix, _k1, _k2, klen);
+        }
       }
       score[n] += partscore;
       // if (isLeft) {
