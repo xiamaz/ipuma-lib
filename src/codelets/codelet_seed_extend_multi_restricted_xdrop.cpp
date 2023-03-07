@@ -20,11 +20,11 @@ inline int min(int a, int b) {
   return a > b ? b : a;
 }
 
-const int GAP_PENALTY = 1;
 // const int neginf = -9999;
 
+// typedef int sType;
+const int GAP_PENALTY = 1;
 typedef int sType;
-#define GAP_PENALTY 1
 
 class TileTelemetry {
  private:
@@ -39,24 +39,9 @@ class TileTelemetry {
   unsigned cycle_counter_diff() {
     unsigned now_l = __builtin_ipu_get_scount_l();
     unsigned now_u = __builtin_ipu_get_scount_u();
-
-    unsigned diff_u = now_u - cycle_counter_u;
-    unsigned diff_l = now_l - cycle_counter_l;
-
-    if (now_u < cycle_counter_u)
-      return __UINT32_MAX__;
-    else if (diff_u == 0)
-      return diff_l;
-    else if (diff_u == 1) {
-      if (now_l >= cycle_counter_l)
-        return __UINT32_MAX__;
-      else {
-        return __UINT32_MAX__ - (cycle_counter_l - now_l);
-      }
-    } else if (diff_u > 1) {
-      return __UINT32_MAX__;
-    }
-    return 0;
+    int64_t now = (((int64_t)now_u) << 32) | now_l;
+    int64_t old = (((int64_t)cycle_counter_u) << 32) | cycle_counter_l;
+    return (unsigned) now-old;
   }
 
   void reset() {
@@ -72,8 +57,8 @@ constexpr unsigned numberOfBits(unsigned x) {
 template <int X>
 class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
  private:
-  poplar::Output<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>> K1;
-  poplar::Output<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>> K2;
+  poplar::Output<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR, 8>> K1;
+  poplar::Output<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR, 8>> K2;
 
  public:
   // Fields
@@ -104,21 +89,24 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
     // This is an eventual atomic counter
     int myN = workerId;
     volatile int* globalN = &currentN;
+    volatile int* globalWB = &currentN;
     *globalN = 6;
 
+    const ipu::XDropMeta* metas = reinterpret_cast<const ipu::XDropMeta*>(&Meta[0]);
     if (workerId == 0) {
       memset((char*)&score[0], 0, maxNPerTile * sizeof(score[0]));
+      // memset((char*)&ARange[0], 0, maxNPerTile * sizeof(ARange[0]));
     }
-    const ipu::XDropMeta* metas = reinterpret_cast<const ipu::XDropMeta*>(&Meta[0]);
+    // auto tt = TileTelemetry();
     for (; myN < maxNPerTile * 2;) {
-      const bool isLeft = myN % 2 == 0;
-      const int n = myN >> 1;
+      // const bool isLeft = myN % 2 == 0;
+      const int n = myN / 2;
 
       const ipu::XDropMeta meta = metas[n];
       const auto a_len = meta.sizeA;
       const auto j_offset = meta.offsetA;
       const auto b_len = meta.sizeB;
-      const auto i_offset = meta.offsetA;
+      const auto i_offset = meta.offsetB;
 
       const int32_t a_seed_begin = meta.seedAStartPos;
       const int32_t b_seed_begin = meta.seedBStartPos;
@@ -129,49 +117,79 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
       if (a_len == 0 || b_len == 0) break;
 
       // printf("a_seed_begin %d, b_seed_begin %d\n", a_seed_begin, b_seed_begin);
+      const int LR_offsert = 20;
 
-      const int klen = restrictedSize + 2 + 2;
+      const int klen = restrictedSize + 2 * LR_offsert;
       sType* k1 = &K1[workerId * (klen)];
       sType* k2 = &K2[workerId * (klen)];
 
-      int* _k1 = &k1[2];
-      int* _k2 = &k2[2];
+      sType* _k1 = &k1[LR_offsert];
+      sType* _k2 = &k2[LR_offsert];
 
-      sType partscore = 0;
-      // auto tt = TileTelemetry();
+      // comps[myN] = 1;
+
+      if (a_seed_begin == -1) {
+      //  if (isLeft) {
+      //    ARange[n/2] += tt.cycle_counter_diff();
+      //  } else {
+      //    BRange[n/2] += tt.cycle_counter_diff();
+      //  }
+       for (int i = 0; i < workerId * 5; i++) {
+        asm volatile("nop":::"memory");
+       }
+        score[n] = 0;
+      } else {
+        if (myN % 2 == 0) {
       memset(k1, 0, (klen) * sizeof(sType));
       memset(k2, 0, (klen) * sizeof(sType));
-      if (a_seed_begin == -1) {
-       partscore = 0; 
-      } else {
-        if (isLeft) {
-          partscore = ipumacore::xdrop::xdrop_smart_restricted_extend_left<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
+          sType lpartscore = ipumacore::xdrop::xdrop_smart_restricted_extend_left<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
               a, a_len, a_seed_begin,
               b, b_len, b_seed_begin,
               seedLength,
-              simMatrix, _k1, _k2, klen);
+              simMatrix, _k1, _k2, restrictedSize);
+          ARange[n] = lpartscore;
+
         } else {
-          // Right hand side
-          partscore = ipumacore::xdrop::xdrop_smart_restricted_extend_right<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
+      // memset(k1, 0, (klen) * sizeof(sType));
+      // memset(k2, 0, (klen) * sizeof(sType));
+      memset(k1, 0, (klen) * sizeof(sType));
+      memset(k2, 0, (klen) * sizeof(sType));
+          sType rpartscore = ipumacore::xdrop::xdrop_smart_restricted_extend_right<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
               a, a_len, a_seed_begin,
               b, b_len, b_seed_begin,
               seedLength,
-              simMatrix, _k1, _k2, klen);
+              simMatrix, _k1, _k2, restrictedSize) + 17;
+          BRange[n] = rpartscore;
         }
+
+          // Right hand side
+
+          // score[n] = rpartscore + lpartscore;
+        // printf("XXXXXXXXXX: %d\n", partscore);
+        // partscore = lpartscore + rpartscore + 17;
+        // printf("[%d] %d => (%d|%d) :: %d => (%d|%d) :: (%d|%d) = %d\n",n, a_len, a_seed_begin, a_len - a_seed_begin -17, b_len, b_seed_begin, b_len - b_seed_begin - 17 ,lpartscore, rpartscore,lpartscore + rpartscore);
+        // printf("%d\n", partscore);
       }
-      score[n] += partscore;
+      // printf("RAN\n")
+      // score[n] = partscore;
       // if (isLeft) {
-      //   ARange[n] = tt.cycle_counter_diff();
+      //   ARange[n/2] += tt.cycle_counter_diff();
       // } else {
-      //   BRange[n] = tt.cycle_counter_diff();
+      //   BRange[n/2] += tt.cycle_counter_diff();
       // }
 
       // This operation can cause raise conditions, but that will not produce
       // incurrect results. However, double work can be done, which we accept.
-      myN = *globalN;
-      (*globalN) += 1;
+      {
+        myN = *globalN;
+        (*globalWB) = (myN+1);
+      }
     }
-    // printf("AAA: %d\n", (unsigned) tt.cycle_counter_diff());
+    // ARange[workerId] = tt.cycle_counter_diff();
+    //printf("AAA: %d\n", (unsigned) tt.cycle_counter_diff());
+    // printf("AAA: %d\n", (unsigned) count);
+
+    // printf("AAA: %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", comps[0], comps[1], comps[2], comps[3], comps[4], comps[5], comps[6], comps[7], comps[8], comps[9], comps[10], comps[11], comps[12], comps[13], comps[14], comps[15], comps[16], comps[17], comps[18], comps[19]);
 
     // if (workerId == 0)
     //   for (int i = 0; i < 5; i++) {
@@ -183,5 +201,5 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
 
 template class SeedExtendRestrictedXDrop<10>;
 template class SeedExtendRestrictedXDrop<15>;
-template class SeedExtendRestrictedXDrop<20>;
-template class SeedExtendRestrictedXDrop<50>;
+// template class SeedExtendRestrictedXDrop<20>;
+// template class SeedExtendRestrictedXDrop<25>;

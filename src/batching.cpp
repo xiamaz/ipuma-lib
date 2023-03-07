@@ -39,8 +39,8 @@ void Batch::initialize(IPUAlgoConfig config) {
 
 BlockAlignmentResults Batch::get_result() {
   std::vector<std::array<int32_t, NSEEDS>> scores(maxComparisons);
-  std::vector<uint32_t> a_range_result(maxComparisons);
-  std::vector<uint32_t> b_range_result(maxComparisons);
+  std::vector<std::array<uint32_t, NSEEDS>> a_range_result(maxComparisons);
+  std::vector<std::array<uint32_t, NSEEDS>> b_range_result(maxComparisons);
 
   // TODO this should not be hardcoded here but passed as a config to make layout changes easier.
   int aOffset = results.size() / 3;
@@ -51,10 +51,18 @@ BlockAlignmentResults Batch::get_result() {
     int aindex = i + aOffset;
     int bindex = i + bOffset;
     for (size_t j = 0; j < NSEEDS; j++) {
+      // if (results[i*NSEEDS + j] != 0) {
+        // PLOGW << results[i*NSEEDS + j];
+        // PLOGW <<"AAAAAAAAAAAAAAAAAAAAAAAA" << i << "   "<< j;
+        // PLOGW.printf("scores[%d/NSEEDS][%d] = results[%d*NSEEDS + %d]\n", i, j, i, j);
+      // }
       scores[i][j] = results[i*NSEEDS + j];
+      a_range_result[i][j] = results[aOffset + i*NSEEDS + j];
+      b_range_result[i][j] = results[bOffset + i*NSEEDS + j];
     }
-    a_range_result[i] = results[aindex];
-    b_range_result[i] = results[bindex];
+    // scores[i] = results[i];
+    // a_range_result[i] = results[aindex];
+    // b_range_result[i] = results[bindex];
   }
 
   return {scores, a_range_result, b_range_result};
@@ -80,7 +88,7 @@ std::vector<Batch> create_batches(const RawSequences& seqs, const Comparisons& c
 
   swatlib::TickTock seqT;
   swatlib::TickTock cmpT;
-  #pragma omp parallel for num_threads(8)
+  #pragma omp parallel for schedule(static) num_threads(48)
   for (int mi = 0; mi < mappings.size(); ++mi) {
     const auto& map = mappings[mi];
     Batch& batch = batches[mi];
@@ -92,14 +100,17 @@ std::vector<Batch> create_batches(const RawSequences& seqs, const Comparisons& c
     auto& dataCount = batch.dataCount;
     auto& comparisonCount = batch.numComparisons;
 
-    for (const auto& bucketMapping : map.buckets) {
+    for (int bi = 0; bi < map.buckets.size(); bi++) {
+      const auto& bucketMapping = map.buckets[bi];
       const size_t offsetSequence = bucketMapping.bucketIndex * algoconfig.getBufsize32b() * 4;
 
       auto* bucketSeq = seqInput + offsetSequence;
       seqT.tick();
-      for (const auto& sequenceMapping : bucketMapping.seqs) {
+      for (int si = 0; si< bucketMapping.seqs.size(); si++) {
+        const auto& sequenceMapping = bucketMapping.seqs[si];
         const char *seq = seqs[sequenceMapping.index].data();
         size_t seqSize = seqs[sequenceMapping.index].size();
+        #pragma omp simd
         for (int j = 0; j < seqSize; ++j) {
           bucketSeq[sequenceMapping.offset + j] = encodeTable[seq[j]];
         }
@@ -142,10 +153,17 @@ std::vector<Batch> create_batches(const RawSequences& seqs, const Comparisons& c
   }
   stageTimers[2].tock();
 
+  auto cmps_total = 0;
+  for (auto &&cmp : cmps) {
+    for (auto &&seed : cmp.seeds) {
+      cmps_total += seed.seedAStartPos != -1;
+    }
+  }
+
   stageTimers[0].tock();
   json logData = {
     {"sequences_count", seqs.size() },
-    {"comparisons_count", cmps.size() },
+    {"comparisons_count", cmps_total },
     {"batches_created", batches.size()},
     {"time_total", stageTimers[0].seconds()},
     {"time_partition", stageTimers[1].seconds()},

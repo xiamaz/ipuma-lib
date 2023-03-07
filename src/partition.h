@@ -2,6 +2,7 @@
 #define PARTITION_H
 #include <string>
 #include <vector>
+#include <array>
 #include <queue>
 #include <list>
 #include "types.h"
@@ -34,7 +35,7 @@ namespace ipu { namespace partition {
     int indexB;
     size_t sizeA;
     size_t sizeB;
-    std::vector<ipu::SeedPair> seeds;
+    std::array<ipu::SeedPair, NSEEDS> seeds;
 
     size_t complexity;
 

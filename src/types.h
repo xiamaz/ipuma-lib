@@ -1,7 +1,9 @@
 #ifndef IPUMA_TYPES_H
 #define IPUMA_TYPES_H
 #include <string>
+#include <string_view>
 #include <vector>
+#include <array>
 #include "types.h"
 #include "shared_types.h"
 
@@ -11,10 +13,10 @@ namespace ipu {
 struct Comparison {
 	int32_t indexA;
 	int32_t indexB;
-	std::vector<SeedPair> seeds;
+	std::array<SeedPair, NSEEDS> seeds;
 };
 
-typedef std::vector<std::string> RawSequences;
+typedef std::vector<std::string_view> RawSequences;
 typedef std::vector<uint8_t> EncSequences;
 
 

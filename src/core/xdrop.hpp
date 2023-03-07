@@ -12,6 +12,9 @@ using namespace swatlib;
 #endif
 
 #ifdef __IPU__
+#include <print.h>
+
+#include <Alignment.hpp>
 #include <ipu_memory_intrinsics>
 #include <ipu_vector_math>
 #endif
@@ -147,9 +150,21 @@ int xdrop(const std::string& query, const std::string& reference, bool cut) {
 
 template <int X, int GAP_PENALTY, bool reversed, typename simT, typename sType>
 inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* query, int N, const uint8_t* reference, int M, simT sim, sType* k1, sType* k2) {
+  // printf("NORMAL: N = %d, M = %d\n", N, M);
   if (N == 0 || M == 0) {
     return 0;
   }
+  auto tmp = max<int>(M, N);
+  // for (size_t i = 0; i < tmp; i++) {
+  //   if (k1[i] != 0) {
+  //     printf("k1[%d] == %d\n", i, k1[i]);
+  //   }
+  //   if (k2[i] != 0) {
+  //     printf("k2[%d] == %d\n", i, k2[i]);
+  //   }
+  // }
+  
+
   int L = 0, U = 0;
   sType T_prime = 0, T = 0;
 
@@ -159,25 +174,6 @@ inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* quer
   Matrix<int> H(M + 1, N + 1, 0);  // DEBUG
   Matrix<int> C(M + 1, N + 1, 0);  // DEBUG
 #endif
-
-  auto cell_update = [&](int i, int j, sType* k1, sType* k2, int z, sType& lastval) {
-    sType new_lastval = k1[z];
-    sType score = max<sType>(k2[z] - GAP_PENALTY,
-                             k2[z - 1] - GAP_PENALTY,
-                             lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
-#ifdef PRINT_DEBUG
-    PLOGW.printf("i %d, j %d, k1[z - 1] (%d) + sim(reference[i] (%c), query[j] (%c)) (%d) => %d", i, j, k1[z - 1], reference[adrREF(i)], query[adrQER(j)], sim(reference[adrREF(i)], query[adrQER(j)]), score);
-#endif
-    lastval = new_lastval;
-    if (score < T - X) {
-      score = neginf;
-    }
-    k1[z] = score;
-#ifdef PRINT_DEBUG
-    H(i + 1, j + 1) = score;  // DEBUG
-#endif
-    return score;
-  };
 
   auto rotate = [&]() {
     sType* t;  // 1->3, 2->1, 3->2
@@ -191,10 +187,22 @@ inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* quer
     k = k + 1;
     sType lastval = k1[L - 1];
     for (size_t i = L; i < U + 1; i++) {
-      auto j = k - i - 1;
-      sType score = cell_update(i, j, k1, k2, i, lastval);
+      int32_t j = k - i - 1;
+      sType new_lastval = k1[i];
+      sType score = max<sType>(k2[i] - GAP_PENALTY,
+                               k2[i - 1] - GAP_PENALTY,
+                               lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
 #ifdef PRINT_DEBUG
-      C(i + 1, j + 1) = 1;  // DEBUG
+      PLOGW.printf("i %d, j %d, k1[z - 1] (%d) + sim(reference[i] (%c), query[j] (%c)) (%d) => %d", i, j, k1[z - 1], reference[adrREF(i)], query[adrQER(j)], sim(reference[adrREF(i)], query[adrQER(j)]), score);
+#endif
+      lastval = new_lastval;
+      if (score < T - X) {
+        score = neginf;
+      }
+      k1[i] = score;
+#ifdef PRINT_DEBUG
+      H(i + 1, j + 1) = score;  // DEBUG
+      C(i + 1, j + 1) = 1;      // DEBUG
 #endif
       T_prime = max<sType>(T_prime, score);
     }
@@ -208,18 +216,6 @@ inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* quer
       }
     }
 
-#ifdef __IPU__
-    int maxU = 0;
-    const int* k_inc =reinterpret_cast<const int *>(&k1[L]);
-    const rptsize_t loopCount = U + 1-L;
-    for (unsigned i = 0; i < loopCount; i++) {
-      int s = ipu::load_postinc(&k_inc, 1);
-      maxU = max<int>(maxU, s);
-      // if (s > neginf) {
-      //   maxU = i;
-      // }
-    }
-#else
     int maxU = 0;
     for (size_t i = L; i < U + 1; i++) {
       int s = k1[i];
@@ -227,7 +223,6 @@ inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* quer
         maxU = i;
       }
     }
-#endif
 
     L = minL;
     U = maxU + 1;
@@ -262,7 +257,17 @@ int xdrop_doubleband_cpu(const std::vector<uint8_t>& query, const std::vector<ui
 #endif
 
 template <int X, int GAP_PENALTY, bool reversed, typename simT, typename sType>
-int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* reference, int M, simT sim, sType* t1, sType* t2, int klen) {
+inline __attribute__((always_inline)) int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* reference, int M, simT sim, sType* t1, sType* t2, int klen) {
+  // printf("RESTRICTED: N = %d, M = %d\n", N, M);
+  auto tmp = klen;
+  // for (size_t i = 0; i < tmp; i++) {
+  //   if (t1[i] != 0) {
+  //     printf("t1[%d] == %d\n", i, t1[i]);
+  //   }
+  //   if (t2[i] != 0) {
+  //     printf("t2[%d] == %d\n", i, t2[i]);
+  //   }
+  // }
   if (M == 0 || N == 0) return 0;
   sType T_prime = 0, T = 0;
   int L = 0, U = 0;
@@ -275,20 +280,6 @@ int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* refe
 
 #define adrREF(zzz) ((!reversed) ? zzz : (M - 1) - zzz)
 #define adrQER(zzz) ((!reversed) ? zzz : (N - 1) - zzz)
-  auto cell_update = [&](int i, int j, int* _t1, int* __t1, int* _t2, int z, int& lastval, int L) {
-    sType new_lastval = _t1[z];
-    sType tscore = max(_t2[z] - GAP_PENALTY, _t2[z - 1] - GAP_PENALTY, lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
-
-    lastval = new_lastval;
-    if (tscore < T - X) {
-      tscore = neginf;
-    }
-    __t1[z] = tscore;
-#ifdef PRINT_DEBUG
-    H(i + 1, j + 1) = tscore;  // DEBUG
-#endif
-    return tscore;
-  };
 
   int k = 0;
   do {
@@ -309,12 +300,27 @@ int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* refe
     sType lastval = _t1[L - 1];
     for (size_t i = L; i < U + 1; i++) {
       auto j = k - i - 1;
-      sType score = cell_update(i, j, _t1, __t1, _t2, i, lastval, L);
+
+      sType new_lastval = _t1[i];
+      sType score = max<sType>(_t2[i] - GAP_PENALTY, _t2[i - 1] - GAP_PENALTY, lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
+      // printf("score[%d]: %d = max(%d, %d, %d)\n", i, score, _t2[i] - GAP_PENALTY, _t2[i - 1] - GAP_PENALTY, lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
+      // printf("   lv: %d, sim %d,[v %d, i %d][v %d, i %d]\n", lastval,  sim[reference[adrREF(i)]][query[adrQER(j)]], reference[adrREF(i)], adrREF(i), query[adrQER(j)], adrQER(j));
+
+      lastval = new_lastval;
+      if (score < T - X) {
+        score = neginf;
+      }
+      __t1[i] = score;
+
 #ifdef PRINT_DEBUG
-      C(i + 1, j + 1) = 1;  // DEBUG
+      H(i + 1, j + 1) = tscore;  // DEBUG
+      C(i + 1, j + 1) = 1;       // DEBUG
 #endif
-      T_prime = max(T_prime, score);
+
+      T_prime = max<sType>(T_prime, score);
     }
+    // printf("T_prime[%d]: %d\n",k,  T_prime);
+    // if (k == 5) {break;}
 
     int minL = 99999;
     for (size_t i = L; i < U + 1; i++) {
@@ -373,8 +379,7 @@ int xdrop_doubleband_restricted_cpu(const std::vector<uint8_t>& query, const std
 }
 #endif
 
-
-// Double Band 
+// Double Band
 template <int X, int GAP_PENALTY, typename simT, typename sType>
 inline __attribute__((always_inline)) sType xdrop_extend_right(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2) {
   return xdrop_doubleband<X, GAP_PENALTY, false, simT, sType>(
@@ -408,16 +413,41 @@ inline __attribute__((always_inline)) sType xdrop_restricted_extend_left(const u
       sim, k1, k2, klen);
 }
 
-// Smart Switching 
+inline __attribute__((always_inline)) void setZero(void* p, unsigned char v, int n) {
+// #ifndef __IPU__XAA
+  // memset(p, v, n);
+// #else
+//   int2* o = reinterpret_cast<int2*>(p);
+//   const int2 zzero = {0, 0};
+//   const rptsize_t loopCount = ((n >> 4) << 1) + 1;
+//   for (unsigned i = 0; i < loopCount; i++) {
+//     ipu::store_postinc(&o, zzero, 1);
+//   }
+// #endif
+}
+
+// Smart Switching
 template <int X, int GAP_PENALTY, typename simT, typename sType>
 inline __attribute__((always_inline)) sType xdrop_smart_restricted_extend_left(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2, int klen) {
-  if (max<int>(a_seed_begin, b_seed_begin) >= klen) {
+  const int a_len_real = a_seed_begin;
+  const int b_len_real = b_seed_begin;
+  if (a_seed_begin < b_seed_begin) {
+    std::swap(a, b);
+    std::swap(a_seed_begin, b_seed_begin);
+  }
+  int mlen = min<int>(a_len_real, b_len_real);
+
+  if (mlen >= klen) {
+    setZero(k1, 0, (klen) * sizeof(sType));
+    setZero(k2, 0, (klen) * sizeof(sType));
     return xdrop_doubleband_restricted<X, GAP_PENALTY, true, simT, sType>(
         a, a_seed_begin,
         b, b_seed_begin,
         sim, k1, k2, klen);
 
   } else {
+    setZero(k1, 0, (klen) * sizeof(sType));
+    setZero(k2, 0, (klen) * sizeof(sType));
     return xdrop_doubleband<X, GAP_PENALTY, true, simT, sType>(
         a, a_seed_begin,
         b, b_seed_begin,
@@ -427,12 +457,24 @@ inline __attribute__((always_inline)) sType xdrop_smart_restricted_extend_left(c
 
 template <int X, int GAP_PENALTY, typename simT, typename sType>
 inline __attribute__((always_inline)) sType xdrop_smart_restricted_extend_right(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2, int klen) {
-  if (max<int>((a_len - seedLength - a_seed_begin), (b_len - seedLength - b_seed_begin)) >= klen) {
+  const int a_len_real = a_len - seedLength - a_seed_begin;
+  const int b_len_real = b_len - seedLength - b_seed_begin;
+  if (a_len_real < b_len_real) {
+    std::swap(a, b);
+    std::swap(a_seed_begin, b_seed_begin);
+    std::swap(a_len, b_len);
+  }
+  int mlen = min<int>(a_len_real, b_len_real);
+  if (mlen >= klen) {
+    setZero(k1, 0, (klen) * sizeof(sType));
+    setZero(k2, 0, (klen) * sizeof(sType));
     return xdrop_doubleband_restricted<X, GAP_PENALTY, false, simT, sType>(
         a + seedLength + a_seed_begin, a_len - seedLength - a_seed_begin,
         b + seedLength + b_seed_begin, b_len - seedLength - b_seed_begin,
         sim, k1, k2, klen);
   } else {
+    setZero(k1, 0, (klen) * sizeof(sType));
+    setZero(k2, 0, (klen) * sizeof(sType));
     return xdrop_doubleband<X, GAP_PENALTY, false, simT, sType>(
         a + seedLength + a_seed_begin, a_len - seedLength - a_seed_begin,
         b + seedLength + b_seed_begin, b_len - seedLength - b_seed_begin,
@@ -477,8 +519,8 @@ int seed_extend_cpu(const std::vector<uint8_t>& query, int querySeedBeginPos, co
   int N = query.size();
   assert(M >= N);
   // Can also be malloc with: k1[0] = 0, k2[0:2] = 0
-  int* k1 = &((int*) malloc((M + 2) * sizeof(int)))[0];
-  int* k2 = &((int*) malloc((M + 2) * sizeof(int)))[0];
+  int* k1 = &((int*)malloc((M + 2) * sizeof(int)))[0];
+  int* k2 = &((int*)malloc((M + 2) * sizeof(int)))[0];
   int* _k1 = &k1[1];
   int* _k2 = &k2[1];
 
@@ -505,25 +547,25 @@ int seed_extend_restricted_cpu(const std::vector<uint8_t>& query, int querySeedB
 
   // assert(M >= N);
   // Can also be malloc with: k1[0] = 0, k2[0:2] = 0
-  size_t buflen = klen + 4 + 4 ;
-  int* k1 = &((int*) malloc((buflen) * sizeof(int)))[0];
-  int* k2 = &((int*) malloc((buflen) * sizeof(int)))[0];
+  size_t buflen = klen + 4 + 4;
+  int* k1 = &((int*)malloc((buflen) * sizeof(int)))[0];
+  int* k2 = &((int*)malloc((buflen) * sizeof(int)))[0];
   int* _k1 = &k1[4];
   int* _k2 = &k2[4];
 
   memset(k1, 0, sizeof(int) * buflen);
   memset(k2, 0, sizeof(int) * buflen);
-  auto score_right = xdrop_restricted_extend_right<X, GAP_PENALTY, std::vector<std::vector<int8_t>>, int>(
-    query.data(), N, querySeedBeginPos,
-    reference.data(), M, referenceSeedBeginPos,
-    seedLength, sim.toVector(), _k1, _k2, klen);
+  auto score_left = xdrop_smart_restricted_extend_left<X, GAP_PENALTY, std::vector<std::vector<int8_t>>, int>(
+      query.data(), N, querySeedBeginPos,
+      reference.data(), M, referenceSeedBeginPos,
+      seedLength, sim.toVector(), _k1, _k2, klen);
 
   memset(k1, 0, sizeof(int) * buflen);
   memset(k2, 0, sizeof(int) * buflen);
-  auto score_left = xdrop_restricted_extend_left<X, GAP_PENALTY, std::vector<std::vector<int8_t>>, int>(
-    query.data(), N, querySeedBeginPos,
-    reference.data(), M, referenceSeedBeginPos,
-    seedLength, sim.toVector(), _k1, _k2, klen);
+  auto score_right = xdrop_smart_restricted_extend_right<X, GAP_PENALTY, std::vector<std::vector<int8_t>>, int>(
+      query.data(), N, querySeedBeginPos,
+      reference.data(), M, referenceSeedBeginPos,
+      seedLength, sim.toVector(), _k1, _k2, klen);
 
   free(&k2[0]);
   free(&k1[0]);

@@ -357,7 +357,8 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         graph.connect(vtx["seedLength"], seedLength);
       } else if (vtype == VertexType::xdroprestrictedseedextend) {
         int scaledMaxAB = maxSequenceLength * bandPercentageXDrop;
-        auto k_T = graph.addVariable(sType, {2, ((size_t)scaledMaxAB+2+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
+        const int LR_offsert = 20;
+        auto k_T = graph.addVariable(sType, {2, ((size_t)scaledMaxAB+2 * LR_offsert) * workerMultiplier}, "K[" + std::to_string(i) + "]");
         graph.connect(vtx["restrictedSize"], scaledMaxAB);
         // graph.connect(vtx["maxSequenceLength"], maxSequenceLength);
         graph.setTileMapping(k_T, tileIndex);
