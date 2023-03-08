@@ -11,6 +11,8 @@ using namespace swatlib;
 #include <vector>
 #endif
 
+#include <type_traits>
+
 #ifdef __IPU__
 #include <print.h>
 
@@ -24,7 +26,15 @@ using namespace swatlib;
 
 template <typename T>
 inline T max(T a, T b) {
+#ifdef __IPU__
+  if constexpr (std::is_same<T, float>()) {
+    return __builtin_ipu_max(a, b);
+  } else {
+    return a > b ? a : b;
+  }
+#else
   return a > b ? a : b;
+#endif
 }
 
 template <typename T>
@@ -34,7 +44,15 @@ inline T max(T a, T b, T c) {
 
 template <typename T>
 inline T min(T a, T b) {
+#ifdef __IPU__
+  if constexpr (std::is_same<T, float>()) {
+    return __builtin_ipu_min(a, b);
+  } else {
+    return a > b ? b : a;
+  }
+#else
   return a > b ? b : a;
+#endif
 }
 
 template <typename T>
@@ -42,7 +60,6 @@ inline T min(T a, T b, T c) {
   return min<T>(min<T>(a, c), c);
 }
 
-const int neginf = -999999;
 
 namespace ipumacore {
 namespace xdrop {
@@ -53,6 +70,7 @@ namespace debug {
 
 template <int X, int GAP_PENALTY>
 int xdrop(const std::string& query, const std::string& reference, bool cut) {
+  const int neginf = -999999;
   auto encoder = getEncoder(DataType::nucleicAcid);
   auto sim = selectMatrix(Similarity::nucleicAcid, 1, -1, -1);
   auto ref = encoder.encode(reference);
@@ -150,6 +168,7 @@ int xdrop(const std::string& query, const std::string& reference, bool cut) {
 
 template <int X, int GAP_PENALTY, bool reversed, typename simT, typename sType>
 inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* query, int N, const uint8_t* reference, int M, simT sim, sType* k1, sType* k2) {
+  const sType neginf = -999999;
   // printf("NORMAL: N = %d, M = %d\n", N, M);
   if (N == 0 || M == 0) {
     return 0;
@@ -189,8 +208,8 @@ inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* quer
     for (size_t i = L; i < U + 1; i++) {
       int32_t j = k - i - 1;
       sType new_lastval = k1[i];
-      sType score = max<sType>(k2[i] - GAP_PENALTY,
-                               k2[i - 1] - GAP_PENALTY,
+      sType score = max<sType>(k2[i] - (sType) GAP_PENALTY,
+                               k2[i - 1] - (sType) GAP_PENALTY,
                                lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
 #ifdef PRINT_DEBUG
       PLOGW.printf("i %d, j %d, k1[z - 1] (%d) + sim(reference[i] (%c), query[j] (%c)) (%d) => %d", i, j, k1[z - 1], reference[adrREF(i)], query[adrQER(j)], sim(reference[adrREF(i)], query[adrQER(j)]), score);
@@ -209,7 +228,7 @@ inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* quer
 
     int minL = 99999;
     for (size_t i = L; i < U + 1; i++) {
-      int s = k1[i];
+      sType s = k1[i];
       if (s > neginf) {
         minL = i;
         break;
@@ -218,7 +237,7 @@ inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* quer
 
     int maxU = 0;
     for (size_t i = L; i < U + 1; i++) {
-      int s = k1[i];
+      sType s = k1[i];
       if (s > neginf) {
         maxU = i;
       }
@@ -258,6 +277,7 @@ int xdrop_doubleband_cpu(const std::vector<uint8_t>& query, const std::vector<ui
 
 template <int X, int GAP_PENALTY, bool reversed, typename simT, typename sType>
 inline __attribute__((always_inline)) int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* reference, int M, simT sim, sType* t1, sType* t2, int klen) {
+  const sType neginf = -999999;
   // printf("RESTRICTED: N = %d, M = %d\n", N, M);
   auto tmp = klen;
   // for (size_t i = 0; i < tmp; i++) {
@@ -302,7 +322,7 @@ inline __attribute__((always_inline)) int xdrop_doubleband_restricted(const uint
       auto j = k - i - 1;
 
       sType new_lastval = _t1[i];
-      sType score = max<sType>(_t2[i] - GAP_PENALTY, _t2[i - 1] - GAP_PENALTY, lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
+      sType score = max<sType>(_t2[i] -  (sType) GAP_PENALTY, _t2[i - 1] -  (sType) GAP_PENALTY, lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
       // printf("score[%d]: %d = max(%d, %d, %d)\n", i, score, _t2[i] - GAP_PENALTY, _t2[i - 1] - GAP_PENALTY, lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
       // printf("   lv: %d, sim %d,[v %d, i %d][v %d, i %d]\n", lastval,  sim[reference[adrREF(i)]][query[adrQER(j)]], reference[adrREF(i)], adrREF(i), query[adrQER(j)], adrQER(j));
 
@@ -324,7 +344,7 @@ inline __attribute__((always_inline)) int xdrop_doubleband_restricted(const uint
 
     int minL = 99999;
     for (size_t i = L; i < U + 1; i++) {
-      int s = __t1[i];
+      sType s = __t1[i];
       if (s > neginf) {
         minL = i;
         break;
@@ -333,7 +353,7 @@ inline __attribute__((always_inline)) int xdrop_doubleband_restricted(const uint
 
     int maxU = 0;
     for (size_t i = L; i < U + 1; i++) {
-      int s = __t1[i];
+      sType s = __t1[i];
       if (s > neginf) {
         maxU = i;
       }
@@ -413,19 +433,6 @@ inline __attribute__((always_inline)) sType xdrop_restricted_extend_left(const u
       sim, k1, k2, klen);
 }
 
-inline __attribute__((always_inline)) void setZero(void* p, unsigned char v, int n) {
-// #ifndef __IPU__XAA
-  // memset(p, v, n);
-// #else
-//   int2* o = reinterpret_cast<int2*>(p);
-//   const int2 zzero = {0, 0};
-//   const rptsize_t loopCount = ((n >> 4) << 1) + 1;
-//   for (unsigned i = 0; i < loopCount; i++) {
-//     ipu::store_postinc(&o, zzero, 1);
-//   }
-// #endif
-}
-
 // Smart Switching
 template <int X, int GAP_PENALTY, typename simT, typename sType>
 inline __attribute__((always_inline)) sType xdrop_smart_restricted_extend_left(const uint8_t* a, int a_len, int a_seed_begin, const uint8_t* b, int b_len, int b_seed_begin, int seedLength, simT sim, sType* k1, sType* k2, int klen) {
@@ -438,16 +445,12 @@ inline __attribute__((always_inline)) sType xdrop_smart_restricted_extend_left(c
   int mlen = min<int>(a_len_real, b_len_real);
 
   if (mlen >= klen) {
-    setZero(k1, 0, (klen) * sizeof(sType));
-    setZero(k2, 0, (klen) * sizeof(sType));
     return xdrop_doubleband_restricted<X, GAP_PENALTY, true, simT, sType>(
         a, a_seed_begin,
         b, b_seed_begin,
         sim, k1, k2, klen);
 
   } else {
-    setZero(k1, 0, (klen) * sizeof(sType));
-    setZero(k2, 0, (klen) * sizeof(sType));
     return xdrop_doubleband<X, GAP_PENALTY, true, simT, sType>(
         a, a_seed_begin,
         b, b_seed_begin,
@@ -466,15 +469,11 @@ inline __attribute__((always_inline)) sType xdrop_smart_restricted_extend_right(
   }
   int mlen = min<int>(a_len_real, b_len_real);
   if (mlen >= klen) {
-    setZero(k1, 0, (klen) * sizeof(sType));
-    setZero(k2, 0, (klen) * sizeof(sType));
     return xdrop_doubleband_restricted<X, GAP_PENALTY, false, simT, sType>(
         a + seedLength + a_seed_begin, a_len - seedLength - a_seed_begin,
         b + seedLength + b_seed_begin, b_len - seedLength - b_seed_begin,
         sim, k1, k2, klen);
   } else {
-    setZero(k1, 0, (klen) * sizeof(sType));
-    setZero(k2, 0, (klen) * sizeof(sType));
     return xdrop_doubleband<X, GAP_PENALTY, false, simT, sType>(
         a + seedLength + a_seed_begin, a_len - seedLength - a_seed_begin,
         b + seedLength + b_seed_begin, b_len - seedLength - b_seed_begin,

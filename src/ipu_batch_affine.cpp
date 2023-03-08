@@ -243,7 +243,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         break;
       case VertexType::xdroprestrictedseedextend:
         // This ok?
-        sType = INT; 
+        sType = FLOAT; 
         workerMultiplier = target.getNumWorkerContexts();
         break;
       case VertexType::greedyxdrop:

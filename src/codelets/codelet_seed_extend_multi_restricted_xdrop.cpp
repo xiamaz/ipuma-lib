@@ -24,7 +24,7 @@ inline int min(int a, int b) {
 
 // typedef int sType;
 const int GAP_PENALTY = 1;
-typedef int sType;
+typedef float sType;
 
 class TileTelemetry {
  private:
@@ -41,7 +41,7 @@ class TileTelemetry {
     unsigned now_u = __builtin_ipu_get_scount_u();
     int64_t now = (((int64_t)now_u) << 32) | now_l;
     int64_t old = (((int64_t)cycle_counter_u) << 32) | cycle_counter_l;
-    return (unsigned) now-old;
+    return (unsigned)now - old;
   }
 
   void reset() {
@@ -97,7 +97,6 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
       memset((char*)&score[0], 0, maxNPerTile * sizeof(score[0]));
       // memset((char*)&ARange[0], 0, maxNPerTile * sizeof(ARange[0]));
     }
-    // auto tt = TileTelemetry();
     for (; myN < maxNPerTile * 2;) {
       // const bool isLeft = myN % 2 == 0;
       const int n = myN / 2;
@@ -128,20 +127,20 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
 
       // comps[myN] = 1;
 
+      // auto tt = TileTelemetry();
       if (a_seed_begin == -1) {
-      //  if (isLeft) {
-      //    ARange[n/2] += tt.cycle_counter_diff();
-      //  } else {
-      //    BRange[n/2] += tt.cycle_counter_diff();
-      //  }
-       for (int i = 0; i < workerId * 5; i++) {
-        asm volatile("nop":::"memory");
-       }
-        score[n] = 0;
+        // if (myN % 2 == 0) {
+        //   ARange[n] += tt.cycle_counter_diff();
+        // } else {
+        //   BRange[n] += tt.cycle_counter_diff();
+        // }
+        for (int i = 0; i < workerId * 5; i++) {
+          asm volatile("nop" ::: "memory");
+        }
       } else {
         if (myN % 2 == 0) {
-      memset(k1, 0, (klen) * sizeof(sType));
-      memset(k2, 0, (klen) * sizeof(sType));
+          memset(k1, 0, (klen) * sizeof(sType));
+          memset(k2, 0, (klen) * sizeof(sType));
           sType lpartscore = ipumacore::xdrop::xdrop_smart_restricted_extend_left<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
               a, a_len, a_seed_begin,
               b, b_len, b_seed_begin,
@@ -150,21 +149,19 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
           ARange[n] = lpartscore;
 
         } else {
-      // memset(k1, 0, (klen) * sizeof(sType));
-      // memset(k2, 0, (klen) * sizeof(sType));
-      memset(k1, 0, (klen) * sizeof(sType));
-      memset(k2, 0, (klen) * sizeof(sType));
+          memset(k1, 0, (klen) * sizeof(sType));
+          memset(k2, 0, (klen) * sizeof(sType));
           sType rpartscore = ipumacore::xdrop::xdrop_smart_restricted_extend_right<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
-              a, a_len, a_seed_begin,
-              b, b_len, b_seed_begin,
-              seedLength,
-              simMatrix, _k1, _k2, restrictedSize) + 17;
+                                 a, a_len, a_seed_begin,
+                                 b, b_len, b_seed_begin,
+                                 seedLength,
+                                 simMatrix, _k1, _k2, restrictedSize);
           BRange[n] = rpartscore;
         }
 
-          // Right hand side
+        // Right hand side
 
-          // score[n] = rpartscore + lpartscore;
+        // score[n] = rpartscore + lpartscore;
         // printf("XXXXXXXXXX: %d\n", partscore);
         // partscore = lpartscore + rpartscore + 17;
         // printf("[%d] %d => (%d|%d) :: %d => (%d|%d) :: (%d|%d) = %d\n",n, a_len, a_seed_begin, a_len - a_seed_begin -17, b_len, b_seed_begin, b_len - b_seed_begin - 17 ,lpartscore, rpartscore,lpartscore + rpartscore);
@@ -182,11 +179,11 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
       // incurrect results. However, double work can be done, which we accept.
       {
         myN = *globalN;
-        (*globalWB) = (myN+1);
+        (*globalWB) = (myN + 1);
       }
     }
     // ARange[workerId] = tt.cycle_counter_diff();
-    //printf("AAA: %d\n", (unsigned) tt.cycle_counter_diff());
+    // printf("AAA: %d\n", (unsigned) tt.cycle_counter_diff());
     // printf("AAA: %d\n", (unsigned) count);
 
     // printf("AAA: %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", comps[0], comps[1], comps[2], comps[3], comps[4], comps[5], comps[6], comps[7], comps[8], comps[9], comps[10], comps[11], comps[12], comps[13], comps[14], comps[15], comps[16], comps[17], comps[18], comps[19]);
