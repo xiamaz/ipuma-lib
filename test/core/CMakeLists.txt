@@ -1,13 +1,14 @@
 add_subdirectory("${PROJECT_SOURCE_DIR}/googletest" "googletest")
 set(BINARY ipuma-core)
 
-set(TEST_SOURCES main.cpp ipuma-core_integration.cpp)
+set(TEST_SOURCES main.cpp elba_integration.cpp)
 
 set(SOURCES ${TEST_SOURCES})
 
 add_executable(${BINARY} ${TEST_SOURCES} ${MHM2_TARGET_OBJECTS})
 
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DSEQAN_ENABLE_DEBUG=0")
+# set(CMAKE_CXX_FLAGS_DEBUG "-O1 -DSEQAN_ENABLE_DEBUG=0 -g -Wall -Wpedantic -fsanitize=address")
 
 
 target_include_directories(ipuma-core PRIVATE

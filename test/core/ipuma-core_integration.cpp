@@ -109,12 +109,13 @@ TEST_F(ParityIntegrationTest, XDropToSSW) {
     .similarity = swatlib::Similarity::nucleicAcid,
     .datatype = swatlib::DataType::nucleicAcid,
   }, {
-    .numVertices = 1,
+    .numVertices = 1472,
     .maxSequenceLength = 1000,
     .maxComparisonsPerVertex = 10,
     .vertexBufferSize = 10000,
-    .vtype = ipu::VertexType::multixdrop,
+    .vtype = ipu::VertexType::xdrop,
     .fillAlgo = ipu::Algorithm::fillFirst,
+    .bandPercentageXDrop = 1.0,
     .seedLength = 2,
   });
 
@@ -132,6 +133,7 @@ TEST_F(ParityIntegrationTest, XDropToSSW) {
     auto ref = encoder.encode(global_seqVs);
     auto quer = encoder.encode(global_seqHs);
     auto core_score = alignSingleOnIpu(algo, global_seqHs, global_seqVs);
+    std::cout << core_score << " " << ssw_score << std::endl;
     ASSERT_EQ(ssw_score, core_score) << "\nHSeq: " << seqHs[i] << "\nVSeq: " << seqVs[i] << alignSeqSeqan(seqHs[i], seqVs[i], drop);
     // ASSERT_GT(ssw_score/(double)core_score, 0.85);
   }

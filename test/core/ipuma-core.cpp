@@ -100,7 +100,7 @@ class ParityTest : public ::testing::Test {
 };
 
 TEST_F(ParityTest, SeqAnToSSW) {
-  for (int i = 0; i < seqHs.size(); i++) {
+  for (auto i = 0; i < seqHs.size(); i++) {
     auto max_len = std::max(seqHs[i].size(), seqVs[i].size()) + 1;
     std::string global_seqHs = initerstring(max_len) + seqHs[i] + initerstring(max_len);
     std::string global_seqVs = initerstring(max_len) + seqVs[i] + initerstring(max_len);
@@ -113,7 +113,7 @@ TEST_F(ParityTest, SeqAnToSSW) {
 
 TEST_F(ParityTest, XDropToSSW) {
   const int drop = 1000;
-  for (int i = 0; i < seqHs.size(); i++) {
+  for (auto i = 0; i < seqHs.size(); i++) {
     auto max_len = std::max(seqHs[i].size(), seqVs[i].size()) + 1;
     std::string global_seqHs = initerstring(max_len) + seqHs[i];
     std::string global_seqVs = initerstring(max_len) + seqVs[i];
@@ -132,8 +132,7 @@ TEST_F(ParityTest, XDropToSSW) {
 
 TEST_F(ParityTest, XDropToSeqAn) {
   const int drop = 10000;
-  for (int i = 0; i < seqHs.size(); i++) {
-    auto max_len = std::max(seqHs[i].size(), seqVs[i].size()) + 1;
+  for (auto i = 0; i < seqHs.size(); i++) {
     std::string global_seqHs = seqHs[i];
     std::string global_seqVs = seqVs[i];
 
@@ -150,8 +149,7 @@ TEST_F(ParityTest, XDropToSeqAn) {
 
 TEST_F(ParityTest, XDropToXDropRestrictedUnrestrictedX2) {
   const int drop = 2;
-  for (int i = 0; i < seqHs.size(); i++) {
-    auto max_len = std::max(seqHs[i].size(), seqVs[i].size()) + 1;
+  for (auto i = 0; i < seqHs.size(); i++) {
     std::string global_seqHs = seqHs[i];
     std::string global_seqVs = seqVs[i];
 
@@ -168,7 +166,7 @@ TEST_F(ParityTest, XDropToXDropRestrictedUnrestrictedX2) {
 
 TEST_F(ParityTest, XDropToXDropRestrictedX2) {
   const int drop = 2;
-  for (int i = 0; i < seqHs.size(); i++) {
+  for (auto i = 0; i < seqHs.size(); i++) {
     auto max_len = std::max(seqHs[i].size(), seqVs[i].size()) + 1;
     std::string global_seqHs = seqHs[i];
     std::string global_seqVs = seqVs[i];
@@ -186,7 +184,7 @@ TEST_F(ParityTest, XDropToXDropRestrictedX2) {
 
 TEST_F(ParityTest, XDropSeedExtend) {
   const int drop = 20;
-  for (int i = 0; i < seedExtendSeqVs.size(); i++) {
+  for (auto i = 0; i < seedExtendSeqVs.size(); i++) {
     ASSERT_EQ(std::get<0>(seedExtendSeqHs[i]), std::get<0>(seedExtendSeqVs[i]));
     std::string global_seqHs = std::get<2>(seedExtendSeqHs[i]);
     std::string global_seqVs = std::get<2>(seedExtendSeqVs[i]);

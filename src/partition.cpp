@@ -229,6 +229,7 @@ namespace partition {
       .sizeB = sizeB,
       .seeds = cmp.seeds,
       .complexity = complexity,
+      // .complexity = cmp.real_complexity,
     };
   }
 

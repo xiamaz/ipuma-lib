@@ -65,10 +65,16 @@ std::tuple<ipu::RawSequences, ipu::Comparisons> prepareComparisons(std::string s
     if (fHValid & fVValid & fHsValid & fVsValid) {
       seqs.push_back(lH);
       seqs.push_back(lV);
+      const int sizeA = (int) seqs[(int) (2 * i)].size();
+ const int sizeB =       (int) seqs[(int) (2 * i + 1)].size();
       cmps.push_back({
+        i,
         (int) (2 * i),
+        sizeA,
         (int) (2 * i + 1),
+        sizeB,
         {{sH, sV}},
+        // 0,
       });
       i++;
     } else {

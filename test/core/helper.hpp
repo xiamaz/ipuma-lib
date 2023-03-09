@@ -69,3 +69,19 @@ inline std::string initerstring(int minlen) {
   }
   return x;
 }
+
+void loadSequences(const std::string& path, std::vector<std::string>& sequences) {
+  std::ifstream seqFile(path);
+  std::string line;
+  while (std::getline(seqFile, line)) {
+    sequences.push_back(line);
+  }
+}
+
+void loadSeedpos(const std::string& path, std::vector<size_t>& seeds) {
+  std::ifstream file(path);
+  int i;
+  while (file >> i) {
+    seeds.push_back(i);
+  }
+}
