@@ -39,5 +39,5 @@ struct Batch {
   int8_t* getMetaBuffer();
 };
 
-std::vector<Batch> create_batches(const RawSequences& Seqs, const Comparisons& Cmps, const IPUAlgoConfig& algoconfig, const SWConfig& config);
+std::vector<Batch> create_batches(const RawSequences& Seqs, Comparisons& Cmps, const IPUAlgoConfig& algoconfig, const SWConfig& config);
 }

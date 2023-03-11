@@ -84,6 +84,8 @@ void to_json(json& j, const IPUAlgoConfig& c) {
                 {"vertexBufferSize", c.vertexBufferSize},
                 {"vtype", c.vtype},
                 {"fillAlgo", c.fillAlgo},
+                {"complexityAlgo", c.complexityAlgo},
+                {"partitioningSortComparisons", c.partitioningSortComparisons},
                 {"forwardOnly", c.forwardOnly},
                 {"ioTiles", c.ioTiles},
                 {"xDrop", c.xDrop},
@@ -99,6 +101,8 @@ void from_json(const json& j, IPUAlgoConfig& c) {
         j.at("vertexBufferSize").get_to(c.vertexBufferSize);
         j.at("vtype").get_to(c.vtype);
         j.at("fillAlgo").get_to(c.fillAlgo);
+        j.at("complexityAlgo").get_to(c.complexityAlgo);
+        j.at("partitioningSortComparisons").get_to(c.partitioningSortComparisons);
         j.at("forwardOnly").get_to(c.forwardOnly);
         j.at("ioTiles").get_to(c.ioTiles);
         j.at("xDrop").get_to(c.xDrop);

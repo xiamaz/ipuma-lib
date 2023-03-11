@@ -580,7 +580,7 @@ void SWAlgorithm::blocking_join(Job& job) {
 #endif
 }
 
-std::vector<Batch> SWAlgorithm::create_batches(const RawSequences& seqs, const Comparisons& cmps) {
+std::vector<Batch> SWAlgorithm::create_batches(const RawSequences& seqs, Comparisons& cmps) {
   auto batches = ipu::create_batches(seqs, cmps, algoconfig, config);
   return batches;
 }

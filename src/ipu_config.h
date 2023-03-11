@@ -8,6 +8,10 @@
 #define KLIGN_IPU_MAX_SEQUENCE_LENGTH 10000
 #endif
 
+#ifndef KLIGN_IPU_COMPLEXITY_ALGO
+#define KLIGN_IPU_COMPLEXITY_ALGO "xdrop"
+#endif
+
 #ifndef KLIGN_IPU_NUM_VERTICES
 #define KLIGN_IPU_NUM_VERTICES 1472
 #endif
@@ -77,6 +81,8 @@ struct IPUAlgoConfig {
   int vertexBufferSize = KLIGN_IPU_VERTEX_BUFFER_SIZE; // total size of buffer for A and B individually
   VertexType vtype = strToVertexType(KLIGN_IPU_VTYPE);
   Algorithm fillAlgo = strToAlgorithm(KLIGN_IPU_PARTITION_ALGO);
+  Complexity complexityAlgo = strToComplexity(KLIGN_IPU_COMPLEXITY_ALGO);
+  bool partitioningSortComparisons = true;
   bool forwardOnly = false; // do not calculate the start position of a match, this should approx 2x performance, as no reverse pass is needed
   int ioTiles = 0;
 

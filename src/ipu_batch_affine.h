@@ -71,7 +71,7 @@ class SWAlgorithm : public IPUAlgorithm {
   // Convenience (checkSequenceSizes, fillMNBuckets, fill_input_buffer)
   std::vector<Batch> create_batches(
     const RawSequences& Seqs,
-    const Comparisons& Cmps
+    Comparisons& Cmps
   );
 
   Job* async_submit(Batch* batch);

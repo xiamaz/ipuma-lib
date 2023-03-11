@@ -19,7 +19,11 @@ struct Comparison {
 	int32_t indexB;
 	int32_t sizeB;
 	std::array<SeedPair, NSEEDS> seeds;
-	// int real_complexity = 0;
+	size_t complexity;
+
+  bool operator<(const Comparison& other) const;
+
+	std::string toString() const;
 };
 
 struct MultiComparison {
@@ -58,11 +62,19 @@ static const std::string typeLabels[] = {"SWAffine", "SWAffineAsm", "MultiSWAffi
 
 enum class Algorithm {fillFirst, roundRobin, greedy};
 static const std::vector<std::string> algoNames = {"fillfirst", "roundrobin", "greedy"};
+
+enum class Complexity {precomputed, cellcount, sequence_length, xdrop};
+static const std::vector<std::string> complexityNames = {"precomputed", "cellcount", "sequence_length", "xdrop"};
+
 std::string vertexTypeToIpuLabel(VertexType v);
 std::string vertexTypeToConfigString(VertexType v);
-std::string algorithmToConfigString(Algorithm a);
 VertexType strToVertexType(std::string s);
+
+std::string algorithmToConfigString(Algorithm a);
 Algorithm strToAlgorithm(std::string s);
+
+std::string complexityToConfigString(Complexity);
+Complexity strToComplexity(std::string s);
 }
 
 #endif

@@ -68,7 +68,7 @@ BlockAlignmentResults Batch::get_result() {
   return {scores, a_range_result, b_range_result};
 }
 
-std::vector<Batch> create_batches(const RawSequences& seqs, const Comparisons& cmps, const IPUAlgoConfig& algoconfig, const SWConfig& config) {
+std::vector<Batch> create_batches(const RawSequences& seqs, Comparisons& cmps, const IPUAlgoConfig& algoconfig, const SWConfig& config) {
   std::vector<swatlib::TickTock> stageTimers(3);
   stageTimers[0].tick();
   stageTimers[1].tick();
@@ -120,32 +120,25 @@ std::vector<Batch> create_batches(const RawSequences& seqs, const Comparisons& c
 
       cmpT.tick();
       for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
-        const auto& comparison = bucketMapping.cmps[i];
+        const auto& comparisonMapping = bucketMapping.cmps[i];
+        auto* cmp = comparisonMapping.comparison;
         if (isSeeded) {
           auto* bucketMeta = (XDropMeta*)(metaInput) + algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex;
-          bucketMeta[i] = {
-            {
-              .sizeA = static_cast<int32_t>(comparison.sizeA),
-              .offsetA = static_cast<int32_t>(comparison.offsetA),
-              .sizeB = static_cast<int32_t>(comparison.sizeB),
-              .offsetB = static_cast<int32_t>(comparison.offsetB),
-            },
-            .seedAStartPos = static_cast<int32_t>(comparison.seedAStartPos),
-            .seedBStartPos = static_cast<int32_t>(comparison.seedBStartPos),
-          };
+          for (int j = 0; j < NSEEDS; ++j) {
+            bucketMeta[i * NSEEDS + j] = {
+              comparisonMapping.createMeta(),
+              .seedAStartPos = static_cast<int32_t>(cmp->seeds[j].seedAStartPos),
+              .seedBStartPos = static_cast<int32_t>(cmp->seeds[j].seedBStartPos),
+            };
+          }
         } else {
           auto* bucketMeta = (SWMeta*)(metaInput) + algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex;
-          bucketMeta[i] = {
-            .sizeA = static_cast<int32_t>(comparison.sizeA),
-            .offsetA = static_cast<int32_t>(comparison.offsetA),
-            .sizeB = static_cast<int32_t>(comparison.sizeB),
-            .offsetB = static_cast<int32_t>(comparison.offsetB),
-          };
+          bucketMeta[i] = comparisonMapping.createMeta();
         }
 
-        batch.origin_comparison_index[algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex + i] = comparison.comparisonIndex;
+        batch.origin_comparison_index[algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex + i] = cmp->originalComparisonIndex;
 
-        cellCount += comparison.sizeA * comparison.sizeB;
+        cellCount += cmp->sizeA * cmp->sizeB;
         comparisonCount++;
       }
       cmpT.tock();

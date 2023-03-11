@@ -1,4 +1,5 @@
 #include "partition.h"
+#include "complexity.h"
 
 #include <sstream>
 #include <functional>
@@ -23,7 +24,7 @@ namespace ipu {
 namespace partition {
   std::string ComparisonMapping::toString() const {
     std::stringstream ss;
-    ss << "CM[" << comparisonIndex << ": a(l" << sizeA << " o" << offsetA << ") b(l" << sizeB << " o" << offsetB << ")]";
+    ss << "CM[" << comparison->toString() << ": a(o" << offsetA << ") b(o" << offsetB << ")]";
     return ss.str();
   }
 
@@ -44,9 +45,9 @@ namespace partition {
     return ss.str();
   }
 
-  bool Bucket::addComparison(const ComparisonData& d) {
+  bool Bucket::addComparison(const Comparison& d) {
     size_t newTotalLength = totalSequenceLength + d.sizeA + d.sizeB;
-    size_t newTotalCmps = cmps.size() + NSEEDS;
+    size_t newTotalCmps = cmps.size() * NSEEDS + NSEEDS;
 
     if (newTotalLength <= sequenceCapacity && newTotalCmps <= comparisonCapacity) {
       size_t offsetA = totalSequenceLength;
@@ -64,20 +65,14 @@ namespace partition {
       if (d.seeds.size() != NSEEDS) {
         throw std::runtime_error("Number of seeds needs to match NSEEDS");
       }
-      for (size_t i = 0; i < NSEEDS; i++) {
-        cmps.push_back({
-          .comparisonIndex = d.comparisonIndex,
-          .sizeA = d.sizeA,
-          .offsetA = offsetA,
-          .sizeB = d.sizeB,
-          .offsetB = offsetB,
-          .seedAStartPos = (size_t) d.seeds[i].seedAStartPos,
-          .seedBStartPos = (size_t) d.seeds[i].seedBStartPos,
-        });
-      }
+      cmps.push_back({
+        .offsetA = (size_t) offsetA,
+        .offsetB = (size_t) offsetB,
+        .comparison = &d
+      });
 
       totalSequenceLength = newTotalLength;
-      longestLength = std::max({longestLength, d.sizeA, d.sizeB});
+      longestLength = std::max({longestLength, (size_t) d.sizeA, (size_t) d.sizeB});
       totalCells += d.sizeA * d.sizeB * NSEEDS;
       return true;
     }
@@ -120,13 +115,13 @@ namespace partition {
 
     PartitioningAlgorithm(const IPUAlgoConfig& config) : config(config), mappings{BatchMapping(config)} {
     }
-    virtual bool addComparison(const ComparisonData& cmpData, BatchMapping& curMapping) = 0;
+    virtual bool addComparison(const Comparison& cmpData, BatchMapping& curMapping) = 0;
 
     std::vector<BatchMapping> getMappings() {
       return std::move(mappings);
     }
 
-    bool addComparison(const ComparisonData& cmpData) {
+    bool addComparison(const Comparison& cmpData) {
       BatchMapping* curMapping = &mappings.back();
       if (!addComparison(cmpData, *curMapping)) {
         curMapping = &createBatch();
@@ -149,7 +144,7 @@ namespace partition {
       return mappings.back();
     }
 
-    bool addComparison(const ComparisonData& cmpData, BatchMapping& curMapping) override {
+    bool addComparison(const Comparison& cmpData, BatchMapping& curMapping) override {
       for (; bucketIndex < curMapping.buckets.size(); ++bucketIndex) {
         Bucket& bucket = curMapping.buckets[bucketIndex];
         if (bucket.addComparison(cmpData)) {
@@ -173,7 +168,7 @@ namespace partition {
   };
 
   class GreedyPartitioning : public PartitioningAlgorithm {
-    virtual bool addComparison(const ComparisonData& cmpData, BatchMapping& curMapping) override {
+    virtual bool addComparison(const Comparison& cmpData, BatchMapping& curMapping) override {
       BatchMapping& m = mappings.back();
       std::pop_heap(m.buckets.begin(), m.buckets.end(), cmp);
       Bucket& b = m.buckets.back();
@@ -212,48 +207,35 @@ namespace partition {
     throw std::runtime_error("Not any of supported algorithm");
   }
 
-  ComparisonData createCmpData(int i, const Comparison& cmp, const RawSequences& seqs) {
-    auto sizeA = seqs[cmp.indexA].size();
-    auto sizeB = seqs[cmp.indexB].size();
-    size_t complexity = 0;
-    for (const auto &pair : cmp.seeds) {
-     int left = pair.seedAStartPos * pair.seedBStartPos;
-     int right = (sizeA - 17 - pair.seedAStartPos) * (sizeB - 17 - pair.seedBStartPos);
-     complexity += (pair.seedAStartPos != -1 ? 1 : 0) * (left + right);
-    }
-    return {
-      .comparisonIndex = i,
-      .indexA = cmp.indexA,
-      .indexB = cmp.indexB,
-      .sizeA = sizeA,
-      .sizeB = sizeB,
-      .seeds = cmp.seeds,
-      .complexity = complexity,
-      // .complexity = cmp.real_complexity,
-    };
-  }
-
-  bool ComparisonData::operator<(const ComparisonData& other) const {
-    return this->complexity < other.complexity;
-  }
-
-  std::vector<BatchMapping> mapBatches(IPUAlgoConfig config, const RawSequences& Seqs, const Comparisons& Cmps) {
+  std::vector<BatchMapping> mapBatches(IPUAlgoConfig config, const RawSequences& Seqs, Comparisons& Cmps) {
 
     PLOGD << "Mapping " << Cmps.size() << " comparisons to batches";
-    std::vector<ComparisonData> cmpDatas(Cmps.size());
-    for (int i = 0; i < Cmps.size(); ++i) {
-      cmpDatas[i] = createCmpData(i, Cmps[i], Seqs);
+
+    PLOGD << "Set complexity using " << complexityToConfigString(config.complexityAlgo);
+    for (auto&& cmp : Cmps) {
+      cmp.complexity = calculateComplexity(cmp, config.complexityAlgo);
     }
 
-    PLOGD << "Sorting " << cmpDatas.size() << " comparison datas";
-    std::sort(cmpDatas.rbegin(), cmpDatas.rend());
+    if (config.partitioningSortComparisons) {
+      PLOGD << "Sorting comparisons";
+      std::sort(Cmps.rbegin(), Cmps.rend());
+    }
 
-    PLOGD << "Partitioning " << cmpDatas.size() << " comparison datas";
+    PLOGD << "Partitioning " << Cmps.size() << " comparison datas";
     auto Partitioner = createPartitioner(config);
     for (int i = 0; i < Cmps.size(); ++i) {
-      Partitioner->addComparison(cmpDatas[i]);
+      Partitioner->addComparison(Cmps[i]);
     }
     PLOGD << "Created " << Partitioner->mappings.size() << " batches";
     return Partitioner->getMappings();
   }
+
+SWMeta ComparisonMapping::createMeta() const {
+	return {
+		.sizeA = comparison->sizeA,
+		.offsetA = (int32_t) offsetA,
+    .sizeB = comparison->sizeB,
+    .offsetB = (int32_t) offsetB,
+	};
+}
 }}
