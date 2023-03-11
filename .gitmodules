@@ -10,3 +10,6 @@
 [submodule "extern/seqan3"]
 	path = extern/seqan3
 	url = https://github.com/seqan/seqan3.git
+[submodule "extern/genometools"]
+	path = extern/genometools
+	url = https://github.com/genometools/genometools.git

@@ -13,6 +13,7 @@
 #include "ipuma.h"
 #include "cmd_arguments.hpp"
 #include "alignment_seqan.hpp"
+#include "alignment_genometools.hpp"
 
 using json = nlohmann::json;
 
@@ -61,6 +62,9 @@ int main(int argc, char** argv) {
 	std::string vSeedPath = result["vSeedPath"].as<std::string>();
 
 	PLOGI << "CPUSWCONFIG" << json{config}.dump();
+
+	test();
+	return 0;
 
 	auto [seqs, cmps] = ipu::prepareComparisons(hPath, vPath, hSeedPath, vSeedPath);
 	PLOGI << ipu::getDatasetStats(seqs, cmps).dump();
