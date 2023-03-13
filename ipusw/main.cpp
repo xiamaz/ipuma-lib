@@ -75,6 +75,7 @@ int main(int argc, char** argv) {
 
 
   std::vector<ipu::BlockAlignmentResults> results;
+	std::vector<int32_t> scores(cmps.size());
   for (auto& batch : batches) {
     ipu::batchaffine::Job* j = driver.async_submit(&batch);
     assert(batch.cellCount > 0);
@@ -82,6 +83,19 @@ int main(int argc, char** argv) {
     driver.blocking_join(*j);
     results.push_back(batch.get_result());
     delete j;
+
+		// results parsing
+		for (int i = 0; i < batch.origin_comparison_index.size(); ++i) {
+			auto [orig_i, orig_seed] = ipu::unpackOriginIndex(batch.origin_comparison_index[i]);
+			if (orig_i >= 0) {
+				scores[orig_i] = std::max(results.back().scores[i][orig_seed], scores[orig_i]);
+			}
+		}
   }
+
+	if (config.output != "") {
+		std::ofstream ofile(config.output);
+		ofile << json{scores};
+	}
   return 0;
 }

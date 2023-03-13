@@ -14,6 +14,7 @@ struct IpuSwConfig {
 	int numThreads = 1; // number of threads for submitting work to the IPU devices
 	bool duplicateDatasets = false;
 	int duplicationFactor = 0;
+	std::string output = "";
 	int repeat = 1; // number of repeated runs
 
 	IpuSwConfig() {}
@@ -31,6 +32,7 @@ void to_json(json& j, const IpuSwConfig& c) {
 		{"numThreads", c.numThreads},
 		{"duplicateDatasets", c.duplicateDatasets},
 		{"duplicationFactor", c.duplicationFactor},
+		{"output", c.output},
 		{"repeat", c.repeat}
 	};
 }
@@ -42,6 +44,7 @@ void from_json(const json& j, IpuSwConfig& c) {
 	j.at("numThreads").get_to(c.numThreads);
 	j.at("duplicateDatasets").get_to(c.duplicateDatasets);
 	j.at("duplicationFactor").get_to(c.duplicationFactor);
+	j.at("output").get_to(c.output);
 	j.at("repeat").get_to(c.repeat);
 }
 #endif
