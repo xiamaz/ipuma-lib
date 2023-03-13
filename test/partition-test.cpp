@@ -22,7 +22,7 @@ TEST_F(PartitioningTest, fullFillFirst) {
     1000 /*maxSequenceLength*/,
     200000,
     sequence_length * 2 * 10,
-    ipu::VertexType::multixdrop,
+    ipu::VertexType::xdroprestrictedseedextend,
     ipu::Algorithm::fillFirst,
   };
   size_t totalBufsize = config.vertexBufferSize * config.numVertices;
@@ -45,7 +45,7 @@ TEST_F(PartitioningTest, fullGreedy) {
     1000 /*maxSequenceLength*/,
     200000,
     sequence_length * 2 * 10,
-    ipu::VertexType::multixdrop,
+    ipu::VertexType::xdroprestrictedseedextend,
     ipu::Algorithm::greedy,
   };
   size_t totalBufsize = config.vertexBufferSize * config.numVertices;
@@ -74,7 +74,7 @@ TEST_F(PartitioningTest, MultiBatchSizedCount) {
     1000 /*maxSequenceLength*/,
     200000,
     sequence_length * 2 * 10,
-    ipu::VertexType::multixdrop,
+    ipu::VertexType::xdroprestrictedseedextend,
     ipu::Algorithm::fillFirst,
   };
   size_t totalBufsize = config.vertexBufferSize * config.numVertices;
@@ -91,8 +91,8 @@ TEST_F(PartitioningTest, MultiBatchSizedCount) {
   size_t bufsum = 0;
     for (auto && bucket : batch.buckets) {
       for (auto && cmp : bucket.cmps) {
-        bufsum += cmp.comparison->sizeA;
-        bufsum += cmp.comparison->sizeB;
+        bufsum += cmp.comparison.sizeA;
+        bufsum += cmp.comparison.sizeB;
       }
     }
     ASSERT_EQ(bufsum,  2 * numberCmps * sequence_length);

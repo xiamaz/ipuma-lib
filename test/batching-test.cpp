@@ -16,7 +16,7 @@ TEST(BatchingTest, testOriginComparisonIndex) {
     10000 /*maxSequenceLength*/,
     20,
     sequence_length * 2 * 10,
-    ipu::VertexType::xdropseedextend,
+    ipu::VertexType::xdroprestrictedseedextend,
     ipu::Algorithm::greedy,
   };
   size_t totalBufsize = config.vertexBufferSize * config.numVertices;
@@ -78,7 +78,7 @@ TEST(BatchingTest, testValidNumberCmps) {
     100 /*maxSequenceLength*/,
     20,
     sequence_length * 2 * 10,
-    ipu::VertexType::xdropseedextend,
+    ipu::VertexType::xdroprestrictedseedextend,
     ipu::Algorithm::fillFirst,
   };
   size_t totalBufsize = config.vertexBufferSize * config.numVertices;
@@ -123,7 +123,7 @@ TEST(BatchingTest, testUniformCorrectness) {
     100 /*maxSequenceLength*/,
     14,
     sequence_length * 2 * 10,
-    ipu::VertexType::xdropseedextend,
+    ipu::VertexType::xdroprestrictedseedextend,
     ipu::Algorithm::fillFirst,
   };
   size_t totalBufsize = config.vertexBufferSize * config.numVertices;
