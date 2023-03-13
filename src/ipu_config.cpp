@@ -14,11 +14,12 @@ int IPUAlgoConfig::getMetaBufferSize32b() const {
         return getTotalNumberOfComparisons() * getMetaStructSize32b();
 };
 
+bool IPUAlgoConfig::hasSeeds() const {
+        return isSeeded(vtype);
+}
+
 int IPUAlgoConfig::getMetaStructSize32b() const {
         switch(this->vtype) {
-        case VertexType::xdropseedextend:
-                return get32bSize(sizeof(XDropMeta));
-                break;
         case VertexType::xdroprestrictedseedextend:
                 return get32bSize(sizeof(XDropMeta));
                 break;

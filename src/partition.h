@@ -13,7 +13,7 @@ namespace ipu { namespace partition {
   struct ComparisonMapping {
     size_t offsetA;
     size_t offsetB;
-    const Comparison* comparison;
+    Comparison comparison;
 
 	  SWMeta createMeta() const;
 
@@ -44,6 +44,7 @@ namespace ipu { namespace partition {
     Bucket(int bucketIndex, size_t sequenceCapacity, size_t comparisonCapacity);
 
     bool addComparison(const Comparison&);
+    bool addComparison(const MultiComparison&);
 
     std::string toString() const;
   };
@@ -64,7 +65,14 @@ namespace ipu { namespace partition {
   using BucketHeap = std::priority_queue<Bucket, std::deque<Bucket>, std::greater<std::deque<Bucket>::value_type>>;
 
   // generic methods
-  std::vector<BatchMapping> mapBatches(IPUAlgoConfig config, const RawSequences& Seqs, Comparisons& Cmps);
+  template<typename C>
+  std::vector<BatchMapping> mapBatches(IPUAlgoConfig config, const RawSequences& Seqs, std::vector<C>& Cmps);
+
+  extern template
+  std::vector<BatchMapping> mapBatches<Comparison>(IPUAlgoConfig config, const RawSequences& Seqs, Comparisons& Cmps);
+
+  extern template
+  std::vector<BatchMapping> mapBatches<MultiComparison>(IPUAlgoConfig config, const RawSequences& Seqs, MultiComparisons& Cmps);
 }}
 
 #endif

@@ -31,7 +31,15 @@ Complexity strToComplexity(std::string s) {
 
 }
 
+bool isSeeded(VertexType vtype) {
+	return vtype == VertexType::xdroprestrictedseedextend;
+}
+
 bool Comparison::operator<(const Comparison& other) const {
+  return this->complexity < other.complexity;
+}
+
+bool MultiComparison::operator<(const MultiComparison& other) const {
   return this->complexity < other.complexity;
 }
 
@@ -40,4 +48,19 @@ bool Comparison::operator<(const Comparison& other) const {
     ss << "Comp[" << originalComparisonIndex << ": a(l" << sizeA << ") b(l" << sizeB << ")]";
     return ss.str();
   }
+
+	MultiComparison::MultiComparison(const std::vector<Comparison>& cmps, const int seedLength) : comparisons(cmps), comparisonCount(cmps.size() * NSEEDS) {
+		for (const auto& comparison : comparisons) {
+    			for (const auto &pair : comparison.seeds) {
+    				int left = pair.seedAStartPos * pair.seedBStartPos;
+    				int right = (comparison.sizeA - seedLength - pair.seedAStartPos) * (comparison.sizeB - seedLength - pair.seedBStartPos);
+    				complexity += (pair.seedAStartPos != -1 ? 1 : 0) * (left + right);
+    			}
+			seqs[comparison.indexA] = comparison.sizeA;
+			seqs[comparison.indexB] = comparison.sizeB;
+		}
+		for (const auto &[key, value]: seqs) {
+			totalSeqSize += value;
+		}
+	}
 }

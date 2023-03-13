@@ -24,7 +24,7 @@ namespace ipu {
 namespace partition {
   std::string ComparisonMapping::toString() const {
     std::stringstream ss;
-    ss << "CM[" << comparison->toString() << ": a(o" << offsetA << ") b(o" << offsetB << ")]";
+    ss << "CM[" << comparison.toString() << ": a(o" << offsetA << ") b(o" << offsetB << ")]";
     return ss.str();
   }
 
@@ -43,6 +43,36 @@ namespace partition {
     std::stringstream ss;
     ss << "BMapping[" << bucketIndex << ": cmps(" << cmps.size() << ") maxLen(" << longestLength << ") seqSize(" << totalSequenceLength << ")]";
     return ss.str();
+  }
+
+  bool Bucket::addComparison(const MultiComparison& md) {
+    size_t newTotalLength = totalSequenceLength + md.totalSeqSize;
+    size_t newTotalCmps = cmps.size() * NSEEDS + md.comparisonCount * NSEEDS;
+    if (newTotalLength <= sequenceCapacity && newTotalCmps <= comparisonCapacity) {
+      std::unordered_map<int32_t, size_t> offsets;
+      // add sequences
+      for (auto [index, size] : md.seqs) {
+        seqs.push_back({
+          .index = index,
+          .offset = totalSequenceLength,
+        });
+        offsets[index] = totalSequenceLength;
+        totalSequenceLength += size;
+        longestLength = std::max(longestLength, (size_t) size);
+      }
+
+      // add comparisons
+      for (const auto& cmp : md.comparisons) {
+        cmps.push_back({
+          .offsetA = offsets[cmp.indexA],
+          .offsetB = offsets[cmp.indexB],
+          .comparison = cmp,
+        });
+        totalCells += cmp.sizeA * cmp.sizeB * NSEEDS;
+      }
+      return true;
+    }
+    return false;
   }
 
   bool Bucket::addComparison(const Comparison& d) {
@@ -68,7 +98,7 @@ namespace partition {
       cmps.push_back({
         .offsetA = (size_t) offsetA,
         .offsetB = (size_t) offsetB,
-        .comparison = &d
+        .comparison = d
       });
 
       totalSequenceLength = newTotalLength;
@@ -105,6 +135,7 @@ namespace partition {
     }
   }
 
+  template<typename C>
   class PartitioningAlgorithm {
   protected:
     const IPUAlgoConfig& config;
@@ -115,13 +146,14 @@ namespace partition {
 
     PartitioningAlgorithm(const IPUAlgoConfig& config) : config(config), mappings{BatchMapping(config)} {
     }
-    virtual bool addComparison(const Comparison& cmpData, BatchMapping& curMapping) = 0;
+
+    virtual bool addComparison(const C& cmpData, BatchMapping& curMapping) = 0;
 
     std::vector<BatchMapping> getMappings() {
       return std::move(mappings);
     }
 
-    bool addComparison(const Comparison& cmpData) {
+    bool addComparison(const C& cmpData) {
       BatchMapping* curMapping = &mappings.back();
       if (!addComparison(cmpData, *curMapping)) {
         curMapping = &createBatch();
@@ -133,18 +165,19 @@ namespace partition {
     }
   };
 
-  class FillFirstPartitioning : public PartitioningAlgorithm {
-    using PartitioningAlgorithm::PartitioningAlgorithm;
+  template<typename C>
+  class FillFirstPartitioning : public PartitioningAlgorithm<C> {
+    using PartitioningAlgorithm<C>::PartitioningAlgorithm;
 
     int bucketIndex = 0;
 
     BatchMapping& createBatch() override {
-      mappings.push_back(BatchMapping(config));
+      this->mappings.push_back(BatchMapping(this->config));
       bucketIndex = 0;
-      return mappings.back();
+      return this->mappings.back();
     }
 
-    bool addComparison(const Comparison& cmpData, BatchMapping& curMapping) override {
+    bool addComparison(const C& cmpData, BatchMapping& curMapping) override {
       for (; bucketIndex < curMapping.buckets.size(); ++bucketIndex) {
         Bucket& bucket = curMapping.buckets[bucketIndex];
         if (bucket.addComparison(cmpData)) {
@@ -167,9 +200,10 @@ namespace partition {
     }
   };
 
-  class GreedyPartitioning : public PartitioningAlgorithm {
-    virtual bool addComparison(const Comparison& cmpData, BatchMapping& curMapping) override {
-      BatchMapping& m = mappings.back();
+  template<typename C>
+  class GreedyPartitioning : public PartitioningAlgorithm<C> {
+    virtual bool addComparison(const C& cmpData, BatchMapping& curMapping) override {
+      BatchMapping& m = this->mappings.back();
       std::pop_heap(m.buckets.begin(), m.buckets.end(), cmp);
       Bucket& b = m.buckets.back();
       auto success = b.addComparison(cmpData);
@@ -178,43 +212,39 @@ namespace partition {
     }
 
     BatchMapping& createBatch() override {
-      mappings.push_back(BatchMapping(config));
-      BatchMapping& m = mappings.back();
+      this->mappings.push_back(BatchMapping(this->config));
+      BatchMapping& m = this->mappings.back();
       std::make_heap(m.buckets.begin(), m.buckets.end(), cmp);
-      return mappings.back();
+      return this->mappings.back();
     }
 
   public:
     BucketCompare cmp;
-    GreedyPartitioning(const IPUAlgoConfig& config) : PartitioningAlgorithm(config), cmp{} {
-      BatchMapping& m = mappings.back();
+    GreedyPartitioning(const IPUAlgoConfig& config) : PartitioningAlgorithm<C>(config), cmp{} {
+      BatchMapping& m = this->mappings.back();
       std::make_heap(m.buckets.begin(), m.buckets.end(), BucketCompare());
     }
   };
 
-  std::unique_ptr<PartitioningAlgorithm> createPartitioner(const IPUAlgoConfig& config) {
+  template<typename C>
+  std::unique_ptr<PartitioningAlgorithm<C>> createPartitioner(const IPUAlgoConfig& config) {
     switch (config.fillAlgo) {
     case Algorithm::fillFirst:
-      return std::unique_ptr<PartitioningAlgorithm>(new FillFirstPartitioning(config));
+      return std::unique_ptr<PartitioningAlgorithm<C>>(new FillFirstPartitioning<C>(config));
       break;
     case Algorithm::roundRobin:
       throw std::runtime_error("Not implemented");
       break;
     case Algorithm::greedy:
-      return std::unique_ptr<PartitioningAlgorithm>(new GreedyPartitioning(config));
+      return std::unique_ptr<PartitioningAlgorithm<C>>(new GreedyPartitioning<C>(config));
       break;
     }
     throw std::runtime_error("Not any of supported algorithm");
   }
 
-  std::vector<BatchMapping> mapBatches(IPUAlgoConfig config, const RawSequences& Seqs, Comparisons& Cmps) {
-
-    PLOGD << "Mapping " << Cmps.size() << " comparisons to batches";
-
-    PLOGD << "Set complexity using " << complexityToConfigString(config.complexityAlgo);
-    for (auto&& cmp : Cmps) {
-      cmp.complexity = calculateComplexity(cmp, config.complexityAlgo);
-    }
+  template<typename C>
+  std::vector<BatchMapping> mapBatches(IPUAlgoConfig config, const RawSequences& Seqs, std::vector<C>& Cmps) {
+    addComplexity(Cmps, config.complexityAlgo);
 
     if (config.partitioningSortComparisons) {
       PLOGD << "Sorting comparisons";
@@ -222,7 +252,7 @@ namespace partition {
     }
 
     PLOGD << "Partitioning " << Cmps.size() << " comparison datas";
-    auto Partitioner = createPartitioner(config);
+    auto Partitioner = createPartitioner<C>(config);
     for (int i = 0; i < Cmps.size(); ++i) {
       Partitioner->addComparison(Cmps[i]);
     }
@@ -230,11 +260,17 @@ namespace partition {
     return Partitioner->getMappings();
   }
 
+  template
+  std::vector<BatchMapping> mapBatches<Comparison>(IPUAlgoConfig config, const RawSequences& Seqs, Comparisons& Cmps);
+
+  template
+  std::vector<BatchMapping> mapBatches<MultiComparison>(IPUAlgoConfig config, const RawSequences& Seqs, MultiComparisons& Cmps);
+
 SWMeta ComparisonMapping::createMeta() const {
 	return {
-		.sizeA = comparison->sizeA,
+		.sizeA = comparison.sizeA,
 		.offsetA = (int32_t) offsetA,
-    .sizeB = comparison->sizeB,
+    .sizeB = comparison.sizeB,
     .offsetB = (int32_t) offsetB,
 	};
 }

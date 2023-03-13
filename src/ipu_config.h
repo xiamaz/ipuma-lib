@@ -25,7 +25,7 @@
 #endif
 
 #ifndef KLIGN_IPU_VTYPE
-#define KLIGN_IPU_VTYPE "multixdrop"
+#define KLIGN_IPU_VTYPE "xdroprestrictedseedextend"
 #endif
 
 #ifndef KLIGN_IPU_PARTITION_ALGO
@@ -102,6 +102,7 @@ struct IPUAlgoConfig {
   int getInputBufferSize32b() const;
 
   int getMetaStructSize32b() const;
+  bool hasSeeds() const;
 
   size_t getOffsetInputSequence() const;
   size_t getOffsetMetadata() const;

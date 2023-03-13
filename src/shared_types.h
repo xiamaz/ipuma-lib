@@ -1,6 +1,9 @@
 #pragma once
 
+#ifndef NSEEDS
 #define NSEEDS 2
+#endif
+
 namespace ipu {
 
 struct __attribute__((__packed__)) SeedPair {

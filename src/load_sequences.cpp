@@ -6,6 +6,7 @@
 #include <plog/Log.h>
 
 #include "types.h"
+#include "load_sequences.h"
 
 using json = nlohmann::json;
 namespace ipu {
@@ -25,10 +26,7 @@ json getDatasetStats(const ipu::RawSequences& seqs, const ipu::Comparisons& cmps
   PLOGI << "COMPARISON STATS: " << stats.dump();
 }
 
-std::tuple<ipu::RawSequences, ipu::Comparisons> prepareComparisons(std::string seqH, std::string seqV, std::string seedH, std::string seedV) {
-  ipu::RawSequences seqs;
-  ipu::Comparisons cmps;
-
+SequenceData::SequenceData(std::string seqH, std::string seqV, std::string seedH, std::string seedV) {
   std::ifstream fileH(seqH);
   std::ifstream fileV(seqV);
   std::ifstream fileHs(seedH);
@@ -63,18 +61,19 @@ std::tuple<ipu::RawSequences, ipu::Comparisons> prepareComparisons(std::string s
       break;
     }
     if (fHValid & fVValid & fHsValid & fVsValid) {
-      seqs.push_back(lH);
-      seqs.push_back(lV);
+      sequences.push_back(lH);
+      seqs.push_back(sequences.back());
+      sequences.push_back(lV);
+      seqs.push_back(sequences.back());
       const int sizeA = (int) seqs[(int) (2 * i)].size();
- const int sizeB =       (int) seqs[(int) (2 * i + 1)].size();
+      const int sizeB = (int) seqs[(int) (2 * i + 1)].size();
       cmps.push_back({
         i,
         (int) (2 * i),
         sizeA,
         (int) (2 * i + 1),
         sizeB,
-        {{sH, sV}},
-        // 0,
+        {{{sH, sV}, {-1, -1}}},
       });
       i++;
     } else {
@@ -94,7 +93,10 @@ std::tuple<ipu::RawSequences, ipu::Comparisons> prepareComparisons(std::string s
       exit(1);
     }
   }
+}
 
+
+std::tuple<ipu::RawSequences, ipu::Comparisons> SequenceData::get() {
   return {std::move(seqs), std::move(cmps)};
 }
 }

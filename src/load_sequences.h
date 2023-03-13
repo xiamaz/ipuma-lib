@@ -13,5 +13,15 @@ using json = nlohmann::json;
 namespace ipu {
 json getDatasetStats(const ipu::RawSequences& seqs, const ipu::Comparisons& cmps);
 
-std::tuple<ipu::RawSequences, ipu::Comparisons> prepareComparisons(std::string seqH, std::string seqV, std::string seedH, std::string seedV);
+class SequenceData {
+	std::vector<std::string> sequences;
+	ipu::RawSequences seqs;
+	ipu::Comparisons cmps;
+
+public:
+	SequenceData(std::string, std::string, std::string, std::string);
+	// SequenceData(std::string, std::string, std::string, std::string, std::string, std::string);
+
+	std::tuple<ipu::RawSequences, ipu::Comparisons> get();
+};
 }

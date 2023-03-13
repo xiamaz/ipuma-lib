@@ -15,7 +15,7 @@ using json = nlohmann::json;
 
 int main(int argc, char** argv) {
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
-  plog::init(plog::debug, &consoleAppender);
+  plog::init(plog::verbose, &consoleAppender);
 
 	cxxopts::Options options("ipusw", "IPU Smith Waterman Binary");
 
@@ -28,11 +28,11 @@ int main(int argc, char** argv) {
 		("h,help", "Print usage")
 		;
 
-	options.positional_help("[hSequences] [vSequences] [hSeed] [vSeed]");
-	options.parse_positional({"hSequencePath", "vSequencePath", "hSeedPath", "vSeedPath"});
-
 	json configJson = IpuSwConfig();
 	addArguments(configJson, options, "");
+
+	options.positional_help("[hSequences] [vSequences] [hSeed] [vSeed]");
+	options.parse_positional({"hSequencePath", "vSequencePath", "hSeedPath", "vSeedPath"});
 
 	auto result = options.parse(argc, argv);
 	if (result.count("help")) {
@@ -60,12 +60,19 @@ int main(int argc, char** argv) {
 	PLOGI << "IPUSWCONFIG" << json{config}.dump();
 
 	// run_comparison(config, refPath, queryPath);
-	auto [seqs, cmps] = ipu::prepareComparisons(hPath, vPath, hSeedPath, vSeedPath);
+	auto seqdb = ipu::SequenceData(hPath, vPath, hSeedPath, vSeedPath);
+	auto [seqs, cmps] = seqdb.get();
 	PLOGI << ipu::getDatasetStats(seqs, cmps).dump();
+
+	ipu::MultiComparisons mcmps;
+	for (const auto& cmp : cmps) {
+		mcmps.push_back({{cmp}, 17});
+	}
 
 	auto driver = ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, 0, config.numDevices);
 
-	auto batches = driver.create_batches(seqs, cmps);
+	auto batches = ipu::create_batches(seqs, mcmps, config.ipuconfig, config.swconfig);
+
 
   std::vector<ipu::BlockAlignmentResults> results;
   for (auto& batch : batches) {

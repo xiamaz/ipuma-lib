@@ -5,16 +5,23 @@
 #include "types.h"
 
 namespace ipu {
+
+typedef int32_t OriginIndex;
+
 struct BlockAlignmentResults {
   std::vector<std::array<int32_t, NSEEDS>> scores;
   std::vector<std::array<uint32_t, NSEEDS>> a_range_result;
   std::vector<std::array<uint32_t, NSEEDS>> b_range_result;
 };
 
+int32_t getComparisonIndex(OriginIndex);
+int32_t getSeedIndex(OriginIndex);
+std::tuple<int32_t, int32_t> unpackOriginIndex(OriginIndex);
+
 struct Batch {
   std::vector<int32_t> inputs;
   std::vector<int32_t> results;
-  std::vector<int32_t> origin_comparison_index;
+  std::vector<OriginIndex> origin_comparison_index;
 
   Batch();
   Batch(IPUAlgoConfig config);
@@ -39,5 +46,12 @@ struct Batch {
   int8_t* getMetaBuffer();
 };
 
-std::vector<Batch> create_batches(const RawSequences& Seqs, Comparisons& Cmps, const IPUAlgoConfig& algoconfig, const SWConfig& config);
+template<typename C>
+std::vector<Batch> create_batches(const RawSequences& seqs, std::vector<C>& cmps, const IPUAlgoConfig& algoconfig, const SWConfig& config);
+
+extern template
+std::vector<Batch> create_batches<Comparison>(const RawSequences& Seqs, Comparisons& Cmps, const IPUAlgoConfig& algoconfig, const SWConfig& config);
+
+extern template
+std::vector<Batch> create_batches<MultiComparison>(const RawSequences& Seqs, MultiComparisons& Cmps, const IPUAlgoConfig& algoconfig, const SWConfig& config);
 }

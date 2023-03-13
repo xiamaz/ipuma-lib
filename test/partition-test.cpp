@@ -82,7 +82,7 @@ TEST_F(PartitioningTest, MultiBatchSizedCount) {
   for (int i = 0; i < numberCmps * batches_count; ++i) {
     Seqs.push_back(std::string(sequence_length, 'A'));
     Seqs.push_back(std::string(sequence_length, 'B'));
-    Cmps.push_back({.indexA = i * 2, .indexB = i * 2 + 1});
+    Cmps.push_back({.indexA = i * 2, .sizeA = (int32_t) Seqs[i*2].size(), .indexB = i * 2 + 1, .sizeB = (int32_t) Seqs[i*2+1].size()});
   }
 
 
@@ -91,8 +91,8 @@ TEST_F(PartitioningTest, MultiBatchSizedCount) {
   size_t bufsum = 0;
     for (auto && bucket : batch.buckets) {
       for (auto && cmp : bucket.cmps) {
-        bufsum += cmp.sizeA;
-        bufsum += cmp.sizeB;
+        bufsum += cmp.comparison->sizeA;
+        bufsum += cmp.comparison->sizeB;
       }
     }
     ASSERT_EQ(bufsum,  2 * numberCmps * sequence_length);

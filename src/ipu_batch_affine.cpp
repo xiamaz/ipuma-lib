@@ -223,32 +223,10 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         sType = FLOAT;
         workerMultiplier = target.getNumWorkerContexts();
         break;
-      case VertexType::xdrop:
-        sType = INT; 
-        break;
-      case VertexType::multixdrop:
-        // This ok?
-        sType = INT; 
-        workerMultiplier = target.getNumWorkerContexts();
-        break;
-      case VertexType::multibandxdrop:
-        // This ok?
-        sType = INT; 
-        workerMultiplier = target.getNumWorkerContexts();
-        break;
-      case VertexType::xdropseedextend:
-        // This ok?
-        sType = INT; 
-        workerMultiplier = target.getNumWorkerContexts();
-        break;
       case VertexType::xdroprestrictedseedextend:
         // This ok?
         sType = FLOAT; 
         workerMultiplier = target.getNumWorkerContexts();
-        break;
-      case VertexType::greedyxdrop:
-        // This ok?
-        sType = INT; 
         break;
       default:
         PLOGF.printf("Unknown vtype %d", vtype);
@@ -305,13 +283,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
     }
 
     auto label = vertexTypeToIpuLabel(vtype);
-    if (vtype == VertexType::multibandxdrop) {
-      label += "<" + std::to_string(xDrop) + ">";
-    } else if (vtype == VertexType::multixdrop) {
-      label += "<" + std::to_string(xDrop) + ">"; 
-    } else if (vtype == VertexType::xdropseedextend) {
-      label += "<" + std::to_string(xDrop) + ">";
-    } else if (vtype == VertexType::xdroprestrictedseedextend) {
+    if (vtype == VertexType::xdroprestrictedseedextend) {
       label += "<" + std::to_string(xDrop) + ">";
     }
     PLOGD.printf("Use Vertex class: %s", label.c_str());
@@ -331,31 +303,7 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
                                           {"score", Scores[i]},
                                       });
 
-      if (vtype == VertexType::xdrop) {
-        auto k_T = graph.addVariable(sType, {3, (maxSequenceLength+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
-        graph.setTileMapping(k_T, tileIndex);
-        graph.connect(vtx["maxSequenceLength"], maxSequenceLength);
-        graph.connect(vtx["K1"], k_T[0]);
-        graph.connect(vtx["K2"], k_T[1]);
-        graph.connect(vtx["K3"], k_T[2]);
-        graph.connect(vtx["simMatrix"], similarity);
-        PLOGE << "OUTDATED";
-      } else if (vtype == VertexType::multixdrop) {
-        auto k_T = graph.addVariable(sType, {2, (maxSequenceLength+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
-        graph.connect(vtx["maxSequenceLength"], maxSequenceLength);
-        graph.setTileMapping(k_T, tileIndex);
-        graph.connect(vtx["K1"], k_T[0]);
-        graph.connect(vtx["K2"], k_T[1]);
-        graph.connect(vtx["simMatrix"], similarity);
-      } else if (vtype == VertexType::xdropseedextend) {
-        auto k_T = graph.addVariable(sType, {2, (maxSequenceLength+2) * workerMultiplier}, "K[" + std::to_string(i) + "]");
-        graph.connect(vtx["maxSequenceLength"], maxSequenceLength);
-        graph.setTileMapping(k_T, tileIndex);
-        graph.connect(vtx["K1"], k_T[0]);
-        graph.connect(vtx["K2"], k_T[1]);
-        graph.connect(vtx["simMatrix"], similarity);
-        graph.connect(vtx["seedLength"], seedLength);
-      } else if (vtype == VertexType::xdroprestrictedseedextend) {
+      if (vtype == VertexType::xdroprestrictedseedextend) {
         int scaledMaxAB = maxSequenceLength * bandPercentageXDrop;
         const int LR_offsert = 20;
         auto k_T = graph.addVariable(sType, {2, ((size_t)scaledMaxAB+2 * LR_offsert) * workerMultiplier}, "K[" + std::to_string(i) + "]");
@@ -368,31 +316,6 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
         graph.connect(vtx["seedLength"], seedLength);
         graph.connect(vtx["ARange"], ARanges[i]);
         graph.connect(vtx["BRange"], BRanges[i]);
-      } else if (vtype == VertexType::multibandxdrop) {
-        int scaledMaxAB = maxSequenceLength * bandPercentageXDrop;
-        auto k_T = graph.addVariable(sType, {2, ((size_t)scaledMaxAB+2+2) * (size_t) workerMultiplier}, "K[" + std::to_string(i) + "]");
-        graph.connect(vtx["maxSequenceLength"], scaledMaxAB);
-        graph.setTileMapping(k_T, tileIndex);
-        graph.connect(vtx["K1"], k_T[0]);
-        graph.connect(vtx["K2"], k_T[1]);
-        graph.connect(vtx["simMatrix"], similarity);
-        PLOGE << "OUTDATED";
-      } else if (vtype == VertexType::greedyxdrop) {
-        int mis = -2;
-        int mat = 2;
-        int X = 10;
-        int xdrop_offset = ((X + mat / 2) / (mat - mis)) + 1;
-
-        graph.connect(vtx["maxSequenceLength"], maxSequenceLength);
-        Tensor R0 = graph.addVariable(INT, {2 * maxSequenceLength});
-        graph.setTileMapping(R0, tileIndex);
-        Tensor R1 = graph.addVariable(INT, {2 * maxSequenceLength});
-        graph.setTileMapping(R1, tileIndex);
-        Tensor T = graph.addVariable(INT, {maxSequenceLength+maxSequenceLength+xdrop_offset+1});
-        graph.setTileMapping(T, tileIndex);
-        graph.connect(vtx["VTR0"], R0);
-        graph.connect(vtx["VTR1"], R1);
-        graph.connect(vtx["VTT"], T);
       } else {
         graph.connect(vtx["maxSequenceLength"], maxSequenceLength);
         graph.connect(vtx["ARange"], ARanges[i]);

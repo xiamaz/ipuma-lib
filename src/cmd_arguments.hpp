@@ -24,7 +24,7 @@ void parseArguments(json& dict, const cxxopts::ParseResult& result) {
 			dict[k] = result[k].as<bool>();
 			break;
 		default:
-			throw std::runtime_error("unsupported type");
+			throw std::runtime_error("unsupported type: " + std::string(v.type_name()));
 			break;
 		}
 	}
@@ -53,7 +53,7 @@ void addArguments(const json& dict, cxxopts::Options& options, std::string gname
 				addArguments(v, options, k);
 				break;
 			default:
-				throw std::runtime_error("unsupported type");
+				throw std::runtime_error("unsupported type: " + std::string(v.type_name()));
 				break;
 		}
 	}

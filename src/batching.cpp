@@ -5,6 +5,23 @@
 #include "partition.h"
 
 namespace ipu {
+
+int32_t getComparisonIndex(OriginIndex oi) {
+  return oi / NSEEDS;
+}
+
+int32_t getSeedIndex(OriginIndex oi) {
+  return oi % NSEEDS;
+}
+
+std::tuple<int32_t, int32_t> unpackOriginIndex(OriginIndex oi) {
+  return {getComparisonIndex(oi), getSeedIndex(oi)};
+}
+
+OriginIndex packOriginIndex(int32_t comparisonIndex, int32_t seedIndex) {
+  return comparisonIndex * NSEEDS + seedIndex;
+}
+
 std::string Batch::toString() const {
   std::stringstream ss;
   ss << "Batch[" << this->numComparisons << " size: " << this->dataCount << "]";
@@ -29,7 +46,7 @@ Batch::Batch(IPUAlgoConfig config) {
 void Batch::initialize(IPUAlgoConfig config) {
   inputs.resize(config.getInputBufferSize32b(), 0);
   results.resize(config.getTotalNumberOfComparisons() * 3, 0);
-  origin_comparison_index.resize(config.getTotalNumberOfComparisons(), -1);
+  origin_comparison_index.resize(config.getTotalNumberOfComparisons(), -1 * NSEEDS);
   metaOffset = config.getOffsetMetadata();
   maxComparisons = config.getTotalNumberOfComparisons();
   numComparisons = 0;
@@ -68,7 +85,8 @@ BlockAlignmentResults Batch::get_result() {
   return {scores, a_range_result, b_range_result};
 }
 
-std::vector<Batch> create_batches(const RawSequences& seqs, Comparisons& cmps, const IPUAlgoConfig& algoconfig, const SWConfig& config) {
+template<typename C>
+std::vector<Batch> create_batches(const RawSequences& seqs, std::vector<C>& cmps, const IPUAlgoConfig& algoconfig, const SWConfig& config) {
   std::vector<swatlib::TickTock> stageTimers(3);
   stageTimers[0].tick();
   stageTimers[1].tick();
@@ -78,7 +96,7 @@ std::vector<Batch> create_batches(const RawSequences& seqs, Comparisons& cmps, c
   std::vector<Batch> batches(mappings.size());
   const auto inputBufferSize = algoconfig.getInputBufferSize32b();
   auto encodeTable = swatlib::getEncoder(config.datatype).getCodeTable();
-  const bool isSeeded = algoconfig.vtype == ipu::VertexType::xdropseedextend || algoconfig.vtype == VertexType::xdroprestrictedseedextend;
+  const bool isSeeded = algoconfig.hasSeeds();
 
   stageTimers[2].tick();
   size_t vertexMetaSize = algoconfig.maxComparisonsPerVertex * sizeof(SWMeta);
@@ -88,6 +106,8 @@ std::vector<Batch> create_batches(const RawSequences& seqs, Comparisons& cmps, c
 
   swatlib::TickTock seqT;
   swatlib::TickTock cmpT;
+  auto cmps_total = 0;
+
   #pragma omp parallel for schedule(static) num_threads(48)
   for (int mi = 0; mi < mappings.size(); ++mi) {
     const auto& map = mappings[mi];
@@ -121,37 +141,34 @@ std::vector<Batch> create_batches(const RawSequences& seqs, Comparisons& cmps, c
       cmpT.tick();
       for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
         const auto& comparisonMapping = bucketMapping.cmps[i];
-        auto* cmp = comparisonMapping.comparison;
+        const auto& cmp = comparisonMapping.comparison;
         if (isSeeded) {
           auto* bucketMeta = (XDropMeta*)(metaInput) + algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex;
+          // PLOGE << "Num Comparisons " << bucketMapping.cmps.size() << " " << NSEEDS;
           for (int j = 0; j < NSEEDS; ++j) {
             bucketMeta[i * NSEEDS + j] = {
               comparisonMapping.createMeta(),
-              .seedAStartPos = static_cast<int32_t>(cmp->seeds[j].seedAStartPos),
-              .seedBStartPos = static_cast<int32_t>(cmp->seeds[j].seedBStartPos),
+              .seedAStartPos = static_cast<int32_t>(cmp.seeds[j].seedAStartPos),
+              .seedBStartPos = static_cast<int32_t>(cmp.seeds[j].seedBStartPos),
             };
+            // PLOGE << "Seeds " << bucketMeta[i * NSEEDS + j].seedAStartPos << " " <<  bucketMeta[i * NSEEDS + j].seedBStartPos;
+            // PLOGE << "Lengths " << bucketMeta[i * NSEEDS + j].sizeA << " " <<  bucketMeta[i * NSEEDS + j].sizeB;
+            cmps_total += bucketMeta[i * NSEEDS + j].seedAStartPos != -1;
+            batch.origin_comparison_index[algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex + i * NSEEDS + j] = packOriginIndex(cmp.originalComparisonIndex, j);
           }
         } else {
           auto* bucketMeta = (SWMeta*)(metaInput) + algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex;
           bucketMeta[i] = comparisonMapping.createMeta();
+          batch.origin_comparison_index[algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex + i] = packOriginIndex(cmp.originalComparisonIndex, 0);
         }
 
-        batch.origin_comparison_index[algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex + i] = cmp->originalComparisonIndex;
-
-        cellCount += cmp->sizeA * cmp->sizeB;
+        cellCount += cmp.sizeA * cmp.sizeB;
         comparisonCount++;
       }
       cmpT.tock();
     }
   }
   stageTimers[2].tock();
-
-  auto cmps_total = 0;
-  for (auto &&cmp : cmps) {
-    for (auto &&seed : cmp.seeds) {
-      cmps_total += seed.seedAStartPos != -1;
-    }
-  }
 
   stageTimers[0].tock();
   json logData = {
@@ -167,5 +184,11 @@ std::vector<Batch> create_batches(const RawSequences& seqs, Comparisons& cmps, c
   PLOGD << "BATCHCREATE: " << logData.dump();
   return batches;
 }
+
+template
+std::vector<Batch> create_batches<Comparison>(const RawSequences& seqs, Comparisons& cmps, const IPUAlgoConfig& algoconfig, const SWConfig& config);
+
+template
+std::vector<Batch> create_batches<MultiComparison>(const RawSequences& seqs, MultiComparisons& cmps, const IPUAlgoConfig& algoconfig, const SWConfig& config);
 
 }
