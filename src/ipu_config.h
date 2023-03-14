@@ -32,6 +32,10 @@
 #define KLIGN_IPU_PARTITION_ALGO "greedy"
 #endif
 
+#ifndef ALN_SEED_LENGTH
+#define ALN_SEED_LENGTH 17
+#endif
+
 #ifndef ALN_GAP_OPENING_COST
 #define ALN_GAP_OPENING_COST 1
 #endif
@@ -65,13 +69,14 @@ namespace ipu {
 using json = nlohmann::json;
 
 struct SWConfig {
-        int gapInit = -(ALN_GAP_OPENING_COST - ALN_GAP_EXTENDING_COST);
-        int gapExtend = -ALN_GAP_EXTENDING_COST;
-        int matchValue = ALN_MATCH_SCORE;
-        int mismatchValue = -ALN_MISMATCH_COST;
-        int ambiguityValue = -ALN_AMBIGUITY_COST;
-        swatlib::Similarity similarity = swatlib::strToSimilarity(ALN_SIMILARITY);
-        swatlib::DataType datatype = swatlib::strToDataType(ALN_DATATYPE);
+  int gapInit = -(ALN_GAP_OPENING_COST - ALN_GAP_EXTENDING_COST);
+  int gapExtend = -ALN_GAP_EXTENDING_COST;
+  int matchValue = ALN_MATCH_SCORE;
+  int mismatchValue = -ALN_MISMATCH_COST;
+  int ambiguityValue = -ALN_AMBIGUITY_COST;
+  swatlib::Similarity similarity = swatlib::strToSimilarity(ALN_SIMILARITY);
+  swatlib::DataType datatype = swatlib::strToDataType(ALN_DATATYPE);
+  int seedLength = ALN_SEED_LENGTH;
 };
 
 struct IPUAlgoConfig {
@@ -89,7 +94,6 @@ struct IPUAlgoConfig {
   // Optional: XDrop
   int xDrop = 10;
   double bandPercentageXDrop = 0.5;
-  int seedLength = -1;
 
   // this is maxbatches * num_vertices and is the maximum number of comparisons in a single batch
   int getTotalNumberOfComparisons() const;
@@ -119,6 +123,10 @@ void to_json(json& j, const Algorithm& a);
 void from_json(const json& j, VertexType& t);
 
 void to_json(json& j, const VertexType& t);
+
+void from_json(const json& j, Complexity& t);
+
+void to_json(json& j, const Complexity& t);
 
 void to_json(json& j, const IPUAlgoConfig& c);
 

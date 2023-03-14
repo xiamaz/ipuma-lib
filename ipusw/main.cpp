@@ -20,10 +20,12 @@ int main(int argc, char** argv) {
 	cxxopts::Options options("ipusw", "IPU Smith Waterman Binary");
 
 	options.add_options()
-		("hSequencePath", "Sequences File (either fa or txt)", cxxopts::value<std::string>())
-		("vSequencePath", "Sequences File (either fa or txt)", cxxopts::value<std::string>())
-		("hSeedPath", "Seed Position File (txt)", cxxopts::value<std::string>())
-		("vSeedPath", "Seed Position File (txt)", cxxopts::value<std::string>())
+		("hSequencePath", "Sequences File (txt)", cxxopts::value<std::string>())
+		("vSequencePath", "Sequences File (txt)", cxxopts::value<std::string>())
+		("hSeed1Path", "Seed Position File (txt)", cxxopts::value<std::string>())
+		("vSeed1Path", "Seed Position File (txt)", cxxopts::value<std::string>())
+		("hSeed2Path", "Seed Position File (txt)", cxxopts::value<std::string>())
+		("vSeed2Path", "Seed Position File (txt)", cxxopts::value<std::string>())
 		("c,config", "Configuration file.", cxxopts::value<std::string>())
 		("h,help", "Print usage")
 		;
@@ -31,8 +33,8 @@ int main(int argc, char** argv) {
 	json configJson = IpuSwConfig();
 	addArguments(configJson, options, "");
 
-	options.positional_help("[hSequences] [vSequences] [hSeed] [vSeed]");
-	options.parse_positional({"hSequencePath", "vSequencePath", "hSeedPath", "vSeedPath"});
+	// options.positional_help("[hSequences] [vSequences] [hSeed] [vSeed]");
+	// options.parse_positional({"hSequencePath", "vSequencePath", "hSeedPath", "vSeedPath"});
 
 	auto result = options.parse(argc, argv);
 	if (result.count("help")) {
@@ -52,17 +54,20 @@ int main(int argc, char** argv) {
 
 	IpuSwConfig config = configJson.get<IpuSwConfig>();
 
-	std::string hPath = result["hSequencePath"].as<std::string>();
-	std::string vPath = result["vSequencePath"].as<std::string>();
-	std::string hSeedPath = result["hSeedPath"].as<std::string>();
-	std::string vSeedPath = result["vSeedPath"].as<std::string>();
+	// std::string hPath = result["hSequencePath"].as<std::string>();
+	// std::string vPath = result["vSequencePath"].as<std::string>();
+	// std::string hSeedPath = result["hSeedPath"].as<std::string>();
+	// std::string vSeedPath = result["vSeedPath"].as<std::string>();
 
 	PLOGI << "IPUSWCONFIG" << json{config}.dump();
 
-	// run_comparison(config, refPath, queryPath);
-	auto seqdb = ipu::SequenceData(hPath, vPath, hSeedPath, vSeedPath);
-	auto [seqs, cmps] = seqdb.get();
+	auto seqdb = config.getSequences();
+	auto [seqs, cmps] = seqdb->get();
 	PLOGI << ipu::getDatasetStats(seqs, cmps).dump();
+	if (cmps.size() == 0) {
+		PLOGF << "No comparisons defined";
+		exit(1);
+	}
 
 	ipu::MultiComparisons mcmps;
 	for (const auto& cmp : cmps) {

@@ -403,7 +403,7 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
     algoconfig.ioTiles,
     algoconfig.xDrop,
     algoconfig.bandPercentageXDrop,
-    algoconfig.seedLength,
+    config.seedLength,
     algoconfig.getMetaStructSize32b());
 
   std::hash<std::string> hasher;

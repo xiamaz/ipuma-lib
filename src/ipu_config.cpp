@@ -48,6 +48,7 @@ void to_json(json& j, const SWConfig& c) {
                 {"ambiguityValue", c.ambiguityValue},
                 {"similarity", c.similarity},
                 {"datatype", c.datatype},
+                {"seedLength", c.seedLength}
         };
 }
 
@@ -59,6 +60,7 @@ void from_json(const json& j, SWConfig& c) {
         j.at("ambiguityValue").get_to(c.ambiguityValue);
         j.at("similarity").get_to(c.similarity);
         j.at("datatype").get_to(c.datatype);
+        j.at("seedLength").get_to(c.seedLength);
 }
 
 void from_json(const json& j, Algorithm& a) {
@@ -77,6 +79,14 @@ void to_json(json& j, const VertexType& t) {
         j = ipu::vertexTypeToConfigString(t);
 }
 
+void from_json(const json& j, Complexity& t) {
+        t = ipu::strToComplexity(j);
+}
+
+void to_json(json& j, const Complexity& t) {
+        j = ipu::complexityToConfigString(t);
+}
+
 void to_json(json& j, const IPUAlgoConfig& c) {
         j = json{
                 {"numVertices", c.numVertices},
@@ -91,7 +101,6 @@ void to_json(json& j, const IPUAlgoConfig& c) {
                 {"ioTiles", c.ioTiles},
                 {"xDrop", c.xDrop},
                 {"bandPercentageXDrop", c.bandPercentageXDrop},
-                {"seedLength", c.seedLength}
         };
 }
 
@@ -108,6 +117,5 @@ void from_json(const json& j, IPUAlgoConfig& c) {
         j.at("ioTiles").get_to(c.ioTiles);
         j.at("xDrop").get_to(c.xDrop);
         j.at("bandPercentageXDrop").get_to(c.bandPercentageXDrop);
-        j.at("seedLength").get_to(c.seedLength);
 }
 }
