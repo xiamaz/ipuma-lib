@@ -62,7 +62,7 @@ SequenceGenerator::SequenceGenerator(GeneratorConfig config, SWConfig swconfig) 
 			.sizeA = (int) seqs[2*i].size(),
 			.indexB = 2 * i + 1,
 			.sizeB = (int) seqs[2*i + 1].size(),
-			.seeds = {{{seed_start, swconfig.seedLength}, {seed_start, swconfig.seedLength}}},
+			.seeds = {{{seed_start, seed_start}, {seed_start, seed_start}}},
 			.complexity = 0,
 		});
 	}

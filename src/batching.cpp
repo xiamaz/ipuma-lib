@@ -55,9 +55,9 @@ void Batch::initialize(IPUAlgoConfig config) {
 }
 
 BlockAlignmentResults Batch::get_result() {
-  std::vector<std::array<int32_t, NSEEDS>> scores(maxComparisons);
-  std::vector<std::array<uint32_t, NSEEDS>> a_range_result(maxComparisons);
-  std::vector<std::array<uint32_t, NSEEDS>> b_range_result(maxComparisons);
+  std::vector<int32_t> scores(maxComparisons);
+  std::vector<uint32_t> a_range_result(maxComparisons);
+  std::vector<uint32_t> b_range_result(maxComparisons);
 
   // TODO this should not be hardcoded here but passed as a config to make layout changes easier.
   int aOffset = results.size() / 3;
@@ -67,19 +67,9 @@ BlockAlignmentResults Batch::get_result() {
   for (int i = 0; i < maxComparisons; ++i) {
     int aindex = i + aOffset;
     int bindex = i + bOffset;
-    for (size_t j = 0; j < NSEEDS; j++) {
-      // if (results[i*NSEEDS + j] != 0) {
-        // PLOGW << results[i*NSEEDS + j];
-        // PLOGW <<"AAAAAAAAAAAAAAAAAAAAAAAA" << i << "   "<< j;
-        // PLOGW.printf("scores[%d/NSEEDS][%d] = results[%d*NSEEDS + %d]\n", i, j, i, j);
-      // }
-      scores[i][j] = results[i*NSEEDS + j];
-      a_range_result[i][j] = results[aOffset + i*NSEEDS + j];
-      b_range_result[i][j] = results[bOffset + i*NSEEDS + j];
-    }
-    // scores[i] = results[i];
-    // a_range_result[i] = results[aindex];
-    // b_range_result[i] = results[bindex];
+    scores[i] = results[i];
+    a_range_result[i] = results[aOffset + i];
+    b_range_result[i] = results[bOffset + i];
   }
 
   return {scores, a_range_result, b_range_result};
@@ -153,16 +143,21 @@ std::vector<Batch> create_batches(const RawSequences& seqs, std::vector<C>& cmps
             };
             // PLOGE << "Seeds " << bucketMeta[i * NSEEDS + j].seedAStartPos << " " <<  bucketMeta[i * NSEEDS + j].seedBStartPos;
             // PLOGE << "Lengths " << bucketMeta[i * NSEEDS + j].sizeA << " " <<  bucketMeta[i * NSEEDS + j].sizeB;
-            cmps_total += bucketMeta[i * NSEEDS + j].seedAStartPos != -1;
+            auto validCmp = bucketMeta[i * NSEEDS + j].seedAStartPos != -1;
+
+            #pragma omp atomic
+            cmps_total += validCmp;
+
             batch.origin_comparison_index[algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex + i * NSEEDS + j] = packOriginIndex(cmp.originalComparisonIndex, j);
+            cellCount += cmp.sizeA * cmp.sizeB * validCmp;
           }
         } else {
           auto* bucketMeta = (SWMeta*)(metaInput) + algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex;
           bucketMeta[i] = comparisonMapping.createMeta();
           batch.origin_comparison_index[algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex + i] = packOriginIndex(cmp.originalComparisonIndex, 0);
+          cellCount += cmp.sizeA * cmp.sizeB;
         }
 
-        cellCount += cmp.sizeA * cmp.sizeB;
         comparisonCount++;
       }
       cmpT.tock();

@@ -64,6 +64,10 @@
 #define ALN_DATATYPE "na"
 #endif
 
+#ifndef ALN_XDROP
+#define ALN_XDROP 10
+#endif
+
 namespace ipu {
 
 using json = nlohmann::json;
@@ -77,6 +81,7 @@ struct SWConfig {
   swatlib::Similarity similarity = swatlib::strToSimilarity(ALN_SIMILARITY);
   swatlib::DataType datatype = swatlib::strToDataType(ALN_DATATYPE);
   int seedLength = ALN_SEED_LENGTH;
+  int xDrop = ALN_XDROP;
 };
 
 struct IPUAlgoConfig {
@@ -92,7 +97,6 @@ struct IPUAlgoConfig {
   int ioTiles = 0;
 
   // Optional: XDrop
-  int xDrop = 10;
   double bandPercentageXDrop = 0.5;
 
   // this is maxbatches * num_vertices and is the maximum number of comparisons in a single batch

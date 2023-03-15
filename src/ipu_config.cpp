@@ -48,6 +48,7 @@ void to_json(json& j, const SWConfig& c) {
                 {"ambiguityValue", c.ambiguityValue},
                 {"similarity", c.similarity},
                 {"datatype", c.datatype},
+                {"xDrop", c.xDrop},
                 {"seedLength", c.seedLength}
         };
 }
@@ -61,6 +62,7 @@ void from_json(const json& j, SWConfig& c) {
         j.at("similarity").get_to(c.similarity);
         j.at("datatype").get_to(c.datatype);
         j.at("seedLength").get_to(c.seedLength);
+        j.at("xDrop").get_to(c.xDrop);
 }
 
 void from_json(const json& j, Algorithm& a) {
@@ -99,7 +101,6 @@ void to_json(json& j, const IPUAlgoConfig& c) {
                 {"partitioningSortComparisons", c.partitioningSortComparisons},
                 {"forwardOnly", c.forwardOnly},
                 {"ioTiles", c.ioTiles},
-                {"xDrop", c.xDrop},
                 {"bandPercentageXDrop", c.bandPercentageXDrop},
         };
 }
@@ -115,7 +116,6 @@ void from_json(const json& j, IPUAlgoConfig& c) {
         j.at("partitioningSortComparisons").get_to(c.partitioningSortComparisons);
         j.at("forwardOnly").get_to(c.forwardOnly);
         j.at("ioTiles").get_to(c.ioTiles);
-        j.at("xDrop").get_to(c.xDrop);
         j.at("bandPercentageXDrop").get_to(c.bandPercentageXDrop);
 }
 }

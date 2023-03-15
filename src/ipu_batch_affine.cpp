@@ -401,7 +401,7 @@ SWAlgorithm::SWAlgorithm(SWConfig config, IPUAlgoConfig algoconfig, int thread_i
     config.gapExtend,
     algoconfig.forwardOnly,
     algoconfig.ioTiles,
-    algoconfig.xDrop,
+    config.xDrop,
     algoconfig.bandPercentageXDrop,
     config.seedLength,
     algoconfig.getMetaStructSize32b());

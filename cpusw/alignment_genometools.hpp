@@ -2,49 +2,63 @@
 
 #include "genometools.h"
 #include "match/diagbandseed.h"
+#include "match/xdrop.h"
 
-void test() {
-  gt_lib_init();
-  GtAlphabet* alpha = gt_alphabet_new_dna();
+#include "ipu_config.h"
 
-  GtEncseqBuilder* eb = gt_encseq_builder_new(alpha);
-  gt_encseq_builder_disable_description_support(eb);
+namespace cpu {
 
-  std::string teststr1 = "aaaagggttttt";
-  std::string teststr2 = "caaagggtttgt";
+  class GenomeToolsAligner {
+  public:
+    static int align(const std::string_view& seqH, const std::string_view& seqV, int32_t seedHStart, int32_t seedVStart, int32_t seedLen, const ipu::SWConfig& config) {
+      gt_lib_init();
+      GtAlphabet* alpha = gt_alphabet_new_dna();
 
-  gt_encseq_builder_add_cstr(eb, teststr1.c_str(), teststr2.size(), NULL);
-  gt_encseq_builder_add_cstr(eb, teststr2.c_str(), teststr2.size(), NULL);
+      GtEncseqBuilder* eb = gt_encseq_builder_new(alpha);
+      gt_encseq_builder_disable_description_support(eb);
 
-  GtEncseq* es = gt_encseq_builder_build(eb, NULL);
-  
-GtDiagbandseedInfo *gt_diagbandseed_info_new(es,
-                                             es,
-                                             5,
-                                             42,
-                                             unsigned int spacedseedweight,
-                                             unsigned int seedlength,
-                                             bool norev,
-                                             bool nofwd,
-                                             const GtRange *seedpairdistance,
-                                             GtDiagbandseedBaseListType splt,
-                                             GtDiagbandseedBaseListType kmplt,
-                                             bool verify,
-                                             bool verbose,
-                                             bool debug_kmer,
-                                             bool debug_seedpair,
-                                             bool use_kmerfile,
-                                             bool trimstat_on,
-                                             GtUword maxmat,
-                                             const GtStr *chainarguments,
-                                             const GtStr
-                                               *diagband_statistics_arg,
-                                             const GtDiagbandseedExtendParams
-                                               *extp);
+      GtSeqabstract *useq, *vseq;
+      useq = gt_seqabstract_new_gtuchar(
+        true, GT_READMODE_FORWARD, (const GtUchar*) seqH.data(), seqH.size(), 0, seqH.size());
+      vseq = gt_seqabstract_new_gtuchar(
+        true, GT_READMODE_FORWARD, (const GtUchar*) seqV.data(), seqV.size(), 0, seqV.size());
 
-  gt_encseq_delete(es);
-  gt_encseq_builder_delete(eb);
-  gt_alphabet_delete(alpha);
+      GtXdropArbitraryscores xdropConfig{
+        .mat = config.matchValue,
+        .mis = config.mismatchValue,
+        .ins = config.gapExtend,
+        .del = config.gapExtend,
+      };
 
-  gt_lib_clean();
+      auto* xres = gt_xdrop_resources_new(&xdropConfig);
+
+      GtXdropbest result;
+
+      PLOGF << "GTOOLS " << result.score;
+
+      int score;
+
+      gt_evalxdroparbitscoresextend(
+        true, // forward
+        &result,
+        xres,
+        useq,
+        vseq,
+        config.xDrop
+      );
+
+      score = result.score;
+
+      gt_seqabstract_delete(useq);
+      gt_seqabstract_delete(vseq);
+
+      gt_xdrop_resources_delete(xres);
+      gt_encseq_builder_delete(eb);
+      gt_alphabet_delete(alpha);
+
+      gt_lib_clean();
+
+      return score;
+    }
+  };
 }

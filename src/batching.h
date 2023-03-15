@@ -9,9 +9,9 @@ namespace ipu {
 typedef int32_t OriginIndex;
 
 struct BlockAlignmentResults {
-  std::vector<std::array<int32_t, NSEEDS>> scores;
-  std::vector<std::array<uint32_t, NSEEDS>> a_range_result;
-  std::vector<std::array<uint32_t, NSEEDS>> b_range_result;
+  std::vector<int32_t> scores;
+  std::vector<uint32_t> a_range_result;
+  std::vector<uint32_t> b_range_result;
 };
 
 int32_t getComparisonIndex(OriginIndex);
