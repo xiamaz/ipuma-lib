@@ -13,7 +13,7 @@ add_definitions(-DKLIGN_IPU_MAX_SEQUENCE_LENGTH=10000)
 add_definitions(-DKLIGN_IPU_MAX_CMPS_PER_VERTEX=200)
 add_definitions(-DKLIGN_IPU_VERTEX_BUFFER_SIZE=120000)
 add_definitions(-DKLIGN_IPUS_LOCAL=1)
-add_definitions(-DKLIGN_IPU_VTYPE="multixdrop")
+add_definitions(-DKLIGN_IPU_VTYPE="xdroprestrictedseedextend")
 add_definitions(-DKLIGN_IPU_PARTITION_ALGO="greedy")
 
 # debug params

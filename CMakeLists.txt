@@ -47,7 +47,6 @@ add_subdirectory(src)
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
   set(PACKAGE_TESTS ON)
   set(PACKAGE_MAIN ON)
-  set(PACKAGE_XDROP ON)
   set(PACKAGE_CPU ON)
 endif()
 
@@ -57,18 +56,14 @@ if(PACKAGE_MAIN)
   add_subdirectory(ipusw)
 endif()
 
-if(PACKAGE_XDROP)
-  add_subdirectory(xdrop)
-endif()
-
 if(PACKAGE_CPU)
   add_subdirectory(cpusw)
 endif()
 
 if(PACKAGE_TESTS)
   enable_testing()
-  # add_subdirectory(test)
-  add_subdirectory(test/core)
+  add_subdirectory(test)
+  # add_subdirectory(test/core)
 endif()
 
 #   - POPC_EXECUTABLE

@@ -9,11 +9,7 @@ add_gp_library(
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_batch_asm.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_multi_asm.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_multi_affine.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_xdrop.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_greedy_xdrop.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_multi_band_xdrop.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_multi_xdrop.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_seed_extend_multi_xdrop.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/codelets/codelet_seed_extend_multi_restricted_xdrop.cpp
   HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/core/xdrop.hpp
@@ -21,7 +17,7 @@ add_gp_library(
 
 add_subdirectory(swatlib)
 
-add_library(IPUMA_LIBRARY "batching.cpp" "ipu_batch_affine.cpp" "ipu_base.cpp" "driver.cpp" "partition.cpp" "types.cpp" "ipu_config.cpp" "load_sequences.cpp")
+add_library(IPUMA_LIBRARY "batching.cpp" "ipu_batch_affine.cpp" "ipu_base.cpp" "driver.cpp" "partition.cpp" "types.cpp" "ipu_config.cpp" "load_sequences.cpp" "complexity.cpp" "sequences_generator.cpp")
 
 find_package(OpenMP REQUIRED)
 if(OPENMP_FOUND OR OpenMP_CXX_FOUND)

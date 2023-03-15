@@ -11,13 +11,11 @@
 namespace ipu { namespace partition {
   // mapping of the comparison to an individual tile
   struct ComparisonMapping {
-    int comparisonIndex;  // index in cmp input list
-    size_t sizeA;
     size_t offsetA;
-    size_t sizeB;
     size_t offsetB;
-    size_t seedAStartPos;
-    size_t seedBStartPos;
+    Comparison comparison;
+
+	  SWMeta createMeta() const;
 
     std::string toString() const;
   };
@@ -27,19 +25,6 @@ namespace ipu { namespace partition {
     size_t offset;
 
     std::string toString() const;
-  };
-
-  struct ComparisonData {
-    int comparisonIndex;
-    int indexA;
-    int indexB;
-    size_t sizeA;
-    size_t sizeB;
-    std::array<ipu::SeedPair, NSEEDS> seeds;
-
-    size_t complexity;
-
-    bool operator<(const ComparisonData& other) const;
   };
 
   struct Bucket {
@@ -58,7 +43,8 @@ namespace ipu { namespace partition {
 
     Bucket(int bucketIndex, size_t sequenceCapacity, size_t comparisonCapacity);
 
-    bool addComparison(const ComparisonData&);
+    bool addComparison(const Comparison&);
+    bool addComparison(const MultiComparison&);
 
     std::string toString() const;
   };
@@ -79,7 +65,14 @@ namespace ipu { namespace partition {
   using BucketHeap = std::priority_queue<Bucket, std::deque<Bucket>, std::greater<std::deque<Bucket>::value_type>>;
 
   // generic methods
-  std::vector<BatchMapping> mapBatches(IPUAlgoConfig config, const RawSequences& Seqs, const Comparisons& Cmps);
+  template<typename C>
+  std::vector<BatchMapping> mapBatches(IPUAlgoConfig config, const RawSequences& Seqs, std::vector<C>& Cmps);
+
+  extern template
+  std::vector<BatchMapping> mapBatches<Comparison>(IPUAlgoConfig config, const RawSequences& Seqs, Comparisons& Cmps);
+
+  extern template
+  std::vector<BatchMapping> mapBatches<MultiComparison>(IPUAlgoConfig config, const RawSequences& Seqs, MultiComparisons& Cmps);
 }}
 
 #endif

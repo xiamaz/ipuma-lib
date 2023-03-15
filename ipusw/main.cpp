@@ -15,21 +15,14 @@ using json = nlohmann::json;
 
 int main(int argc, char** argv) {
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
-  plog::init(plog::debug, &consoleAppender);
+  plog::init(plog::verbose, &consoleAppender);
 
 	cxxopts::Options options("ipusw", "IPU Smith Waterman Binary");
 
 	options.add_options()
-		("hSequencePath", "Sequences File (either fa or txt)", cxxopts::value<std::string>())
-		("vSequencePath", "Sequences File (either fa or txt)", cxxopts::value<std::string>())
-		("hSeedPath", "Seed Position File (txt)", cxxopts::value<std::string>())
-		("vSeedPath", "Seed Position File (txt)", cxxopts::value<std::string>())
 		("c,config", "Configuration file.", cxxopts::value<std::string>())
 		("h,help", "Print usage")
 		;
-
-	options.positional_help("[hSequences] [vSequences] [hSeed] [vSeed]");
-	options.parse_positional({"hSequencePath", "vSequencePath", "hSeedPath", "vSeedPath"});
 
 	json configJson = IpuSwConfig();
 	addArguments(configJson, options, "");
@@ -52,29 +45,54 @@ int main(int argc, char** argv) {
 
 	IpuSwConfig config = configJson.get<IpuSwConfig>();
 
-	std::string hPath = result["hSequencePath"].as<std::string>();
-	std::string vPath = result["vSequencePath"].as<std::string>();
-	std::string hSeedPath = result["hSeedPath"].as<std::string>();
-	std::string vSeedPath = result["vSeedPath"].as<std::string>();
-
 	PLOGI << "IPUSWCONFIG" << json{config}.dump();
 
-	// run_comparison(config, refPath, queryPath);
-	auto [seqs, cmps] = ipu::prepareComparisons(hPath, vPath, hSeedPath, vSeedPath);
+	auto seqdb = config.getSequences();
+	auto [seqs, cmps] = seqdb->get();
 	PLOGI << ipu::getDatasetStats(seqs, cmps).dump();
+	if (cmps.size() == 0) {
+		PLOGF << "No comparisons defined";
+		exit(1);
+	}
+
+	ipu::MultiComparisons mcmps;
+	for (const auto& cmp : cmps) {
+		mcmps.push_back({{cmp}, config.swconfig.seedLength});
+	}
 
 	auto driver = ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, 0, config.numDevices);
 
-	auto batches = driver.create_batches(seqs, cmps);
+	auto batches = ipu::create_batches(seqs, cmps, config.ipuconfig, config.swconfig);
 
-  std::vector<ipu::BlockAlignmentResults> results;
+
+	std::vector<int32_t> scores(cmps.size());
   for (auto& batch : batches) {
     ipu::batchaffine::Job* j = driver.async_submit(&batch);
     assert(batch.cellCount > 0);
     assert(batch.dataCount > 0);
     driver.blocking_join(*j);
-    results.push_back(batch.get_result());
+    auto result = batch.get_result();
     delete j;
+
+		PLOGE << json{result.a_range_result}.dump();
+
+		// results parsing
+		for (int i = 0; i < batch.origin_comparison_index.size(); ++i) {
+			auto [orig_i, orig_seed] = ipu::unpackOriginIndex(batch.origin_comparison_index[i]);
+			if (orig_i >= 0) {
+				int lpartScore = result.a_range_result[i];
+				int rpartScore = result.a_range_result[i];
+				PLOGF << orig_i << ":" << batch.origin_comparison_index[i] << " " << lpartScore << " " << rpartScore;
+				scores[orig_i] = std::max(lpartScore + rpartScore, scores[orig_i]);
+			}
+		}
   }
+
+	PLOGE << json{scores}.dump();
+
+	if (config.output != "") {
+		std::ofstream ofile(config.output);
+		ofile << json{scores};
+	}
   return 0;
 }

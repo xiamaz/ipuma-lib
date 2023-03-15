@@ -14,11 +14,12 @@ int IPUAlgoConfig::getMetaBufferSize32b() const {
         return getTotalNumberOfComparisons() * getMetaStructSize32b();
 };
 
+bool IPUAlgoConfig::hasSeeds() const {
+        return isSeeded(vtype);
+}
+
 int IPUAlgoConfig::getMetaStructSize32b() const {
         switch(this->vtype) {
-        case VertexType::xdropseedextend:
-                return get32bSize(sizeof(XDropMeta));
-                break;
         case VertexType::xdroprestrictedseedextend:
                 return get32bSize(sizeof(XDropMeta));
                 break;
@@ -47,6 +48,8 @@ void to_json(json& j, const SWConfig& c) {
                 {"ambiguityValue", c.ambiguityValue},
                 {"similarity", c.similarity},
                 {"datatype", c.datatype},
+                {"xDrop", c.xDrop},
+                {"seedLength", c.seedLength}
         };
 }
 
@@ -58,6 +61,8 @@ void from_json(const json& j, SWConfig& c) {
         j.at("ambiguityValue").get_to(c.ambiguityValue);
         j.at("similarity").get_to(c.similarity);
         j.at("datatype").get_to(c.datatype);
+        j.at("seedLength").get_to(c.seedLength);
+        j.at("xDrop").get_to(c.xDrop);
 }
 
 void from_json(const json& j, Algorithm& a) {
@@ -76,6 +81,14 @@ void to_json(json& j, const VertexType& t) {
         j = ipu::vertexTypeToConfigString(t);
 }
 
+void from_json(const json& j, Complexity& t) {
+        t = ipu::strToComplexity(j);
+}
+
+void to_json(json& j, const Complexity& t) {
+        j = ipu::complexityToConfigString(t);
+}
+
 void to_json(json& j, const IPUAlgoConfig& c) {
         j = json{
                 {"numVertices", c.numVertices},
@@ -84,11 +97,11 @@ void to_json(json& j, const IPUAlgoConfig& c) {
                 {"vertexBufferSize", c.vertexBufferSize},
                 {"vtype", c.vtype},
                 {"fillAlgo", c.fillAlgo},
+                {"complexityAlgo", c.complexityAlgo},
+                {"partitioningSortComparisons", c.partitioningSortComparisons},
                 {"forwardOnly", c.forwardOnly},
                 {"ioTiles", c.ioTiles},
-                {"xDrop", c.xDrop},
                 {"bandPercentageXDrop", c.bandPercentageXDrop},
-                {"seedLength", c.seedLength}
         };
 }
 
@@ -99,10 +112,10 @@ void from_json(const json& j, IPUAlgoConfig& c) {
         j.at("vertexBufferSize").get_to(c.vertexBufferSize);
         j.at("vtype").get_to(c.vtype);
         j.at("fillAlgo").get_to(c.fillAlgo);
+        j.at("complexityAlgo").get_to(c.complexityAlgo);
+        j.at("partitioningSortComparisons").get_to(c.partitioningSortComparisons);
         j.at("forwardOnly").get_to(c.forwardOnly);
         j.at("ioTiles").get_to(c.ioTiles);
-        j.at("xDrop").get_to(c.xDrop);
         j.at("bandPercentageXDrop").get_to(c.bandPercentageXDrop);
-        j.at("seedLength").get_to(c.seedLength);
 }
 }

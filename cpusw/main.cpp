@@ -8,13 +8,47 @@
 #include <plog/Formatters/TxtFormatter.h>
 
 #include "cpuswconfig.hpp"
-#include "run_comparison.hpp"
 
 #include "ipuma.h"
 #include "cmd_arguments.hpp"
 #include "alignment_seqan.hpp"
+#include "alignment_genometools.hpp"
 
 using json = nlohmann::json;
+
+template<typename C>
+std::vector<int> runAlignment(const ipu::RawSequences& seqs, const ipu::Comparisons& cmps, const ipu::SWConfig& config) {
+  swatlib::TickTock t;
+  t.tick();
+  double cells = 0;
+
+  std::vector<int> scores(cmps.size());
+
+  #pragma omp parallel for
+  for (int i = 0; i < cmps.size(); ++i) {
+    const auto& cmp = cmps[i];
+    cells += (seqs[cmp.indexA].size() * seqs[cmp.indexB].size()) / 1e9;
+    // PLOGE << json{
+    //   {"i", i},
+    //   {"lenH", seqs[cmp.indexA].size()},
+    //   {"lenV", seqs[cmp.indexB].size()},
+    //   {"seedH", cmp.seedAStartPos},
+    //   {"seedV", cmp.seedBStartPos},
+    // }.dump();
+    int maxScore = 0;
+    for (int j = 0; j < NSEEDS; ++j) {
+      maxScore = std::max(
+				C::align(seqs[cmp.indexA], seqs[cmp.indexB], cmp.seeds[j].seedAStartPos, cmp.seeds[j].seedBStartPos, config.seedLength, config),
+				maxScore
+			);
+    }
+    scores[i] = maxScore;
+  }
+  t.tock();
+  double gcups = cells / t.accumulate_microseconds() * 1e6;
+  PLOGI << "GCUPS " << gcups;
+  return scores;
+}
 
 int main(int argc, char** argv) {
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
@@ -23,16 +57,9 @@ int main(int argc, char** argv) {
 	cxxopts::Options options("cpusw", "CPU Xdrop implementation");
 
 	options.add_options()
-		("hSequencePath", "Sequences File (either fa or txt)", cxxopts::value<std::string>())
-		("vSequencePath", "Sequences File (either fa or txt)", cxxopts::value<std::string>())
-		("hSeedPath", "Seed Position File (txt)", cxxopts::value<std::string>())
-		("vSeedPath", "Seed Position File (txt)", cxxopts::value<std::string>())
 		("c,config", "Configuration file.", cxxopts::value<std::string>())
 		("h,help", "Print usage")
 		;
-
-	options.positional_help("[hSequences] [vSequences] [hSeed] [vSeed]");
-	options.parse_positional({"hSequencePath", "vSequencePath", "hSeedPath", "vSeedPath"});
 
 	json configJson = CpuSwConfig();
 	addArguments(configJson, options, "");
@@ -55,15 +82,25 @@ int main(int argc, char** argv) {
 
 	CpuSwConfig config = configJson.get<CpuSwConfig>();
 
-	std::string hPath = result["hSequencePath"].as<std::string>();
-	std::string vPath = result["vSequencePath"].as<std::string>();
-	std::string hSeedPath = result["hSeedPath"].as<std::string>();
-	std::string vSeedPath = result["vSeedPath"].as<std::string>();
-
 	PLOGI << "CPUSWCONFIG" << json{config}.dump();
-
-	auto [seqs, cmps] = ipu::prepareComparisons(hPath, vPath, hSeedPath, vSeedPath);
+	auto seqdb = config.getSequences();
+	auto [seqs, cmps] = seqdb->get();
 	PLOGI << ipu::getDatasetStats(seqs, cmps).dump();
 
-	runAlignment(seqs, cmps);
+	std::vector<int> scores;
+	switch (config.algoconfig.algo) {
+	case cpu::Algo::seqan:
+		scores = runAlignment<cpu::SeqanAligner>(seqs, cmps, config.swconfig);
+		break;
+	case cpu::Algo::genometools:
+		scores = runAlignment<cpu::GenomeToolsAligner>(seqs, cmps, config.swconfig);
+		break;
+	}
+	if (config.output != "") {
+		std::ofstream ofile(config.output);
+		ofile << json{scores};
+	}
+
+	return 0;
+
 }

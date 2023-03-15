@@ -6,6 +6,7 @@
 #include <plog/Log.h>
 
 #include "types.h"
+#include "load_sequences.h"
 
 using json = nlohmann::json;
 namespace ipu {
@@ -25,76 +26,111 @@ json getDatasetStats(const ipu::RawSequences& seqs, const ipu::Comparisons& cmps
   PLOGI << "COMPARISON STATS: " << stats.dump();
 }
 
-std::tuple<ipu::RawSequences, ipu::Comparisons> prepareComparisons(std::string seqH, std::string seqV, std::string seedH, std::string seedV) {
-  ipu::RawSequences seqs;
-  ipu::Comparisons cmps;
+std::unique_ptr<std::ifstream> openFile(std::string path) {
+  std::unique_ptr<std::ifstream> file(new std::ifstream(path));
+  if (!file->good()) {
+    PLOGE << "Failed to open " << path;
+    file->close();
+    return {nullptr};
+  }
+  PLOGD << "Loading from " << path;
+  return file;
+}
 
-  std::ifstream fileH(seqH);
-  std::ifstream fileV(seqV);
-  std::ifstream fileHs(seedH);
-  std::ifstream fileVs(seedV);
+typedef bool FailFlag;
+typedef bool EOFFlag;
+
+std::tuple<std::string, int, int, FailFlag, EOFFlag> readFile(std::unique_ptr<std::ifstream>& seqF, std::unique_ptr<std::ifstream>& seed1F, std::unique_ptr<std::ifstream>& seed2F) {
+  std::string s = "";
+  int seed1 = -1, seed2 = -1;
+  std::getline(*seqF, s);
+  bool allEof = seqF->eof();
+  bool anyFail = seqF->fail();
+  if (seed1F) {
+    *seed1F >> seed1;
+    allEof = allEof && seed1F->eof();
+    anyFail = anyFail || seed1F->fail();
+  }
+  if (seed2F) {
+    *seed2F >> seed2;
+    allEof = allEof && seed2F->eof();
+    anyFail = anyFail || seed2F->fail();
+  }
+
+  return {std::move(s), seed1, seed2, anyFail, allEof};
+}
+
+SequenceData::SequenceData(const SequenceConfig& config) {
+  auto fileH = openFile(config.seqsH);
+  auto fileV = openFile(config.seqsV);
+  auto fileHs1 = openFile(config.seedsH1);
+  auto fileVs1 = openFile(config.seedsV1);
+  auto fileHs2 = openFile(config.seedsH2);
+  auto fileVs2 = openFile(config.seedsV2);
   int sH, sV;
   std::string lH, lV;
   int i = 0;
-  PLOGD << "Loading from " << seqH << " " << seqV << " " << seedH << " " << seedV;
-  if (!fileH.good()) {
-    PLOGE << "Failed to open " << seqH;
-  }
-  if (!fileV.good()) {
-    PLOGE << "Failed to open " << seqV;
-  }
-  if (!fileHs.good()) {
-    PLOGE << "Failed to open " << seedH;
-  }
-  if (!fileVs.good()) {
-    PLOGE << "Failed to open " << seedV;
-  }
   while (true) {
-    std::getline(fileH, lH);
-    std::getline(fileV, lV);
-    fileHs >> sH;
-    fileVs >> sV;
-    bool fHValid = !fileH.fail();
-    bool fVValid = !fileV.fail();
-    bool fHsValid = !fileHs.fail();
-    bool fVsValid = !fileVs.fail();
-    auto allFilesEOF = fileH.eof() & fileH.eof() & fileHs.eof() & fileVs.eof();
-    if (allFilesEOF) {
+    auto [lH, sH1, sH2, anyFailH, eofH] = readFile(fileH, fileHs1, fileHs2);
+    auto [lV, sV1, sV2, anyFailV, eofV] = readFile(fileV, fileVs1, fileVs2);
+    if (eofH && eofV) {
       break;
     }
-    if (fHValid & fVValid & fHsValid & fVsValid) {
-      seqs.push_back(lH);
-      seqs.push_back(lV);
+    if (!anyFailH && !anyFailV) {
+      sequences.push_back(lH);
+      seqs.push_back(sequences.back());
+      sequences.push_back(lV);
+      seqs.push_back(sequences.back());
       const int sizeA = (int) seqs[(int) (2 * i)].size();
- const int sizeB =       (int) seqs[(int) (2 * i + 1)].size();
+      const int sizeB = (int) seqs[(int) (2 * i + 1)].size();
       cmps.push_back({
         i,
         (int) (2 * i),
         sizeA,
         (int) (2 * i + 1),
         sizeB,
-        {{sH, sV}},
-        // 0,
+        {{{sH1, sH2}, {sV1, sV2}}},
       });
       i++;
     } else {
-      if (!fHValid) {
-        PLOGE << "Malformed sequence input in " << seqH;
+      if (anyFailH) {
+        PLOGE << "Malformed sequence input in H sequence string or seeds";
       }
-      if (!fVValid) {
-        PLOGE << "Malformed sequence input in " << seqV;
-      }
-      if (!fHsValid) {
-        PLOGE << "Malformed seed input in " << seedH;
-      }
-      if (!fVsValid) {
-        PLOGE << "Malformed seed input in " << seedV;
+      if (anyFailV) {
+        PLOGE << "Malformed sequence input in V sequence string or seeds";
       }
       PLOGF << "Failed to read input files";
       exit(1);
     }
   }
+}
 
+void from_json(const json& j, SequenceConfig& c) {
+	j.at("seqsH").get_to(c.seqsH);
+	j.at("seqsV").get_to(c.seqsV);
+	j.at("seedsH1").get_to(c.seedsH1);
+	j.at("seedsH2").get_to(c.seedsH2);
+	j.at("seedsV1").get_to(c.seedsV1);
+	j.at("seedsV2").get_to(c.seedsV2);
+	j.at("complexity1").get_to(c.complexity1);
+	j.at("complexity2").get_to(c.complexity2);
+}
+
+void to_json(json& j, const SequenceConfig& c) {
+	j = json{
+		{"seqsH", c.seqsH},
+		{"seqsV", c.seqsV},
+		{"seedsH1", c.seedsH1},
+		{"seedsH2", c.seedsH2},
+		{"seedsV1", c.seedsV1},
+		{"seedsV2", c.seedsV2},
+		{"complexity1", c.complexity1},
+		{"complexity2", c.complexity2},
+	};
+}
+
+
+std::tuple<ipu::RawSequences, ipu::Comparisons> SequenceData::get() {
   return {std::move(seqs), std::move(cmps)};
 }
 }

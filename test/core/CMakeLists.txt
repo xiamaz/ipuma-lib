@@ -1,4 +1,4 @@
-add_subdirectory("${PROJECT_SOURCE_DIR}/googletest" "googletest")
+add_subdirectory("${PROJECT_SOURCE_DIR}/extern/googletest" "googletest")
 set(BINARY ipuma-core)
 
 set(TEST_SOURCES main.cpp elba_integration.cpp)
