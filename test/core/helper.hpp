@@ -29,9 +29,10 @@ inline int alignSeqSeqan(const std::string cpp_seqH, const std::string cpp_seqV,
     // Create the seed sequence.
     Seed<Simple> seed(0, 0, 0, 0);
 
+    int seedLen = 0;
     // Perform match extension.
     Score<int, Simple> scoringScheme(1, -1, -1);
-    auto score = extendSeed(seed, seqH, seqV, EXTEND_RIGHT, scoringScheme, XDrop, GappedXDrop());
+    auto score = extendSeed(seed, seqH, seqV, EXTEND_RIGHT, scoringScheme, XDrop, seedLen, GappedXDrop());
 
     if (true) {
       // Perform a banded alignment.

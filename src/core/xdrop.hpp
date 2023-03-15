@@ -173,7 +173,6 @@ inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* quer
   if (N == 0 || M == 0) {
     return 0;
   }
-  auto tmp = max<int>(M, N);
   // for (size_t i = 0; i < tmp; i++) {
   //   if (k1[i] != 0) {
   //     printf("k1[%d] == %d\n", i, k1[i]);
@@ -201,19 +200,26 @@ inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* quer
     k2 = t;
   };
 
+  sType lastval = 0;
   int k = 0;
   do {
     k = k + 1;
-    sType lastval = k1[L - 1];
+    if (k != 1) {
+      lastval = k1[L - 1];
+    }
     for (size_t i = L; i < U + 1; i++) {
       int32_t j = k - i - 1;
       sType new_lastval = k1[i];
       sType score = max<sType>(k2[i] - (sType) GAP_PENALTY,
                                k2[i - 1] - (sType) GAP_PENALTY,
                                lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
-#ifdef PRINT_DEBUG
-      PLOGW.printf("i %d, j %d, k1[z - 1] (%d) + sim(reference[i] (%c), query[j] (%c)) (%d) => %d", i, j, k1[z - 1], reference[adrREF(i)], query[adrQER(j)], sim(reference[adrREF(i)], query[adrQER(j)]), score);
-#endif
+// #ifdef PRINT_DEBUG
+//       printf("\n\n\n");
+//       printf("Pos(%d, %d):\n", i + 1, j + 1);
+//       printf(" k2[i] - (sType) GAP_PENALTY                           %d - %d = %d\n", k2[i], GAP_PENALTY, k2[i] - (sType) GAP_PENALTY);
+//       printf(" k2[i - 1] - (sType) GAP_PENALTY                       %d - %d = %d\n", k2[i - 1], GAP_PENALTY, k2[i - 1] - (sType) GAP_PENALTY);
+//       printf(" lastval + sim[reference[adrREF(i)]][query[adrQER(j)]] %d + %d = %d\n", lastval, sim[reference[adrREF(i)]][query[adrQER(j)]], lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
+// #endif
       lastval = new_lastval;
       if (score < T - X) {
         score = neginf;
@@ -222,6 +228,21 @@ inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* quer
 #ifdef PRINT_DEBUG
       H(i + 1, j + 1) = score;  // DEBUG
       C(i + 1, j + 1) = 1;      // DEBUG
+
+  // printf("k1 = ");
+  // for (int i = 0; i < std::max(M, N)+2; i++)  {
+  //   printf("%7d ", k1[i - 1]);
+  // }
+  // printf("\n");
+  // printf("k2 = ");
+  // for (int i = 0; i < std::max(M, N)+2; i++)  {
+  //   printf("%7d ", k2[i - 1]);
+  // }
+  // printf("\n");
+
+  // PLOGD << H.toString();  // DEBUG
+  // PLOGD << C.toString();  // DEBUG
+
 #endif
       T_prime = max<sType>(T_prime, score);
     }
@@ -265,12 +286,20 @@ template <int X, int GAP_PENALTY, bool reversed>
 int xdrop_doubleband_cpu(const std::vector<uint8_t>& query, const std::vector<uint8_t>& reference, Matrix<int8_t> sim) {
   int M = reference.size();
   int N = query.size();
+  int s = std::max(M, N) + 10;
   // Can also be malloc with: k1[0] = 0, k2[0:2] = 0
-  int* k1 = &((int*)calloc(M + 2, sizeof(int)))[1];
-  int* k2 = &((int*)calloc(M + 2, sizeof(int)))[1];
+  int* _k1 = (int*) calloc(s, sizeof(int));
+  int* _k2 = (int*) calloc(s, sizeof(int));
+  for (int i = 0; i < s; i++) {
+    _k1[i] = -9999;
+    _k2[i] = -9999;
+  }
+
+  int* k1 = &((int*)_k1)[5];
+  int* k2 = &((int*)_k2)[5];
   int score = xdrop_doubleband<X, GAP_PENALTY, reversed, std::vector<std::vector<int8_t>>, int>(query.data(), N, reference.data(), M, sim.toVector(), k1, k2);
-  free(&k2[-1]);
-  free(&k1[-1]);
+  free(_k1);
+  free(_k2);
   return score;
 }
 #endif
@@ -279,7 +308,6 @@ template <int X, int GAP_PENALTY, bool reversed, typename simT, typename sType>
 inline __attribute__((always_inline)) int xdrop_doubleband_restricted(const uint8_t* query, int N, const uint8_t* reference, int M, simT sim, sType* t1, sType* t2, int klen) {
   const sType neginf = -999999;
   // printf("RESTRICTED: N = %d, M = %d\n", N, M);
-  auto tmp = klen;
   // for (size_t i = 0; i < tmp; i++) {
   //   if (t1[i] != 0) {
   //     printf("t1[%d] == %d\n", i, t1[i]);
@@ -301,6 +329,7 @@ inline __attribute__((always_inline)) int xdrop_doubleband_restricted(const uint
 #define adrREF(zzz) ((!reversed) ? zzz : (M - 1) - zzz)
 #define adrQER(zzz) ((!reversed) ? zzz : (N - 1) - zzz)
 
+  sType lastval = 0;
   int k = 0;
   do {
 #ifndef __POPC__
@@ -310,19 +339,24 @@ inline __attribute__((always_inline)) int xdrop_doubleband_restricted(const uint
     }
     assert(U - L < klen);
 #endif
-
     k = k + 1;
     // int lastval = k1[L-1];
     sType* _t2 = t2 + (-L + L2inc);
     sType* _t1 = t1 + (-L + L2inc + L1inc);
     sType* __t1 = t1 + (-L);
 
-    sType lastval = _t1[L - 1];
+    if (k != 1) {
+      lastval = _t1[L - 1];
+    }
+    // sType lastval = _t1[L - 1];
     for (size_t i = L; i < U + 1; i++) {
       auto j = k - i - 1;
 
       sType new_lastval = _t1[i];
-      sType score = max<sType>(_t2[i] -  (sType) GAP_PENALTY, _t2[i - 1] -  (sType) GAP_PENALTY, lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
+      sType score = max<sType>(
+          _t2[i] -  (sType) GAP_PENALTY,
+          _t2[i - 1] -  (sType) GAP_PENALTY,
+          lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
       // printf("score[%d]: %d = max(%d, %d, %d)\n", i, score, _t2[i] - GAP_PENALTY, _t2[i - 1] - GAP_PENALTY, lastval + sim[reference[adrREF(i)]][query[adrQER(j)]]);
       // printf("   lv: %d, sim %d,[v %d, i %d][v %d, i %d]\n", lastval,  sim[reference[adrREF(i)]][query[adrQER(j)]], reference[adrREF(i)], adrREF(i), query[adrQER(j)], adrQER(j));
 
@@ -333,7 +367,7 @@ inline __attribute__((always_inline)) int xdrop_doubleband_restricted(const uint
       __t1[i] = score;
 
 #ifdef PRINT_DEBUG
-      H(i + 1, j + 1) = tscore;  // DEBUG
+      H(i + 1, j + 1) = score;  // DEBUG
       C(i + 1, j + 1) = 1;       // DEBUG
 #endif
 
@@ -360,7 +394,7 @@ inline __attribute__((always_inline)) int xdrop_doubleband_restricted(const uint
     }
 
     int oldL = L;
-    t1[U - L + 1] = 0;
+    t1[U - L + 1] = neginf;
     L = max(minL, k + 1 - N);
     U = min(maxU + 1, M - 1);
     T = T_prime;
@@ -390,11 +424,20 @@ template <int X, int GAP_PENALTY, int klen, bool reversed>
 int xdrop_doubleband_restricted_cpu(const std::vector<uint8_t>& query, const std::vector<uint8_t>& reference, Matrix<int8_t> sim) {
   int M = reference.size();
   int N = query.size();
-  int* t1 = &((int*)calloc(klen + 5, sizeof(int)))[1];
-  int* t2 = &((int*)calloc(klen + 5, sizeof(int)))[1];
-  auto score = xdrop_doubleband_restricted<X, GAP_PENALTY, reversed, Matrix<int8_t>, klen>(query.data(), N, reference.data(), M, sim, t1, t2);
-  free(&t2[-1]);
-  free(&t1[-1]);
+  int s = klen + 10;
+  int* _t1 = (int*) calloc(s, sizeof(int));
+  int* _t2 = (int*) calloc(s, sizeof(int));
+  int *t1 = &_t1[5];
+  int *t2 = &_t2[5];
+
+  for (int i = 0; i < s; i++) {
+    _t1[i] = -9999;
+    _t2[i] = -9999;
+  }
+
+  auto score = xdrop_doubleband_restricted<X, GAP_PENALTY, reversed, std::vector<std::vector<int8_t>>, int>(query.data(), N, reference.data(), M, sim.toVector(), t1, t2, klen);
+  free(_t1);
+  free(_t2);
   return score;
 }
 #endif
@@ -531,8 +574,8 @@ int seed_extend_cpu(const std::vector<uint8_t>& query, int querySeedBeginPos, co
   memset(k2, 0, sizeof(int) * M + 2);
   auto score_left = xdrop_extend_left<X, GAP_PENALTY, std::vector<std::vector<int8_t>>, int>(query.data(), N, querySeedBeginPos, reference.data(), M, referenceSeedBeginPos, seedLength, sim.toVector(), _k1, _k2);
 
-  free(&k2[0]);
-  free(&k1[0]);
+  free(k2);
+  free(k1);
 
   return score_right + score_left + seedLength;
 }

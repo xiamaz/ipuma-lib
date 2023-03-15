@@ -26,6 +26,8 @@ inline int min(int a, int b) {
 const int GAP_PENALTY = 1;
 typedef float sType;
 
+// typedef int sType;
+
 class TileTelemetry {
  private:
   unsigned cycle_counter_l;
@@ -52,6 +54,17 @@ class TileTelemetry {
 
 constexpr unsigned numberOfBits(unsigned x) {
   return x < 2 ? x : 1 + numberOfBits(x >> 1);
+}
+
+void inline setZeroPart(sType* ptr, int N) {
+  sType negXinf = -9999;
+  const float2 zzero = {negXinf, negXinf}; 
+  const rptsize_t loopCount = N / 2;
+  float2 * o = reinterpret_cast<float2 *>(ptr);
+  for (unsigned i = 0; i < loopCount; i++) {
+    ipu::store_postinc(&o, zzero, 1);
+  }
+  ptr[N-1] = negXinf;
 }
 
 template <int X>
@@ -139,8 +152,20 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
         }
       } else {
         if (myN % 2 == 0) {
-          memset(k1, 0, (klen) * sizeof(sType));
-          memset(k2, 0, (klen) * sizeof(sType));
+          // memset(k1, 0, (klen) * sizeof(sType));
+          // memset(k2, 0, (klen) * sizeof(sType));
+          setZeroPart(k1, klen);
+          // for (int i = 0; i < klen; i++) {
+          //   if (k1[i] >= 0) {
+          //     printf("FAILURE %d\n", i);
+          //   }
+          // }
+          setZeroPart(k2, klen);
+          // for (int i = 0; i < klen; i++) {
+          //   if (k2[i] >= 0) {
+          //     printf("FAILURE %d\n", i);
+          //   }
+          // }
           sType lpartscore = ipumacore::xdrop::xdrop_smart_restricted_extend_left<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
               a, a_len, a_seed_begin,
               b, b_len, b_seed_begin,
@@ -149,8 +174,20 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
           ARange[n] = lpartscore;
 
         } else {
-          memset(k1, 0, (klen) * sizeof(sType));
-          memset(k2, 0, (klen) * sizeof(sType));
+          // memset(k1, 0, (klen) * sizeof(sType));
+          // memset(k2, 0, (klen) * sizeof(sType));
+          setZeroPart(k1, klen);
+          // for (int i = 0; i < klen; i++) {
+          //   if (k1[i] >= 0) {
+          //     printf("FAILURE %d\n", i);
+          //   }
+          // }
+          setZeroPart(k2, klen);
+          // for (int i = 0; i < klen; i++) {
+          //   if (k2[i] >= 0) {
+          //     printf("FAILURE %d\n", i);
+          //   }
+          // }
           sType rpartscore = ipumacore::xdrop::xdrop_smart_restricted_extend_right<X, GAP_PENALTY, poplar::Vector<poplar::Input<poplar::Vector<sType, poplar::VectorLayout::ONE_PTR>>>&, sType>(
                                  a, a_len, a_seed_begin,
                                  b, b_len, b_seed_begin,
