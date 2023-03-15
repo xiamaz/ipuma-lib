@@ -48,12 +48,14 @@ SequenceGenerator::SequenceGenerator(GeneratorConfig config, SWConfig swconfig) 
 		throw std::runtime_error("Seed does not fit into sequence length");
 	}
 	for (int i = 0; i < config.sequenceCount; ++i) {
-		auto seq1 = generateRandomSequence(config.sequenceLength, swconfig.datatype, gen);
-		std::string seq2;
+		std::string seq1, seq2;
 		if (config.similarity > 0) {
+			seq1 = generateRandomSequence(config.sequenceLength, swconfig.datatype, gen);
 			seq2 = mutateSequence(seq1, swconfig.datatype, gen, config.similarity, seed_start, swconfig.seedLength);
 		} else {
-			seq2 = generateRandomSequence(config.sequenceLength, swconfig.datatype, gen);
+			const auto& chars = SYMBOLS[swconfig.datatype];
+			seq1 = std::string(config.sequenceLength, chars[0]);
+			seq2 = std::string(config.sequenceLength, chars[1]);
 		}
 
 		sequences.push_back(seq1);
