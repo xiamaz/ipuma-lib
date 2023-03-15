@@ -17,11 +17,9 @@ namespace cpu {
 
       Seed<Simple> seed(seedHStart, seedVStart, seedLen);
       Score<int, Simple> scoringScheme(config.matchValue, config.mismatchValue, config.gapExtend);
-      auto scoreRight = extendSeed(seed, sH, sV, EXTEND_RIGHT, scoringScheme, config.xDrop, GappedXDrop());
-      auto scoreLeft = extendSeed(seed, sH, sV, EXTEND_LEFT, scoringScheme, config.xDrop, GappedXDrop());
-      PLOGE << scoreRight;
-      PLOGE << scoreLeft;
-      return scoreRight + scoreLeft;
+      auto scoreBoth = extendSeed(seed, sH, sV, seqan::ExtensionDirection::EXTEND_BOTH, scoringScheme, config.xDrop, seedLen, GappedXDrop());
+
+      return scoreBoth;
     }
   };
 }

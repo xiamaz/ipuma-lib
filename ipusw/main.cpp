@@ -74,7 +74,7 @@ int main(int argc, char** argv) {
     auto result = batch.get_result();
     delete j;
 
-		PLOGE << json{result.a_range_result}.dump();
+		// PLOGE << json{result.a_range_result}.dump();
 
 		// results parsing
 		for (int i = 0; i < batch.origin_comparison_index.size(); ++i) {
@@ -82,13 +82,13 @@ int main(int argc, char** argv) {
 			if (orig_i >= 0) {
 				int lpartScore = result.a_range_result[i];
 				int rpartScore = result.a_range_result[i];
-				PLOGF << orig_i << ":" << batch.origin_comparison_index[i] << " " << lpartScore << " " << rpartScore;
+				// PLOGF << orig_i << ":" << batch.origin_comparison_index[i] << " " << lpartScore << " " << rpartScore;
 				scores[orig_i] = std::max(lpartScore + rpartScore, scores[orig_i]);
 			}
 		}
   }
 
-	PLOGE << json{scores}.dump();
+	// PLOGE << json{scores}.dump();
 
 	if (config.output != "") {
 		std::ofstream ofile(config.output);

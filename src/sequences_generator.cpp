@@ -49,7 +49,12 @@ SequenceGenerator::SequenceGenerator(GeneratorConfig config, SWConfig swconfig) 
 	}
 	for (int i = 0; i < config.sequenceCount; ++i) {
 		auto seq1 = generateRandomSequence(config.sequenceLength, swconfig.datatype, gen);
-		auto seq2 = mutateSequence(seq1, swconfig.datatype, gen, config.similarity, seed_start, swconfig.seedLength);
+		std::string seq2;
+		if (config.similarity > 0) {
+			seq2 = mutateSequence(seq1, swconfig.datatype, gen, config.similarity, seed_start, swconfig.seedLength);
+		} else {
+			seq2 = generateRandomSequence(config.sequenceLength, swconfig.datatype, gen);
+		}
 
 		sequences.push_back(seq1);
 		seqs.push_back(sequences.back());

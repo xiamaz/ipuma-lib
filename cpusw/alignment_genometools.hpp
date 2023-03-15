@@ -11,52 +11,63 @@ namespace cpu {
   class GenomeToolsAligner {
   public:
     static int align(const std::string_view& seqH, const std::string_view& seqV, int32_t seedHStart, int32_t seedVStart, int32_t seedLen, const ipu::SWConfig& config) {
-      gt_lib_init();
-      GtAlphabet* alpha = gt_alphabet_new_dna();
 
-      GtEncseqBuilder* eb = gt_encseq_builder_new(alpha);
-      gt_encseq_builder_disable_description_support(eb);
-
-      GtSeqabstract *useq, *vseq;
-      useq = gt_seqabstract_new_gtuchar(
-        true, GT_READMODE_FORWARD, (const GtUchar*) seqH.data(), seqH.size(), 0, seqH.size());
-      vseq = gt_seqabstract_new_gtuchar(
-        true, GT_READMODE_FORWARD, (const GtUchar*) seqV.data(), seqV.size(), 0, seqV.size());
+      GtSeqabstract *useq_right, *vseq_right;
+      GtSeqabstract *useq_left, *vseq_left;
+      useq_left = gt_seqabstract_new_gtuchar(
+        false, GT_READMODE_FORWARD, (const GtUchar*) seqH.data(), seedHStart, 0, seqH.size());
+      vseq_left = gt_seqabstract_new_gtuchar(
+        false, GT_READMODE_FORWARD, (const GtUchar*) seqV.data(), seedVStart, 0, seqV.size());
+      useq_right = gt_seqabstract_new_gtuchar(
+        true, GT_READMODE_FORWARD, (const GtUchar*) seqH.data(), seqH.size() - (seedHStart + seedLen), seedHStart + seedLen, seqH.size());
+      vseq_right = gt_seqabstract_new_gtuchar(
+        true, GT_READMODE_FORWARD, (const GtUchar*) seqV.data(), seqV.size() - (seedVStart + seedLen), seedVStart + seedLen, seqV.size());
 
       GtXdropArbitraryscores xdropConfig{
-        .mat = config.matchValue,
-        .mis = config.mismatchValue,
-        .ins = config.gapExtend,
-        .del = config.gapExtend,
+        // .mat = config.matchValue,
+        // .mis = config.mismatchValue,
+        // .ins = config.gapExtend,
+        // .del = config.gapExtend,
+        .mat = 2,
+        .mis = -1,
+        .ins = -2,
+        .del = -2,
       };
 
-      auto* xres = gt_xdrop_resources_new(&xdropConfig);
+      auto* xres_left = gt_xdrop_resources_new(&xdropConfig);
+      auto* xres_right = gt_xdrop_resources_new(&xdropConfig);
 
-      GtXdropbest result;
-
-      PLOGF << "GTOOLS " << result.score;
+      GtXdropbest result_left, result_right;
 
       int score;
 
       gt_evalxdroparbitscoresextend(
         true, // forward
-        &result,
-        xres,
-        useq,
-        vseq,
+        &result_left,
+        xres_left,
+        useq_left,
+        vseq_left,
         config.xDrop
       );
 
-      score = result.score;
+      gt_evalxdroparbitscoresextend(
+        true, // forward
+        &result_right,
+        xres_right,
+        useq_right,
+        vseq_right,
+        config.xDrop
+      );
 
-      gt_seqabstract_delete(useq);
-      gt_seqabstract_delete(vseq);
+      score = result_left.score + result_right.score;
 
-      gt_xdrop_resources_delete(xres);
-      gt_encseq_builder_delete(eb);
-      gt_alphabet_delete(alpha);
+      gt_seqabstract_delete(useq_left);
+      gt_seqabstract_delete(vseq_left);
+      gt_seqabstract_delete(useq_right);
+      gt_seqabstract_delete(vseq_right);
 
-      gt_lib_clean();
+      gt_xdrop_resources_delete(xres_left);
+      gt_xdrop_resources_delete(xres_right);
 
       return score;
     }
