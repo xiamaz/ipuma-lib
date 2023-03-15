@@ -17,12 +17,16 @@
 using json = nlohmann::json;
 
 template<typename C>
-std::vector<int> runAlignment(const ipu::RawSequences& seqs, const ipu::Comparisons& cmps, const ipu::SWConfig& config) {
+std::vector<int> runAlignment(const ipu::RawSequences& seqs, const ipu::Comparisons& cmps, const ipu::SWConfig& config, int threads) {
   swatlib::TickTock t;
   t.tick();
   double cells = 0;
 
   std::vector<int> scores(cmps.size());
+
+	if (threads > 0) {
+		omp_set_num_threads(threads);
+	}
 
   #pragma omp parallel for
   for (int i = 0; i < cmps.size(); ++i) {
@@ -90,10 +94,11 @@ int main(int argc, char** argv) {
 	std::vector<int> scores;
 	switch (config.algoconfig.algo) {
 	case cpu::Algo::seqan:
-		scores = runAlignment<cpu::SeqanAligner>(seqs, cmps, config.swconfig);
+		scores = runAlignment<cpu::SeqanAligner>(seqs, cmps, config.swconfig, config.algoconfig.threads);
 		break;
 	case cpu::Algo::genometools:
-		scores = runAlignment<cpu::GenomeToolsAligner>(seqs, cmps, config.swconfig);
+    gt_lib_init();
+		scores = runAlignment<cpu::GenomeToolsAligner>(seqs, cmps, config.swconfig, config.algoconfig.threads);
 		break;
 	}
 	if (config.output != "") {
