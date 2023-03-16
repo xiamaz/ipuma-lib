@@ -63,109 +63,6 @@ inline T min(T a, T b, T c) {
 
 namespace ipumacore {
 namespace xdrop {
-
-#ifndef __POPC__
-#include "../src/swatlib/swatlib.h"
-namespace debug {
-
-template <int X, int GAP_PENALTY>
-int xdrop(const std::string& query, const std::string& reference, bool cut) {
-  const int neginf = -999999;
-  auto encoder = getEncoder(DataType::nucleicAcid);
-  auto sim = selectMatrix(Similarity::nucleicAcid, 1, -1, -1);
-  auto ref = encoder.encode(reference);
-  auto quer = encoder.encode(query);
-
-  int T_prime = 0, T = 0, L = 0, U = 0;
-
-  int M = reference.length();
-  int N = query.length();
-  Matrix<int> H(M + 1, N + 1, 0);  // DEBUG
-  Matrix<int> C(M + 1, N + 1, 0);  // DEBUG
-
-  // Can also be malloc with: k1[0] = 0, k2[0:2] = 0
-  int* k1 = &((int*)calloc(M + 2, sizeof(int)))[1];
-  int* k2 = &((int*)calloc(M + 2, sizeof(int)))[1];
-  int* k3 = &((int*)calloc(M + 2, sizeof(int)))[1];
-
-  auto cell_update = [&](int i, int j, int* k1, int* k2, int* k3, int z) {
-    auto score = max(k2[z] - GAP_PENALTY,
-                     k2[z - 1] - GAP_PENALTY,
-                     k1[z - 1] + sim(ref[i], quer[j]));
-
-#ifdef PRINT_DEBUG
-    PLOGW.printf("Q: %s, R: %s", query.c_str(), reference.c_str());
-    PLOGW.printf("i %d, j %d, k1[z - 1] (%d) + sim(ref[i] (%c), quer[j] (%c)) (%d) => %d", i, j, k1[z - 1], reference[i], query[j], sim(ref[i], quer[j]), score);
-#endif
-    if (score < T - X) {
-      score = neginf;
-    }
-    k3[z] = score;
-    H(i + 1, j + 1) = score;  // DEBUG
-    // PLOGE <<  H.toString();
-    return score;
-  };
-
-  auto rotate = [&]() {
-    int* t;  // 1->3, 2->1, 3->2
-    t = k1;
-    k1 = k2;
-    k2 = k3;
-    k3 = t;
-  };
-
-  int k = 0;
-  do {
-    k = k + 1;
-    for (size_t i = L; i < U + 1; i++) {
-      auto j = k - i - 1;
-      int score = cell_update(i, j, k1, k2, k3, i);
-      C(i + 1, j + 1) = 1;  // DEBUG
-      T_prime = max(T_prime, score);
-    }
-
-    int minL = 99999;
-    for (size_t i = L; i < U + 1; i++) {
-      int s = k3[i];
-      if (s > neginf) {
-        minL = i;
-        break;
-      }
-    }
-
-    int maxU = 0;
-    for (size_t i = L; i < U + 1; i++) {
-      int s = k3[i];
-      if (s > neginf) {
-        maxU = i;
-      }
-    }
-
-    if (cut) {
-      L = minL;
-      U = maxU + 1;
-    } else {
-      L = 0;
-      U = U + 1;
-    }
-
-    L = max(L, k + 1 - N);
-    U = min(U, M - 1);
-    T = T_prime;
-    rotate();
-  } while (L <= U + 1);
-
-  // PLOGD << H.toString(); // DEBUG
-  // PLOGD << C.toString(); // DEBUG
-
-  free(&k3[-1]);
-  free(&k2[-1]);
-  free(&k1[-1]);
-  return T;
-}
-}  // namespace debug
-#endif
-
 template <int X, int GAP_PENALTY, bool reversed, typename simT, typename sType>
 inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* query, int N, const uint8_t* reference, int M, simT sim, sType* k1, sType* k2) {
   const sType neginf = -999999;
@@ -589,21 +486,28 @@ int seed_extend_restricted_cpu(const std::vector<uint8_t>& query, int querySeedB
 
   // assert(M >= N);
   // Can also be malloc with: k1[0] = 0, k2[0:2] = 0
-  size_t buflen = klen + 4 + 4;
-  int* k1 = &((int*)malloc((buflen) * sizeof(int)))[0];
-  int* k2 = &((int*)malloc((buflen) * sizeof(int)))[0];
-  int* _k1 = &k1[4];
-  int* _k2 = &k2[4];
+  size_t buflen = klen + 20;
+  int* k1 = (int*) calloc(buflen, sizeof(int));
+  int* k2 = (int*) calloc(buflen, sizeof(int));
 
-  memset(k1, 0, sizeof(int) * buflen);
-  memset(k2, 0, sizeof(int) * buflen);
+  int* _k1 = &k1[10];
+  int* _k2 = &k2[10];
+
+
+
+  for (int i = 0; i < buflen; i++) {
+    k1[i] = -9999;
+    k2[i] = -9999;
+  }
   auto score_left = xdrop_smart_restricted_extend_left<X, GAP_PENALTY, std::vector<std::vector<int8_t>>, int>(
       query.data(), N, querySeedBeginPos,
       reference.data(), M, referenceSeedBeginPos,
       seedLength, sim.toVector(), _k1, _k2, klen);
 
-  memset(k1, 0, sizeof(int) * buflen);
-  memset(k2, 0, sizeof(int) * buflen);
+  for (int i = 0; i < buflen; i++) {
+    k1[i] = -9999;
+    k2[i] = -9999;
+  }
   auto score_right = xdrop_smart_restricted_extend_right<X, GAP_PENALTY, std::vector<std::vector<int8_t>>, int>(
       query.data(), N, querySeedBeginPos,
       reference.data(), M, referenceSeedBeginPos,
