@@ -64,7 +64,6 @@ int main(int argc, char** argv) {
 
 	auto batches = ipu::create_batches(seqs, cmps, config.ipuconfig, config.swconfig);
 
-
 	std::vector<int32_t> scores(cmps.size());
   for (auto& batch : batches) {
     ipu::batchaffine::Job* j = driver.async_submit(&batch);
@@ -83,7 +82,7 @@ int main(int argc, char** argv) {
 				int lpartScore = result.a_range_result[i];
 				int rpartScore = result.a_range_result[i];
 				// PLOGF << orig_i << ":" << batch.origin_comparison_index[i] << " " << lpartScore << " " << rpartScore;
-				scores[orig_i] = std::max(lpartScore + rpartScore, scores[orig_i]);
+				scores[orig_i] = std::max(lpartScore + rpartScore + config.swconfig.seedLength, scores[orig_i]);
 			}
 		}
   }

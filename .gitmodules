@@ -16,3 +16,6 @@
 [submodule "extern/libgaba"]
 	path = extern/libgaba
 	url = https://github.com/ocxtal/libgaba.git
+[submodule "extern/ksw2"]
+	path = extern/ksw2
+	url = https://github.com/lh3/ksw2.git
