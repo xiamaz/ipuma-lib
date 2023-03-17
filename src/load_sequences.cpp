@@ -89,7 +89,7 @@ SequenceData::SequenceData(const SequenceConfig& config) {
         sizeA,
         (int) (2 * i + 1),
         sizeB,
-        {{{sH1, sH2}, {sV1, sV2}}},
+        {{{sH1, sV1}, {sH2, sV2}}},
       });
       i++;
     } else {

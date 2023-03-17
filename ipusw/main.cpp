@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
 			auto [orig_i, orig_seed] = ipu::unpackOriginIndex(batch.origin_comparison_index[i]);
 			if (orig_i >= 0) {
 				int lpartScore = result.a_range_result[i];
-				int rpartScore = result.a_range_result[i];
+				int rpartScore = result.b_range_result[i];
 				// PLOGF << orig_i << ":" << batch.origin_comparison_index[i] << " " << lpartScore << " " << rpartScore;
 				scores[orig_i] = std::max(lpartScore + rpartScore + config.swconfig.seedLength, scores[orig_i]);
 			}
