@@ -9,8 +9,16 @@
 namespace cpu {
 
   class GenomeToolsAligner {
+    const ipu::SWConfig& config;
   public:
-    static int align(const std::string_view& seqH, const std::string_view& seqV, int32_t seedHStart, int32_t seedVStart, int32_t seedLen, const ipu::SWConfig& config) {
+    GenomeToolsAligner(const ipu::SWConfig& config) : config(config) {
+      gt_lib_init();
+    }
+
+    ~GenomeToolsAligner() {
+    }
+
+    int align(const std::string_view& seqH, const std::string_view& seqV, int32_t seedHStart, int32_t seedVStart, int32_t seedLen) {
 
       GtSeqabstract *useq_right, *vseq_right;
       GtSeqabstract *useq_left, *vseq_left;

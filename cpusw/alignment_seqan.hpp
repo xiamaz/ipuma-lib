@@ -10,8 +10,12 @@ using namespace seqan;
 
 namespace cpu {
   class SeqanAligner {
+
+    const ipu::SWConfig& config;
   public:
-    static int align(const std::string_view& seqH, const std::string_view& seqV, int32_t seedHStart, int32_t seedVStart, int32_t seedLen, const ipu::SWConfig& config) {
+    SeqanAligner(const ipu::SWConfig& config) : config(config) {}
+
+    int align(const std::string_view& seqH, const std::string_view& seqV, int32_t seedHStart, int32_t seedVStart, int32_t seedLen) {
       Dna5String sH(std::string{seqH});
       Dna5String sV(std::string{seqV});
 

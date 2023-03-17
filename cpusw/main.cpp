@@ -13,6 +13,9 @@
 #include "cmd_arguments.hpp"
 #include "alignment_seqan.hpp"
 #include "alignment_genometools.hpp"
+#include "alignment_libgaba.hpp"
+#include "alignment_ksw2.hpp"
+#include "alignment_ipuma_cpu.hpp"
 
 using json = nlohmann::json;
 
@@ -28,6 +31,8 @@ std::vector<int> runAlignment(const ipu::RawSequences& seqs, const ipu::Comparis
 		omp_set_num_threads(threads);
 	}
 
+	C comparator(config);
+
   #pragma omp parallel for
   for (int i = 0; i < cmps.size(); ++i) {
     const auto& cmp = cmps[i];
@@ -41,8 +46,9 @@ std::vector<int> runAlignment(const ipu::RawSequences& seqs, const ipu::Comparis
     // }.dump();
     int maxScore = 0;
     for (int j = 0; j < NSEEDS; ++j) {
+			if ((cmp.seeds[j].seedAStartPos < 0) || (cmp.seeds[j].seedBStartPos < 0)) continue;
       maxScore = std::max(
-				C::align(seqs[cmp.indexA], seqs[cmp.indexB], cmp.seeds[j].seedAStartPos, cmp.seeds[j].seedBStartPos, config.seedLength, config),
+				comparator.align(seqs[cmp.indexA], seqs[cmp.indexB], cmp.seeds[j].seedAStartPos, cmp.seeds[j].seedBStartPos, config.seedLength),
 				maxScore
 			);
     }
@@ -50,6 +56,7 @@ std::vector<int> runAlignment(const ipu::RawSequences& seqs, const ipu::Comparis
   }
   t.tock();
   double gcups = cells / t.accumulate_microseconds() * 1e6;
+	// PLOGI << json{scores}.dump();
   PLOGI << "GCUPS " << gcups;
   return scores;
 }
@@ -97,8 +104,16 @@ int main(int argc, char** argv) {
 		scores = runAlignment<cpu::SeqanAligner>(seqs, cmps, config.swconfig, config.algoconfig.threads);
 		break;
 	case cpu::Algo::genometools:
-    gt_lib_init();
 		scores = runAlignment<cpu::GenomeToolsAligner>(seqs, cmps, config.swconfig, config.algoconfig.threads);
+		break;
+	case cpu::Algo::libgaba:
+		scores = runAlignment<cpu::GabaAligner>(seqs, cmps, config.swconfig, config.algoconfig.threads);
+		break;
+	case cpu::Algo::ksw2:
+		scores = runAlignment<cpu::Ksw2Aligner>(seqs, cmps, config.swconfig, config.algoconfig.threads);
+		break;
+	case cpu::Algo::ipumacpu:
+		scores = runAlignment<cpu::IpumaCpuAligner>(seqs, cmps, config.swconfig, config.algoconfig.threads);
 		break;
 	}
 	if (config.output != "") {
