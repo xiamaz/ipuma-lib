@@ -1,40 +1,40 @@
-import re
-import json
-
 from pathlib import Path
 
 from argparse import ArgumentParser
 
-
-def parse_logline(line):
-  if "{" in line and "}" in line:
-    start = line.find("{")
-    end = line.rfind("}")
-    entry = line[start:end+1]
-    if m := re.match("] ([\w ]+) {"):
-      tagname = m.group(1)
-    else:
-      tagname = ""
-    return {
-      "type": tagname,
-      "data": json.loads(entry)
-    }
-  return None
-
-
-def load_logfile(logfile_path):
-  log_entries = []
-  if logfile_path.exists():
-    with open(logfile_path) as file:
-      for line in file:
-        if e := parse_logline(line):
-          log_entries.append(e)
-  return log_entries
+import pandas as pd
+from .ipulog_parser import load_logfile
 
 
 parser = ArgumentParser()
 parser.add_argument("logfile_path", type=Path)
+parser.add_argument("output_path", type=Path)
 
 args = parser.parse_args()
 
-logs = load_logfile(args.logfile_path)
+logfile_path = args.logfile_path
+# logfile_path = Path("./xdrop_logs/elba_ecoli.log")
+
+logs = load_logfile(logfile_path)
+
+job_entries = pd.DataFrame.from_records(l["data"] for l in logs if l["type"] == "JOBLOG")
+
+job_entries.describe()
+
+job_entries.columns
+
+import matplotlib.pyplot as plt
+
+title = logfile_path.stem
+OUTDIR = args.output_path
+OUTDIR.mkdir(exist_ok=True, parents=True)
+job_entries.plot.scatter("cell_count", "time_inner", title=title)
+plt.savefig(OUTDIR / "timescatter.png")
+job_entries[["gcups_outer", "gcups_inner"]].plot.line(title=title, xlabel="Batch Index", ylabel="GCUPS")
+plt.savefig(OUTDIR / "gcups.png")
+job_entries[["cell_count"]].plot.line(title=title, xlabel="Batch Index", ylabel="Cell Count")
+plt.savefig(OUTDIR / "cellcount.png")
+job_entries["comparison_occupancy"]
+job_entries[["comparison_occupancy", "transfer_info_ratio"]].plot.line(title=title, xlabel="Batch Index", ylabel="Ratio in Percent")
+plt.savefig(OUTDIR / "transfer.png")
+plt.close("all")
