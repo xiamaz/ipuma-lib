@@ -12,7 +12,7 @@
 	url = https://github.com/seqan/seqan3.git
 [submodule "extern/genometools"]
 	path = extern/genometools
-	url = https://github.com/genometools/genometools.git
+	url = https://github.com/xiamaz/genometools.git
 [submodule "extern/libgaba"]
 	path = extern/libgaba
 	url = https://github.com/ocxtal/libgaba.git
