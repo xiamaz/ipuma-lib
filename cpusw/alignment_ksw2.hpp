@@ -8,10 +8,14 @@ namespace cpu {
   int alignKsw2(const std::vector<uint8_t>& H, const std::vector<uint8_t>& V, const ipu::SWConfig& config) {
       ksw_extz_t result;
       int bandwidth = 500;
-      int zdrop = 400;
+      int zdrop = config.xDrop; // default should be Z-Drop = 400
       int8_t a = config.matchValue;
       int8_t b = config.mismatchValue;
       int8_t mat[25] = { a,b,b,b,0, b,a,b,b,0, b,b,a,b,0, b,b,b,a,0, 0,0,0,0,0 };
+
+      result.max_q = result.max_t = result.mqe_t = result.mte_q = -1;
+	    result.max = 0, result.mqe = result.mte = KSW_NEG_INF;
+	    result.n_cigar = 0;
 
       ksw_extz2_sse(
         nullptr,
@@ -26,10 +30,11 @@ namespace cpu {
         bandwidth,
         zdrop,
         0,
-        KSW_EZ_SCORE_ONLY | KSW_EZ_APPROX_MAX | KSW_EZ_APPROX_DROP,
+        KSW_EZ_SCORE_ONLY | KSW_EZ_APPROX_MAX | KSW_EZ_APPROX_DROP | KSW_EZ_EXTZ_ONLY,
         &result
       );
-      return result.score;
+
+      return result.max;
   }
 
   class Ksw2Aligner {
