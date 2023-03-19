@@ -107,7 +107,7 @@ TEST(BatchingTest, testValidNumberCmps) {
     cellCount += batch.cellCount;
   }
   ASSERT_EQ(validCmps, Cmps.size() * NSEEDS);
-  ASSERT_EQ(cellCount, numberCmps * batches_count * sequence_length * sequence_length);
+  ASSERT_EQ(cellCount, numberCmps * batches_count * sequence_length * sequence_length * NSEEDS);
 }
 
 TEST(BatchingTest, testUniformCorrectness) {

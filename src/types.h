@@ -8,9 +8,13 @@
 #include "types.h"
 #include "shared_types.h"
 
+#include "nlohmann/json.hpp"
+
 #define IPU_JSON_LOG_TAG "IPUSWLOG"
 
 namespace ipu {
+
+using json = nlohmann::json;
 
 struct Comparison {
 	int64_t originalComparisonIndex;
@@ -34,6 +38,8 @@ struct MultiComparison {
 	std::unordered_map<int32_t, int32_t> seqs; // index -> sequence_length
 
   bool operator<(const MultiComparison& other) const;
+
+	MultiComparison();
 
 	MultiComparison(const std::vector<Comparison>& cmps, const int seedLength);
 };
@@ -66,6 +72,13 @@ Algorithm strToAlgorithm(std::string s);
 
 std::string complexityToConfigString(Complexity);
 Complexity strToComplexity(std::string s);
+
+void to_json(json& j, const Comparison& c);
+void from_json(const json& j, Comparison& c);
+void to_json(json& j, const MultiComparison& c);
+void from_json(const json& j, MultiComparison& c);
+void to_json(json& j, const SeedPair& c);
+void from_json(const json& j, SeedPair& c);
 }
 
 #endif
