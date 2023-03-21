@@ -279,14 +279,27 @@ plt.spy(new_matrix.tocsc()[y:y+viewport, x:x+viewport])
 
 # %%
 
-
-for (i, j) in nonvisited values:
-        if ( A[i, j] + A[i, j+1] + A[i+1,j] + A[i+1,j+1] > 3):
-                add ((i, j), (i, j+1)...) to visited nodes
-
-                add ((), ..()) in bucket3 bucket
-                add ((), ..()) in bucket4
+def load(fname):
+        with open(fname) as fd:
+                return np.array(json.load(fd)[0])
 
 
-over bucket4 verteilen
+cpu = load("/tmp/parity/scores_cpu_seqan_sim05.json")
+ipu_ipuint = load("/tmp/parity/scores_ipuint_sim05.json")
+ipu_ipufloat = load("/tmp/parity/scores_ipu_sim05.json")
+ipu_cpu = load("/tmp/parity/scores_cpu_ipumacpu_sim05.json")
 
+print("CPU IPU")
+print(st.describe(ipu_cpu/cpu))
+
+print("CPU ipuint/ipufloat")
+print(st.describe(ipu_ipufloat/ ipu_ipuint))
+
+print("CPU ipu/ipu")
+print(st.describe(ipu_ipuint/ ipu_cpu))
+
+
+print("Diff blocks")
+
+for d in [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0]:
+        print(d, np.where(np.abs((cpu/ipu_cpu) - 1) <= d)[0].size)
