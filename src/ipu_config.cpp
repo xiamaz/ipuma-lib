@@ -44,7 +44,7 @@ void to_json(json& j, const SWConfig& c) {
                 {"gapInit", c.gapInit},
                 {"gapExtend", c.gapExtend},
                 {"matchValue", c.matchValue},
-                {"mismatchValue", c.ambiguityValue},
+                {"mismatchValue", c.mismatchValue},
                 {"ambiguityValue", c.ambiguityValue},
                 {"similarity", c.similarity},
                 {"datatype", c.datatype},
@@ -87,35 +87,5 @@ void from_json(const json& j, Complexity& t) {
 
 void to_json(json& j, const Complexity& t) {
         j = ipu::complexityToConfigString(t);
-}
-
-void to_json(json& j, const IPUAlgoConfig& c) {
-        j = json{
-                {"numVertices", c.numVertices},
-                {"maxSequenceLength", c.maxSequenceLength},
-                {"maxComparisonsPerVertex", c.maxComparisonsPerVertex},
-                {"vertexBufferSize", c.vertexBufferSize},
-                {"vtype", c.vtype},
-                {"fillAlgo", c.fillAlgo},
-                {"complexityAlgo", c.complexityAlgo},
-                {"partitioningSortComparisons", c.partitioningSortComparisons},
-                {"forwardOnly", c.forwardOnly},
-                {"ioTiles", c.ioTiles},
-                {"bandPercentageXDrop", c.bandPercentageXDrop},
-        };
-}
-
-void from_json(const json& j, IPUAlgoConfig& c) {
-        j.at("numVertices").get_to(c.numVertices);
-        j.at("maxSequenceLength").get_to(c.maxSequenceLength);
-        j.at("maxComparisonsPerVertex").get_to(c.maxComparisonsPerVertex);
-        j.at("vertexBufferSize").get_to(c.vertexBufferSize);
-        j.at("vtype").get_to(c.vtype);
-        j.at("fillAlgo").get_to(c.fillAlgo);
-        j.at("complexityAlgo").get_to(c.complexityAlgo);
-        j.at("partitioningSortComparisons").get_to(c.partitioningSortComparisons);
-        j.at("forwardOnly").get_to(c.forwardOnly);
-        j.at("ioTiles").get_to(c.ioTiles);
-        j.at("bandPercentageXDrop").get_to(c.bandPercentageXDrop);
 }
 }

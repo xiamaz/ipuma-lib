@@ -40,57 +40,46 @@ std::string mutateSequence(std::string seq, swatlib::DataType dtype, std::mt1993
 	return seq;
 }
 
-SequenceGenerator::SequenceGenerator(GeneratorConfig config, SWConfig swconfig) : config{config} {
-  std::mt19937 gen(config.seed);
+template<typename C>
+SequenceDatabase<C> loadSequences(GeneratorConfig& config, SWConfig& swconfig) {
+  std::mt19937 gen(config.generatorSeed);
 
-	int seed_start = config.sequenceLength / 2 - swconfig.seedLength / 2;
-	if (seed_start + swconfig.seedLength >= config.sequenceLength) {
+	SequenceDatabase<C> db;
+
+	int seed_start = config.generatorSeqLen / 2 - swconfig.seedLength / 2;
+	if (seed_start + swconfig.seedLength >= config.generatorSeqLen) {
 		throw std::runtime_error("Seed does not fit into sequence length");
 	}
-	for (int i = 0; i < config.sequenceCount; ++i) {
+	for (int i = 0; i < config.generatorCount; ++i) {
 		std::string seq1, seq2;
-		if (config.similarity > 0) {
-			seq1 = generateRandomSequence(config.sequenceLength, swconfig.datatype, gen);
-			seq2 = mutateSequence(seq1, swconfig.datatype, gen, config.similarity, seed_start, swconfig.seedLength);
+		if (config.generatorSimilarity > 0) {
+			seq1 = generateRandomSequence(config.generatorSeqLen, swconfig.datatype, gen);
+			seq2 = mutateSequence(seq1, swconfig.datatype, gen, config.generatorSimilarity, seed_start, swconfig.seedLength);
 		} else {
 			const auto& chars = SYMBOLS[swconfig.datatype];
-			seq1 = std::string(config.sequenceLength, chars[0]);
-			seq2 = std::string(config.sequenceLength, chars[1]);
+			seq1 = std::string(config.generatorSeqLen, chars[0]);
+			seq2 = std::string(config.generatorSeqLen, chars[1]);
 		}
 
-		sequences.push_back(seq1);
-		seqs.push_back(sequences.back());
-		sequences.push_back(seq2);
-		seqs.push_back(sequences.back());
+		db.strings.push_back(seq1);
+		db.seqs.push_back(db.strings.back());
+		db.strings.push_back(seq2);
+		db.seqs.push_back(db.strings.back());
 
-		cmps.push_back({
+		Comparison c{
 			.originalComparisonIndex = i,
 			.indexA = 2 * i,
-			.sizeA = (int) seqs[2*i].size(),
+			.sizeA = (int) db.seqs[2*i].size(),
 			.indexB = 2 * i + 1,
-			.sizeB = (int) seqs[2*i + 1].size(),
+			.sizeB = (int) db.seqs[2*i + 1].size(),
 			.seeds = {{{seed_start, seed_start}, {seed_start, seed_start}}},
 			.complexity = 0,
-		});
+		};
+		add_comparison<C>(db.cmps, c, swconfig.seedLength);
 	}
+	return std::move(db);
 }
 
-std::tuple<RawSequences, ipu::Comparisons> SequenceGenerator::get() {
-  return {std::move(seqs), std::move(cmps)};
-}
-
-void to_json(json& j, const GeneratorConfig& c) {
-	j = json {
-		{"generatorLength", c.sequenceLength},
-		{"generatorCount", c.sequenceCount},
-		{"generatorSimilarity", c.similarity},
-		{"generatorSeed", c.seed},
-	};
-}
-void from_json(const json& j, GeneratorConfig& c) {
-	j.at("generatorLength").get_to(c.sequenceLength);
-	j.at("generatorCount").get_to(c.sequenceCount);
-	j.at("generatorSimilarity").get_to(c.similarity);
-	j.at("generatorSeed").get_to(c.seed);
-}
+template SequenceDatabase<MultiComparison> loadSequences<MultiComparison>(GeneratorConfig& config, SWConfig& swconfig);
+template SequenceDatabase<Comparison> loadSequences<Comparison>(GeneratorConfig& config, SWConfig& swconfig);
 }

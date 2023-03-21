@@ -8,9 +8,13 @@
 #include "types.h"
 #include "shared_types.h"
 
+#include "nlohmann/json.hpp"
+
 #define IPU_JSON_LOG_TAG "IPUSWLOG"
 
 namespace ipu {
+
+using json = nlohmann::json;
 
 struct Comparison {
 	int64_t originalComparisonIndex;
@@ -35,6 +39,8 @@ struct MultiComparison {
 
   bool operator<(const MultiComparison& other) const;
 
+	MultiComparison();
+
 	MultiComparison(const std::vector<Comparison>& cmps, const int seedLength);
 };
 
@@ -44,6 +50,11 @@ typedef std::vector<uint8_t> EncSequences;
 
 typedef std::vector<Comparison> Comparisons;
 typedef std::vector<MultiComparison> MultiComparisons;
+
+template<typename C>
+void add_comparison(std::vector<C>& cmps, Comparison& cmp, int seedLen);
+
+Comparisons convertToComparisons(const MultiComparisons&);
 
 enum class VertexType { cpp, assembly, multi, multiasm, xdroprestrictedseedextend};
 static const std::vector<std::string> vertexTypeNames = {"cpp", "assembly", "multi", "multiasm", "xdroprestrictedseedextend"};
@@ -57,6 +68,14 @@ static const std::vector<std::string> algoNames = {"fillfirst", "roundrobin", "g
 enum class Complexity {precomputed, cellcount, sequence_length, xdrop};
 static const std::vector<std::string> complexityNames = {"precomputed", "cellcount", "sequence_length", "xdrop"};
 
+enum class PartitionAdd {sequential, alternating, heap};
+NLOHMANN_JSON_SERIALIZE_ENUM(PartitionAdd, {
+    {PartitionAdd::sequential, "sequential"},
+    {PartitionAdd::alternating, "alternating"},
+    {PartitionAdd::heap, "heap"},
+});
+
+
 std::string vertexTypeToIpuLabel(VertexType v);
 std::string vertexTypeToConfigString(VertexType v);
 VertexType strToVertexType(std::string s);
@@ -66,6 +85,13 @@ Algorithm strToAlgorithm(std::string s);
 
 std::string complexityToConfigString(Complexity);
 Complexity strToComplexity(std::string s);
+
+void to_json(json& j, const Comparison& c);
+void from_json(const json& j, Comparison& c);
+void to_json(json& j, const MultiComparison& c);
+void from_json(const json& j, MultiComparison& c);
+void to_json(json& j, const SeedPair& c);
+void from_json(const json& j, SeedPair& c);
 }
 
 #endif

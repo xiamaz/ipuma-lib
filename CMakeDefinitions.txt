@@ -9,9 +9,9 @@ add_definitions(-DALN_DATATYPE="na")
 
 # IPU parameters
 add_definitions(-DKLIGN_IPU_NUM_VERTICES=1472)
-add_definitions(-DKLIGN_IPU_MAX_SEQUENCE_LENGTH=10000)
-add_definitions(-DKLIGN_IPU_MAX_CMPS_PER_VERTEX=200)
-add_definitions(-DKLIGN_IPU_VERTEX_BUFFER_SIZE=120000)
+add_definitions(-DKLIGN_IPU_MAX_SEQUENCE_LENGTH=19750)
+add_definitions(-DKLIGN_IPU_MAX_CMPS_PER_VERTEX=400)
+add_definitions(-DKLIGN_IPU_VERTEX_BUFFER_SIZE=160000)
 add_definitions(-DKLIGN_IPUS_LOCAL=1)
 add_definitions(-DKLIGN_IPU_VTYPE="xdroprestrictedseedextend")
 add_definitions(-DKLIGN_IPU_PARTITION_ALGO="greedy")

@@ -3,9 +3,15 @@
 
 namespace ipu {
 
-class SequenceDatabase {
-public:
-	virtual std::tuple<ipu::RawSequences, ipu::Comparisons> get() = 0;
+template<typename C>
+struct SequenceDatabase {
+	std::vector<std::string> strings;
+	ipu::RawSequences seqs;
+	std::vector<C> cmps;
+
+	std::tuple<ipu::RawSequences, std::vector<C>> get() {
+  	return {std::move(seqs), std::move(cmps)};
+	};
 };
 
 }

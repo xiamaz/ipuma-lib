@@ -5,13 +5,13 @@
 #include "swatlib/swatlib.h"
 #include "ipu_config.h"
 #include "sequences_generator.h"
-#include "load_sequences.h"
+#include "sequences_loader.h"
 
 using json = nlohmann::json;
 
 namespace cpu {
-	static const std::vector<std::string> algoNames = {"genometools", "seqan"};
-	enum class Algo {genometools, seqan};
+	static const std::vector<std::string> algoNames = {"genometools", "seqan", "libgaba", "ksw2", "ipumacpu"};
+	enum class Algo {genometools, seqan, libgaba, ksw2, ipumacpu};
 	void to_json(json& j, const Algo& a) {
 		j = algoNames.at(static_cast<int>(a));
 	}
@@ -41,38 +41,10 @@ namespace cpu {
 struct CpuSwConfig {
 	ipu::SWConfig swconfig;
 	cpu::AlgoConfig algoconfig;
-	ipu::GeneratorConfig generatorconfig;
-	ipu::SequenceConfig sequenceconfig;
+	ipu::LoaderConfig loaderconfig;
 	std::string output;
-	bool generateSequences = false;
-
-	std::unique_ptr<ipu::SequenceDatabase> getSequences() {
-		if (generateSequences) {
-			return std::unique_ptr<ipu::SequenceDatabase>(new ipu::SequenceGenerator(generatorconfig, swconfig));
-		} else {
-			return std::unique_ptr<ipu::SequenceDatabase>(new ipu::SequenceData(sequenceconfig));
-		}
-	}
 };
 
-void to_json(json& j, const CpuSwConfig& c) {
-	j = json{
-		{"sw", c.swconfig},
-		{"cpu", c.algoconfig},
-		{"generator", c.generatorconfig},
-		{"sequence", c.sequenceconfig},
-		{"output", c.output},
-		{"generateSequences", c.generateSequences},
-	};
-}
-
-void from_json(const json& j, CpuSwConfig& c) {
-	j.at("sw").get_to(c.swconfig);
-	j.at("cpu").get_to(c.algoconfig);
-	j.at("generator").get_to(c.generatorconfig);
-	j.at("sequence").get_to(c.sequenceconfig);
-	j.at("output").get_to(c.output);
-	j.at("generateSequences").get_to(c.generateSequences);
-}
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CpuSwConfig, swconfig, algoconfig, loaderconfig, output);
 
 #endif

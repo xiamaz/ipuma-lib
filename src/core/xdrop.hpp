@@ -5,7 +5,7 @@
 
 #include <iostream>
 
-#include "../src/swatlib/swatlib.h"
+#include "swatlib/swatlib.h"
 using namespace swatlib;
 #include <string>
 #include <vector>
@@ -86,8 +86,8 @@ inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* quer
 #define adrREF(zzz) ((!reversed) ? zzz : (M - 1) - zzz)
 #define adrQER(zzz) ((!reversed) ? zzz : (N - 1) - zzz)
 #ifdef PRINT_DEBUG
-  Matrix<int> H(M + 1, N + 1, 0);  // DEBUG
-  Matrix<int> C(M + 1, N + 1, 0);  // DEBUG
+  swatlib::Matrix<int> H(M + 1, N + 1, 0);  // DEBUG
+  swatlib::Matrix<int> C(M + 1, N + 1, 0);  // DEBUG
 #endif
 
   auto rotate = [&]() {
@@ -180,7 +180,7 @@ inline __attribute__((always_inline)) sType xdrop_doubleband(const uint8_t* quer
 
 #ifndef __POPC__
 template <int X, int GAP_PENALTY, bool reversed>
-int xdrop_doubleband_cpu(const std::vector<uint8_t>& query, const std::vector<uint8_t>& reference, Matrix<int8_t> sim) {
+int xdrop_doubleband_cpu(const std::vector<uint8_t>& query, const std::vector<uint8_t>& reference, swatlib::Matrix<int8_t> sim) {
   int M = reference.size();
   int N = query.size();
   int s = std::max(M, N) + 10;
@@ -219,8 +219,8 @@ inline __attribute__((always_inline)) int xdrop_doubleband_restricted(const uint
   int L1inc = 0, L2inc = 0;
 
 #ifdef PRINT_DEBUG
-  Matrix<int> H(M + 1, N + 1, 0);  // DEBUG
-  Matrix<int> C(M + 1, N + 1, 0);  // DEBUG
+  swatlib::Matrix<int> H(M + 1, N + 1, 0);  // DEBUG
+  swatlib::Matrix<int> C(M + 1, N + 1, 0);  // DEBUG
 #endif
 
 #define adrREF(zzz) ((!reversed) ? zzz : (M - 1) - zzz)
@@ -318,7 +318,7 @@ inline __attribute__((always_inline)) int xdrop_doubleband_restricted(const uint
 
 #ifndef __POPC__
 template <int X, int GAP_PENALTY, int klen, bool reversed>
-int xdrop_doubleband_restricted_cpu(const std::vector<uint8_t>& query, const std::vector<uint8_t>& reference, Matrix<int8_t> sim) {
+int xdrop_doubleband_restricted_cpu(const std::vector<uint8_t>& query, const std::vector<uint8_t>& reference, swatlib::Matrix<int8_t> sim) {
   int M = reference.size();
   int N = query.size();
   int s = klen + 10;
@@ -424,7 +424,7 @@ inline __attribute__((always_inline)) sType xdrop_smart_restricted_extend_right(
 #ifndef __POPC__
 namespace debug {
 template <int X, int GAP_PENALTY, int seedLength>
-int seed_extend_cpu(const std::vector<uint8_t>& query, int querySeedBeginPos, const std::vector<uint8_t>& reference, int referenceSeedBeginPos, Matrix<int8_t> sim) {
+int seed_extend_cpu(const std::vector<uint8_t>& query, int querySeedBeginPos, const std::vector<uint8_t>& reference, int referenceSeedBeginPos, swatlib::Matrix<int8_t> sim) {
   auto decoder = swatlib::getEncoder(DataType::nucleicAcid);
   PLOGW << decoder.decode(query);
   PLOGW << decoder.decode(reference);
@@ -453,7 +453,7 @@ int seed_extend_cpu(const std::vector<uint8_t>& query, int querySeedBeginPos, co
 }  // namespace debug
 
 template <int X, int GAP_PENALTY>
-int seed_extend_cpu(const std::vector<uint8_t>& query, int querySeedBeginPos, const std::vector<uint8_t>& reference, int referenceSeedBeginPos, int seedLength, Matrix<int8_t> sim) {
+int seed_extend_cpu(const std::vector<uint8_t>& query, int querySeedBeginPos, const std::vector<uint8_t>& reference, int referenceSeedBeginPos, int seedLength, swatlib::Matrix<int8_t> sim) {
   int M = reference.size();
   int N = query.size();
   assert(M >= N);
@@ -478,7 +478,7 @@ int seed_extend_cpu(const std::vector<uint8_t>& query, int querySeedBeginPos, co
 }
 
 template <int X, int GAP_PENALTY>
-int seed_extend_restricted_cpu(const std::vector<uint8_t>& query, int querySeedBeginPos, const std::vector<uint8_t>& reference, int referenceSeedBeginPos, int seedLength, Matrix<int8_t> sim, int klen) {
+int seed_extend_restricted_cpu(const std::vector<uint8_t>& query, int querySeedBeginPos, const std::vector<uint8_t>& reference, int referenceSeedBeginPos, int seedLength, swatlib::Matrix<int8_t> sim, int klen) {
   int N = query.size();
   int M = reference.size();
   // printf("%d => (%d|%d)\n",query.size(),  querySeedBeginPos, query.size() - seedLength - querySeedBeginPos);

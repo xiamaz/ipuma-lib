@@ -92,6 +92,7 @@ struct IPUAlgoConfig {
   VertexType vtype = strToVertexType(KLIGN_IPU_VTYPE);
   Algorithm fillAlgo = strToAlgorithm(KLIGN_IPU_PARTITION_ALGO);
   Complexity complexityAlgo = strToComplexity(KLIGN_IPU_COMPLEXITY_ALGO);
+  PartitionAdd partitionadd = PartitionAdd::alternating;
   bool partitioningSortComparisons = true;
   bool forwardOnly = false; // do not calculate the start position of a match, this should approx 2x performance, as no reverse pass is needed
   int ioTiles = 0;
@@ -115,6 +116,8 @@ struct IPUAlgoConfig {
   size_t getOffsetInputSequence() const;
   size_t getOffsetMetadata() const;
 };
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(IPUAlgoConfig, 
+  numVertices, maxSequenceLength, maxComparisonsPerVertex, vertexBufferSize, vtype, fillAlgo, complexityAlgo, partitionadd, partitioningSortComparisons, forwardOnly, bandPercentageXDrop);
 
 void to_json(json& j, const SWConfig& c);
 
@@ -131,10 +134,6 @@ void to_json(json& j, const VertexType& t);
 void from_json(const json& j, Complexity& t);
 
 void to_json(json& j, const Complexity& t);
-
-void to_json(json& j, const IPUAlgoConfig& c);
-
-void from_json(const json& j, IPUAlgoConfig& c);
 
 }
 

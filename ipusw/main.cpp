@@ -13,9 +13,17 @@
 
 using json = nlohmann::json;
 
+size_t getNumberComparisons(const ipu::MultiComparisons& mcmps) {
+	size_t totalCmps = 0;
+	for (const auto& m : mcmps) {
+		totalCmps += m.comparisons.size();
+	}
+	return totalCmps;
+}
+
 int main(int argc, char** argv) {
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
-  plog::init(plog::verbose, &consoleAppender);
+  plog::init(plog::debug, &consoleAppender);
 
 	cxxopts::Options options("ipusw", "IPU Smith Waterman Binary");
 
@@ -47,37 +55,41 @@ int main(int argc, char** argv) {
 
 	PLOGI << "IPUSWCONFIG" << json{config}.dump();
 
-	auto seqdb = config.getSequences();
-	auto [seqs, cmps] = seqdb->get();
-	PLOGI << ipu::getDatasetStats(seqs, cmps).dump();
-	if (cmps.size() == 0) {
-		PLOGF << "No comparisons defined";
-		exit(1);
-	}
-
-	ipu::MultiComparisons mcmps;
-	for (const auto& cmp : cmps) {
-		mcmps.push_back({{cmp}, config.swconfig.seedLength});
-	}
+	ipu::SequenceDatabase<ipu::MultiComparison> seqdb = config.loaderconfig.getMultiSequences(config.swconfig);
+	auto [seqs, mcmps] = seqdb.get();
+	PLOGI << ipu::getDatasetStats(seqs, mcmps).dump();
 
 	auto driver = ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, 0, config.numDevices);
 
-	auto batches = ipu::create_batches(seqs, cmps, config.ipuconfig, config.swconfig);
+	std::vector<ipu::Batch> batches;
+	if (config.decomposeMulticomparisons) {
+		PLOGI << "Decompose multicomparisons to individual comparisons";
+		auto cmps = ipu::convertToComparisons(mcmps);
+		batches = ipu::create_batches(seqs, cmps, config.ipuconfig, config.swconfig);
+	} else {
+		PLOGI << "Use multicomparisons for creating batches";
+		batches = ipu::create_batches(seqs, mcmps, config.ipuconfig, config.swconfig);
+	}
 
-	std::vector<int32_t> scores(cmps.size());
-  for (auto& batch : batches) {
-    ipu::batchaffine::Job* j = driver.async_submit(&batch);
-    assert(batch.cellCount > 0);
-    assert(batch.dataCount > 0);
-    driver.blocking_join(*j);
-    auto result = batch.get_result();
-    delete j;
-
-		// PLOGE << json{result.a_range_result}.dump();
-
-		// results parsing
-		for (int i = 0; i < batch.origin_comparison_index.size(); ++i) {
-			auto [orig_i, orig_seed] = ipu::unpackOriginIndex(batch.origin_comparison_index[i]);
+	std::vector<int32_t> scores(getNumberComparisons(mcmps));
+	swatlib::TickTock time;
+	double gcells = 0;
+	time.tick();
+	std::vector<ipu::batchaffine::Job*> jobs(batches.size());
+	for (int i = 0; i < batches.size(); ++i) {
+    jobs[i] = driver.async_submit(&batches[i]);
+	}
+	for (int i = 0; i < jobs.size(); ++i) {
+		driver.blocking_join(*jobs[i]);
+		PLOGI << "Received batch " << i+1 << " / " << jobs.size();
+		gcells += batches[i].cellCount / 1e9;
+	}
+	time.tock();
+	for (int b = 0; b < batches.size(); ++b) {
+    auto result = batches[b].get_result();
+    // delete jobs[i];
+		for (int i = 0; i < batches[b].origin_comparison_index.size(); ++i) {
+			auto [orig_i, orig_seed] = ipu::unpackOriginIndex(batches[b].origin_comparison_index[i]);
 			if (orig_i >= 0) {
 				int lpartScore = result.a_range_result[i];
 				int rpartScore = result.b_range_result[i];
@@ -85,7 +97,17 @@ int main(int argc, char** argv) {
 				scores[orig_i] = std::max(lpartScore + rpartScore + config.swconfig.seedLength, scores[orig_i]);
 			}
 		}
-  }
+	}
+
+	auto totalTimeMs = time.duration();
+	auto gcups = gcells / totalTimeMs * 1e3;
+
+	PLOGI << json{
+		{"time_ms", totalTimeMs},
+		{"gcups", gcups},
+		{"gigacells", gcells},
+		{"comparisons", mcmps.size()},
+	}.dump();
 
 	// PLOGE << json{scores}.dump();
 

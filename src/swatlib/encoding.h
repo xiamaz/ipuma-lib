@@ -80,6 +80,7 @@ public:
 	Encoding(std::map<char, uint8_t>);
 	uint8_t encode(char);
 	std::vector<uint8_t> encode(const std::string&);
+	std::vector<uint8_t> encode(const std::string_view&);
 	std::vector<std::vector<uint8_t>> encode(const std::vector<std::string>&);
 	char decode(uint8_t);
 	std::string decode(const std::vector<uint8_t>&);
