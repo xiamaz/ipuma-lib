@@ -51,6 +51,11 @@ typedef std::vector<uint8_t> EncSequences;
 typedef std::vector<Comparison> Comparisons;
 typedef std::vector<MultiComparison> MultiComparisons;
 
+template<typename C>
+void add_comparison(std::vector<C>& cmps, Comparison& cmp, int seedLen);
+
+Comparisons convertToComparisons(const MultiComparisons&);
+
 enum class VertexType { cpp, assembly, multi, multiasm, xdroprestrictedseedextend};
 static const std::vector<std::string> vertexTypeNames = {"cpp", "assembly", "multi", "multiasm", "xdroprestrictedseedextend"};
 static const std::string typeLabels[] = {"SWAffine", "SWAffineAsm", "MultiSWAffine", "MultiSWAffineAsm", "SeedExtendRestrictedXDrop"};
@@ -62,6 +67,14 @@ static const std::vector<std::string> algoNames = {"fillfirst", "roundrobin", "g
 
 enum class Complexity {precomputed, cellcount, sequence_length, xdrop};
 static const std::vector<std::string> complexityNames = {"precomputed", "cellcount", "sequence_length", "xdrop"};
+
+enum class PartitionAdd {sequential, alternating, heap};
+NLOHMANN_JSON_SERIALIZE_ENUM(PartitionAdd, {
+    {PartitionAdd::sequential, "sequential"},
+    {PartitionAdd::alternating, "alternating"},
+    {PartitionAdd::heap, "heap"},
+});
+
 
 std::string vertexTypeToIpuLabel(VertexType v);
 std::string vertexTypeToConfigString(VertexType v);

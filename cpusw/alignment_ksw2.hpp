@@ -7,7 +7,7 @@
 namespace cpu {
   int alignKsw2(const std::vector<uint8_t>& H, const std::vector<uint8_t>& V, const ipu::SWConfig& config) {
       ksw_extz_t result;
-      int bandwidth = 500;
+      int bandwidth = -1;
       int zdrop = config.xDrop; // default should be Z-Drop = 400
       int8_t a = config.matchValue;
       int8_t b = config.mismatchValue;
@@ -30,6 +30,7 @@ namespace cpu {
         bandwidth,
         zdrop,
         0,
+        // KSW_EZ_SCORE_ONLY,
         KSW_EZ_SCORE_ONLY | KSW_EZ_APPROX_MAX | KSW_EZ_APPROX_DROP | KSW_EZ_EXTZ_ONLY,
         &result
       );

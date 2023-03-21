@@ -233,7 +233,11 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
   }
 };
 
+template class SeedExtendRestrictedXDrop<5>;
 template class SeedExtendRestrictedXDrop<10>;
 template class SeedExtendRestrictedXDrop<15>;
+template class SeedExtendRestrictedXDrop<20>;
+template class SeedExtendRestrictedXDrop<50>;
+template class SeedExtendRestrictedXDrop<100>;
 // template class SeedExtendRestrictedXDrop<20>;
 // template class SeedExtendRestrictedXDrop<25>;

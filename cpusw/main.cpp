@@ -103,9 +103,11 @@ int main(int argc, char** argv) {
 	CpuSwConfig config = configJson.get<CpuSwConfig>();
 
 	PLOGI << "CPUSWCONFIG" << json{config}.dump();
-	auto seqdb = config.getSequences();
-	auto [seqs, cmps] = seqdb->get();
-	PLOGI << ipu::getDatasetStats(seqs, cmps).dump();
+	auto seqdb = config.loaderconfig.getMultiSequences(config.swconfig);
+	auto [seqs, mcmps] = seqdb.get();
+	PLOGI << ipu::getDatasetStats(seqs, mcmps).dump();
+
+	ipu::Comparisons cmps = convertToComparisons(mcmps);
 
 	std::vector<int> scores;
 	switch (config.algoconfig.algo) {

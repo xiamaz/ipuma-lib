@@ -31,6 +31,16 @@ Complexity strToComplexity(std::string s) {
   throw std::runtime_error("Invalid complexity string: " + s);
 }
 
+template<>
+void add_comparison(std::vector<Comparison>& cmps, Comparison& cmp, int seedLen) {
+	cmps.push_back(cmp);
+}
+
+template<>
+void add_comparison(std::vector<MultiComparison>& cmps, Comparison& cmp, int seedLen) {
+	cmps.push_back({{cmp}, seedLen});
+}
+
 bool isSeeded(VertexType vtype) {
   return vtype == VertexType::xdroprestrictedseedextend;
 }
@@ -41,6 +51,17 @@ bool Comparison::operator<(const Comparison& other) const {
 
 bool MultiComparison::operator<(const MultiComparison& other) const {
   return this->complexity < other.complexity;
+}
+
+Comparisons convertToComparisons(const MultiComparisons& mcmps) {
+  Comparisons cmps;
+
+  for (const auto& m : mcmps) {
+    for (const auto& c : m.comparisons) {
+      cmps.push_back(c);
+    }
+  }
+  return std::move(cmps);
 }
 
 std::string Comparison::toString() const {

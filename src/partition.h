@@ -54,11 +54,14 @@ namespace ipu { namespace partition {
 
   struct BatchMapping {
     std::vector<Bucket> buckets;
+    int maxRemainingSpace;
 
     BatchMapping(int bucketCount, size_t sequenceCapacity, size_t comparisonCapacity);
     BatchMapping(IPUAlgoConfig config);
 
     std::string toString() const;
+
+    bool operator<(const BatchMapping&);
   };
 
   using BucketHeapRef = std::priority_queue<std::reference_wrapper<Bucket>, std::deque<std::reference_wrapper<Bucket>>, std::greater<std::deque<std::reference_wrapper<Bucket>>::value_type>>;

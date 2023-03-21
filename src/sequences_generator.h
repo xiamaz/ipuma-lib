@@ -6,24 +6,15 @@
 namespace ipu {
 
 struct GeneratorConfig {
-	int sequenceLength = 0;
-	int sequenceCount = 0;
-	float similarity = 1.0;
-	int seed = 42;
+	int generatorCount = 0;
+	int generatorSeqLen = 0;
+	float generatorSimilarity = 1.0;
+	int generatorSeed = 42;
 };
 
-class SequenceGenerator : public SequenceDatabase {
-	GeneratorConfig config;
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GeneratorConfig, generatorCount, generatorSeqLen, generatorSimilarity, generatorSeed);
 
-	std::vector<std::string> sequences;
-	ipu::RawSequences seqs;
-	ipu::Comparisons cmps;
-public:
-	SequenceGenerator(GeneratorConfig, SWConfig);
-	virtual std::tuple<RawSequences, ipu::Comparisons> get() override;
-};
+template<typename C>
+SequenceDatabase<C> loadSequences(GeneratorConfig& config, SWConfig& swconfig);
 
-
-void to_json(json& j, const GeneratorConfig& c);
-void from_json(const json& j, GeneratorConfig& c);
 }
