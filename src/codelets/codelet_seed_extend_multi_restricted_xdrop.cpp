@@ -239,5 +239,6 @@ template class SeedExtendRestrictedXDrop<15>;
 template class SeedExtendRestrictedXDrop<20>;
 template class SeedExtendRestrictedXDrop<50>;
 template class SeedExtendRestrictedXDrop<100>;
+template class SeedExtendRestrictedXDrop<500>;
 // template class SeedExtendRestrictedXDrop<20>;
 // template class SeedExtendRestrictedXDrop<25>;
