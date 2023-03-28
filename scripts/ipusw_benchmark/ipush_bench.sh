@@ -1,4 +1,5 @@
 #!/bin/bash
+DATASET_DIR="/global/D1/projects/ipumer/inputs_ab"
 set -uo pipefail
 PROJECT_DIR=$(git rev-parse --show-toplevel)
 BUILD_DIR="$PROJECT_DIR/build_$(hostname)"
@@ -15,38 +16,37 @@ if [[ ! -f $BIN ]]; then
 	exit 1
 fi
 
-export POPLAR_LOG_LEVEL=ERR
+ECOLI_ARGS="--comparisons ${DATASET_DIR}/cmps_ecoli_multi_single.json \
+--sequences ${DATASET_DIR}/seqs_ecoli_multi_single.json"
 
-ECOLI_ARGS="--comparisons /global/D1/projects/ipumer/inputs_ab/cmps_ecoli_multi_single.json \
---sequences /global/D1/projects/ipumer/inputs_ab/seqs_ecoli_multi_single.json"
+ECOLI100_ARGS="--comparisons ${DATASET_DIR}/cmps_ecoli100_multi.json \
+ --sequences ${DATASET_DIR}/seqs_ecoli100_multi.json"
 
-ECOLI100_ARGS="--comparisons /global/D1/projects/ipumer/inputs_ab/cmps_elba100_multi.json \
- --sequences /global/D1/projects/ipumer/inputs_ab/seqs_elba100_multi.json"
+ELEGANS_ARGS="--comparisons ${DATASET_DIR}/cmps_celegans_multi.json \
+ --sequences ${DATASET_DIR}/seqs_celegans_multi.json"
 
-ELEGANS_ARGS="--comparisons /global/D1/projects/ipumer/inputs_ab/cmps_celegans_multi.json \
- --sequences /global/D1/projects/ipumer/inputs_ab/seqs_celegans_multi.json"
+LOGAN_ARGS="--comparisons ${DATASET_DIR}/cmps_logan_multi.json \
+ --sequences ${DATASET_DIR}/seqs_logan_multi.json"
 
-LOGAN_ARGS="--seqsH /home/zhaom/ipuma-lib/output/logan_100k/seqH_100k.txt \
- --seqsV /home/zhaom/ipuma-lib/output/logan_100k/seqV_100k.txt \
- --seedsH1 /home/zhaom/ipuma-lib/output/logan_100k/seedH_100k.txt \
- --seedsV1 /home/zhaom/ipuma-lib/output/logan_100k/seedV_100k.txt"
+SIMULATED85_ARGS="--comparisons ${DATASET_DIR}/cmps_simulated85_multi.json \
+ --sequences ${DATASET_DIR}/seqs_simulated85_multi.json"
 
-GENERATOR1_ARGS="--generatorCount 20000 \
- --generatorSeqLen 20000 \
- --generatorSimilarity 1"
-GENERATOR0_ARGS="--generatorCount 20000 \
- --generatorSeqLen 20000 \
- --generatorSimilarity 0"
-GENERATOR_ARGS="--generatorCount 20000 \
- --generatorSeqLen 20000 \
- --generatorSimilarity 0.85"
+# GENERATOR1_ARGS="--generatorCount 20000 \
+#  --generatorSeqLen 20000 \
+#  --generatorSimilarity 1"
+# GENERATOR0_ARGS="--generatorCount 20000 \
+#  --generatorSeqLen 20000 \
+#  --generatorSimilarity 0"
+# GENERATOR_ARGS="--generatorCount 20000 \
+#  --generatorSeqLen 20000 \
+#  --generatorSimilarity 0.85"
 
  declare -A dsmap
-dsmap[logan]="$LOGAN_ARGS"
+# dsmap[logan]="$LOGAN_ARGS"
 dsmap[ecoli]="$ECOLI_ARGS"
-dsmap[simulated1]="$GENERATOR1_ARGS"
-dsmap[simulated0]="$GENERATOR0_ARGS"
-dsmap[simulated85]="$GENERATOR_ARGS"
+# dsmap[simulated1]="$GENERATOR1_ARGS"
+# dsmap[simulated0]="$GENERATOR0_ARGS"
+dsmap[simulated85]="$SIMULATED85_ARGS"
 dsmap[ecoli100]="$ECOLI100_ARGS"
 dsmap[elegans]="$ELEGANS_ARGS"
 
