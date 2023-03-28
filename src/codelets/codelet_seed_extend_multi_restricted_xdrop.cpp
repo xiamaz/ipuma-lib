@@ -27,7 +27,7 @@ const int GAP_PENALTY = 1;
 typedef float sType;
 
 // typedef int sType;
-
+/*
 class TileTelemetry {
  private:
   unsigned cycle_counter_l;
@@ -51,6 +51,7 @@ class TileTelemetry {
     cycle_counter_u = __builtin_ipu_get_scount_u();
   }
 };
+*/
 
 constexpr unsigned numberOfBits(unsigned x) {
   return x < 2 ? x : 1 + numberOfBits(x >> 1);
