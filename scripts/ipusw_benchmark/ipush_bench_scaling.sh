@@ -1,5 +1,5 @@
 #!/bin/bash
-set -uo pipefail
+set -euo pipefail
 PROJECT_DIR=$(git rev-parse --show-toplevel)
 BUILD_DIR="$PROJECT_DIR/build_$(hostname)"
 # --- Build the CPUSW Binary on the hostname system
@@ -14,8 +14,6 @@ if [[ ! -f $BIN ]]; then
 	echo "Binary not found build failed."
 	exit 1
 fi
-
-export POPLAR_LOG_LEVEL=ERR
 
 ECOLI_ARGS="--comparisons /global/D1/projects/ipumer/inputs_ab/cmps_ecoli_multi_single.json \
 --sequences /global/D1/projects/ipumer/inputs_ab/seqs_ecoli_multi_single.json"
@@ -41,23 +39,11 @@ GENERATOR_ARGS="--generatorCount 20000 \
  --generatorSeqLen 20000 \
  --generatorSimilarity 0.85"
 
- declare -A dsmap
-dsmap[logan]="$LOGAN_ARGS"
-dsmap[ecoli]="$ECOLI_ARGS"
-dsmap[simulated1]="$GENERATOR1_ARGS"
-dsmap[simulated0]="$GENERATOR0_ARGS"
-dsmap[simulated85]="$GENERATOR_ARGS"
-dsmap[ecoli100]="$ECOLI100_ARGS"
-dsmap[elegans]="$ELEGANS_ARGS"
-
-OUTDIR="$PROJECT_DIR/output/ipusw_benchmark_final/$(hostname)"
+OUTDIR="$PROJECT_DIR/output/ipusw_benchmark/$(hostname)"
 mkdir -p "$OUTDIR"
 
 run() {
 	RUNNAME="${DSNAME}_${ALGO}_x${XDROP}_decom${DECOMPOSE}"
-  if [[ $DEVICES > 1 ]]; then
-    RUNNAME="${RUNNAME}_ipu${DEVICES}"
-  fi
 	echo "Running $RUNNAME "
   if [[ $DECOMPOSE = "y" ]]; then
     EXTRAARGS="--decomposeMulticomparisons"
@@ -75,13 +61,12 @@ run() {
      --maxComparisonsPerVertex 400 \
      --bandPercentageXDrop 0.45 \
      --maxSequenceLength 20000 \
-     --numDevices "$DEVICES" \
      --xDrop "$XDROP" \
      --vtype xdroprestrictedseedextend \
    	  --output "$scorefile" \
    	$DSARGS $EXTRAARGS |& tee "$OUTDIR/${RUNNAME}.log"
 	else
-   "$BIN" \
+   numactl -N 1 -m 1 "$BIN" \
      --numVertices 1472  --fillAlgo greedy --seedLength 17 \
      --maxComparisonsPerVertex 400 \
      --bandPercentageXDrop 0.45 \
@@ -95,13 +80,214 @@ run() {
 
 NUMACTL=y
 ALGO=ipuma
-for DSNAME in "${!dsmap[@]}"; do
-for DECOMPOSE in n y; do
-for XDROP in 5 10 15 20 50; do
-for DEVICES in 1 2 4 8 16 32; do
-  DSARGS="${dsmap[$DSNAME]}"
-  run
-done
-done
-done
-done
+DECOMPOSE=y
+DSNAME=ecoli
+DSARGS=$ECOLI_ARGS
+XDROP=5
+run
+XDROP=10
+run
+XDROP=15
+run
+XDROP=20
+run
+XDROP=50
+run
+XDROP=500
+run
+
+DSNAME=ecoli100
+DSARGS=$ECOLI100_ARGS
+XDROP=5
+run
+XDROP=10
+run
+XDROP=15
+run
+XDROP=20
+run
+XDROP=50
+run
+XDROP=500
+run
+
+DSNAME=elegans
+DSARGS=$ELEGANS_ARGS
+XDROP=5
+run
+XDROP=10
+run
+XDROP=15
+run
+XDROP=20
+run
+XDROP=50
+run
+XDROP=500
+run
+
+DSNAME=simulated85
+DSARGS=$GENERATOR_ARGS
+XDROP=5
+run
+XDROP=10
+run
+XDROP=15
+run
+XDROP=20
+run
+XDROP=50
+run
+XDROP=500
+run
+
+DSNAME=simulated0
+DSARGS=$GENERATOR0_ARGS
+XDROP=5
+run
+XDROP=10
+run
+XDROP=15
+run
+XDROP=20
+run
+XDROP=50
+run
+XDROP=500
+run
+
+DSNAME=simulated1
+DSARGS=$GENERATOR1_ARGS
+XDROP=5
+run
+XDROP=10
+run
+XDROP=15
+run
+XDROP=20
+run
+XDROP=50
+run
+XDROP=500
+run
+
+DSNAME=logan
+DSARGS=$LOGAN_ARGS
+XDROP=5
+run
+XDROP=10
+run
+XDROP=15
+run
+XDROP=20
+run
+XDROP=50
+run
+XDROP=500
+run
+
+DECOMPOSE=n
+DSNAME=ecoli
+DSARGS=$ECOLI_ARGS
+XDROP=5
+run
+XDROP=10
+run
+XDROP=15
+run
+XDROP=20
+run
+XDROP=50
+run
+XDROP=500
+run
+
+DSNAME=ecoli100
+DSARGS=$ECOLI100_ARGS
+XDROP=5
+run
+XDROP=10
+run
+XDROP=15
+run
+XDROP=20
+run
+XDROP=50
+run
+XDROP=500
+run
+
+DSNAME=elegans
+DSARGS=$ELEGANS_ARGS
+XDROP=5
+run
+XDROP=10
+run
+XDROP=15
+run
+XDROP=20
+run
+XDROP=50
+run
+XDROP=500
+run
+
+DSNAME=simulated85
+DSARGS=$GENERATOR_ARGS
+XDROP=5
+run
+XDROP=10
+run
+XDROP=15
+run
+XDROP=20
+run
+XDROP=50
+run
+XDROP=500
+run
+
+DSNAME=simulated0
+DSARGS=$GENERATOR0_ARGS
+XDROP=5
+run
+XDROP=10
+run
+XDROP=15
+run
+XDROP=20
+run
+XDROP=50
+run
+XDROP=500
+run
+
+DSNAME=simulated1
+DSARGS=$GENERATOR1_ARGS
+XDROP=5
+run
+XDROP=10
+run
+XDROP=15
+run
+XDROP=20
+run
+XDROP=50
+run
+XDROP=500
+run
+
+DSNAME=logan
+DSARGS=$LOGAN_ARGS
+XDROP=5
+run
+XDROP=10
+run
+XDROP=15
+run
+XDROP=20
+run
+XDROP=50
+run
+XDROP=500
+run

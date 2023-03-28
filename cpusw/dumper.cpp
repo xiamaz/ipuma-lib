@@ -17,8 +17,24 @@ struct DumperConfig {
 	ipu::LoaderConfig loaderConfig;
 	std::string outputSequences;
 	std::string outputCmps;
+	std::string outputLogan;
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(DumperConfig, loaderConfig, outputSequences, outputCmps)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(DumperConfig, loaderConfig, outputSequences, outputCmps, outputLogan)
+
+void dumpLogan(const ipu::RawSequences& seqs, const ipu::MultiComparisons& cmps, const DumperConfig& config) {
+	std::ofstream file(config.outputLogan);
+	PLOGI << "Dumping sequences in LOGAN format to " << config.outputLogan;
+	for (const auto& mc : cmps) {
+		for (const auto& c : mc.comparisons) {
+			for (const auto& seed : c.seeds) {
+				if (seed.seedAStartPos >= 0 && seed.seedBStartPos >= 0) {
+					// std::stringstream ss;
+					file << seqs[c.indexA] << "\t" << seed.seedAStartPos << "\t" << seqs[c.indexB] << "\t" << seed.seedBStartPos << "\tn\n";
+				}
+			}
+		}
+	}
+}
 
 void dumpComparisons(const ipu::RawSequences& seqs, const ipu::MultiComparisons& cmps, const DumperConfig& config) {
 	PLOGI << "Dumping sequences to " << config.outputSequences;
@@ -65,9 +81,13 @@ int main(int argc, char** argv) {
 	PLOGI << "DUMPERCONFIG" << json{config}.dump();
 	auto seqdb = config.loaderConfig.getMultiSequences(config.swconfig);
 	auto [seqs, mcmps] = seqdb.get();
-	PLOGI << ipu::getDatasetStats(seqs, mcmps).dump();
+	PLOGI << "DSSTATS" << ipu::getDatasetStats(seqs, mcmps, config.swconfig.seedLength).dump();
 
-	dumpComparisons(seqs, mcmps, config);
+	if (config.outputLogan.size() > 0) {
+		dumpLogan(seqs, mcmps, config);
+	} else if (config.outputCmps.size() > 0 && config.outputSequences.size() > 0) {
+		dumpComparisons(seqs, mcmps, config);
+	}
 
 	return 0;
 

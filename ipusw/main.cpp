@@ -60,7 +60,7 @@ int main(int argc, char** argv) {
 
 	ipu::SequenceDatabase<ipu::MultiComparison> seqdb = config.loaderconfig.getMultiSequences(config.swconfig);
 	auto [seqs, mcmps] = seqdb.get();
-	PLOGI << ipu::getDatasetStats(seqs, mcmps).dump();
+	PLOGI << ipu::getDatasetStats(seqs, mcmps, config.swconfig.seedLength).dump();
 
 	auto driver = ipu::batchaffine::SWAlgorithm(config.swconfig, config.ipuconfig, 0, config.numDevices);
 
