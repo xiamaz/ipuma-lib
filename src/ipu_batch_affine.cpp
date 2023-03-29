@@ -305,7 +305,8 @@ std::vector<program::Program> buildGraph(Graph& graph, VertexType vtype, unsigne
 
       if (vtype == VertexType::xdroprestrictedseedextend) {
         int scaledMaxAB = maxSequenceLength * bandPercentageXDrop;
-        const int LR_offsert = 20;
+        scaledMaxAB += 32 - (scaledMaxAB % 32);
+        const int LR_offsert = 32;
         auto k_T = graph.addVariable(sType, {2, ((size_t)scaledMaxAB+2 * LR_offsert) * workerMultiplier}, "K[" + std::to_string(i) + "]");
         graph.connect(vtx["restrictedSize"], scaledMaxAB);
         // graph.connect(vtx["maxSequenceLength"], maxSequenceLength);

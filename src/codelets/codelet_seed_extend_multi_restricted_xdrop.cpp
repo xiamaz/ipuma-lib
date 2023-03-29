@@ -56,15 +56,27 @@ constexpr unsigned numberOfBits(unsigned x) {
   return x < 2 ? x : 1 + numberOfBits(x >> 1);
 }
 
-void inline setZeroPart(sType* ptr, int N) {
-  sType negXinf = -9999;
-  const float2 zzero = {negXinf, negXinf}; 
-  const rptsize_t loopCount = N / 2;
-  float2 * o = reinterpret_cast<float2 *>(ptr);
-  for (unsigned i = 0; i < loopCount; i++) {
-    ipu::store_postinc(&o, zzero, 1);
+template<typename T>
+void inline setZeroPart(T* ptr, int N);
+
+template<>
+void inline setZeroPart(float* ptr, int N) {
+    float negXinf = -9999;
+    const float2 zzero = {negXinf, negXinf}; 
+    const rptsize_t loopCount = N / 2;
+    float2 * o = reinterpret_cast<float2 *>(ptr);
+    for (unsigned i = 0; i < loopCount; i++) {
+      ipu::store_postinc(&o, zzero, 1);
+    }
+    ptr[N-1] = negXinf;
+}
+
+template<>
+void inline setZeroPart(int* ptr, int N) {
+  int negXinf = -9999;
+  for (int i = 0; i < N; i++) {
+    ptr[i] = negXinf;
   }
-  ptr[N-1] = negXinf;
 }
 
 template <int X>
@@ -129,7 +141,7 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
       if (a_len == 0 || b_len == 0) break;
 
       // printf("a_seed_begin %d, b_seed_begin %d\n", a_seed_begin, b_seed_begin);
-      const int LR_offsert = 20;
+      const int LR_offsert = 32;
 
       const int klen = restrictedSize + 2 * LR_offsert;
       sType* k1 = &K1[workerId * (klen)];
@@ -154,13 +166,13 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
         if (myN % 2 == 0) {
           // memset(k1, 0, (klen) * sizeof(sType));
           // memset(k2, 0, (klen) * sizeof(sType));
-          setZeroPart(k1, klen);
+          setZeroPart<sType>(k1, klen);
           // for (int i = 0; i < klen; i++) {
           //   if (k1[i] >= 0) {
           //     printf("FAILURE %d\n", i);
           //   }
           // }
-          setZeroPart(k2, klen);
+          setZeroPart<sType>(k2, klen);
           // for (int i = 0; i < klen; i++) {
           //   if (k2[i] >= 0) {
           //     printf("FAILURE %d\n", i);
@@ -176,13 +188,13 @@ class SeedExtendRestrictedXDrop : public poplar::MultiVertex {
         } else {
           // memset(k1, 0, (klen) * sizeof(sType));
           // memset(k2, 0, (klen) * sizeof(sType));
-          setZeroPart(k1, klen);
+          setZeroPart<sType>(k1, klen);
           // for (int i = 0; i < klen; i++) {
           //   if (k1[i] >= 0) {
           //     printf("FAILURE %d\n", i);
           //   }
           // }
-          setZeroPart(k2, klen);
+          setZeroPart<sType>(k2, klen);
           // for (int i = 0; i < klen; i++) {
           //   if (k2[i] >= 0) {
           //     printf("FAILURE %d\n", i);
