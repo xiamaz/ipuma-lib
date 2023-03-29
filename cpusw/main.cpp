@@ -46,7 +46,10 @@ std::vector<int> runAlignment(const ipu::RawSequences& seqs, const ipu::Comparis
     int maxScore = -std::numeric_limits<int>::infinity();
     for (int j = 0; j < NSEEDS; ++j) {
 			if ((cmp.seeds[j].seedAStartPos < 0) || (cmp.seeds[j].seedBStartPos < 0)) continue;
+
+			#pragma omp atomic
     	gcells += (seqs[cmp.indexA].size() * seqs[cmp.indexB].size()) / 1e9;
+
       maxScore = std::max(
 				comparator.align(seqs[cmp.indexA], seqs[cmp.indexB], cmp.seeds[j].seedAStartPos, cmp.seeds[j].seedBStartPos, config.seedLength),
 				maxScore
@@ -105,7 +108,7 @@ int main(int argc, char** argv) {
 	PLOGI << "CPUSWCONFIG" << json{config}.dump();
 	auto seqdb = config.loaderconfig.getMultiSequences(config.swconfig);
 	auto [seqs, mcmps] = seqdb.get();
-	PLOGI << ipu::getDatasetStats(seqs, mcmps).dump();
+	PLOGI << ipu::getDatasetStats(seqs, mcmps, config.swconfig.seedLength).dump();
 
 	ipu::Comparisons cmps = convertToComparisons(mcmps);
 

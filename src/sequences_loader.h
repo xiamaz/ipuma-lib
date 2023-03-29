@@ -14,7 +14,7 @@ using json = nlohmann::json;
 
 namespace ipu {
 template<typename C>
-json getDatasetStats(const ipu::RawSequences& seqs, const std::vector<C>& cmps);
+json getDatasetStats(const ipu::RawSequences& seqs, const std::vector<C>& cmps, int seedLen);
 
 struct JsonSequenceConfig {
 	std::string comparisons;

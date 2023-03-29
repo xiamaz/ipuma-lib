@@ -42,6 +42,16 @@ Batch::Batch() {
 Batch::Batch(IPUAlgoConfig config) {
   initialize(config);
 }
+void Batch::clear() {
+  inputs.resize(0);
+  results.resize(0);
+  origin_comparison_index.resize(0);
+  metaOffset = 0;
+  maxComparisons = 0;
+  numComparisons = 0;
+  cellCount = 0;
+  dataCount = 0;
+}
 
 void Batch::initialize(IPUAlgoConfig config) {
   inputs.resize(config.getInputBufferSize32b(), 0);
@@ -73,6 +83,66 @@ BlockAlignmentResults Batch::get_result() {
   }
 
   return {scores, a_range_result, b_range_result};
+}
+
+Batch create_batch(const partition::BatchMapping& map, const RawSequences& seqs, const IPUAlgoConfig& algoconfig, const SWConfig& config) {
+  Batch batch;
+  batch.initialize(algoconfig);
+
+  auto encodeTable = swatlib::getEncoder(config.datatype).getCodeTable();
+  int8_t* seqInput = batch.getSequenceBuffer();
+  int8_t* metaInput = batch.getMetaBuffer();
+
+  auto& cellCount = batch.cellCount;
+  auto& dataCount = batch.dataCount;
+  auto& comparisonCount = batch.numComparisons;
+
+  for (int bi = 0; bi < map.buckets.size(); bi++) {
+    const auto& bucketMapping = map.buckets[bi];
+    const size_t offsetSequence = bucketMapping.bucketIndex * algoconfig.getBufsize32b() * 4;
+
+    auto* bucketSeq = seqInput + offsetSequence;
+    for (int si = 0; si< bucketMapping.seqs.size(); si++) {
+      const auto& sequenceMapping = bucketMapping.seqs[si];
+      const char *seq = seqs[sequenceMapping.index].data();
+      size_t seqSize = seqs[sequenceMapping.index].size();
+      #pragma omp simd
+      for (int j = 0; j < seqSize; ++j) {
+        bucketSeq[sequenceMapping.offset + j] = encodeTable[seq[j]];
+      }
+      dataCount += seqSize;
+    }
+
+    for (int i = 0; i < bucketMapping.cmps.size(); ++i) {
+      const auto& comparisonMapping = bucketMapping.cmps[i];
+      const auto& cmp = comparisonMapping.comparison;
+      if (isSeeded) {
+        auto* bucketMeta = (XDropMeta*)(metaInput) + algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex;
+        // PLOGE << "Num Comparisons " << bucketMapping.cmps.size() << " " << NSEEDS;
+        for (int j = 0; j < NSEEDS; ++j) {
+          bucketMeta[i * NSEEDS + j] = {
+            comparisonMapping.createMeta(),
+            .seedAStartPos = static_cast<int32_t>(cmp.seeds[j].seedAStartPos),
+            .seedBStartPos = static_cast<int32_t>(cmp.seeds[j].seedBStartPos),
+          };
+          // PLOGE << "Seeds " << bucketMeta[i * NSEEDS + j].seedAStartPos << " " <<  bucketMeta[i * NSEEDS + j].seedBStartPos;
+          // PLOGE << "Lengths " << bucketMeta[i * NSEEDS + j].sizeA << " " <<  bucketMeta[i * NSEEDS + j].sizeB;
+          auto validCmp = bucketMeta[i * NSEEDS + j].seedAStartPos != -1;
+
+          batch.origin_comparison_index[algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex + i * NSEEDS + j] = packOriginIndex(cmp.originalComparisonIndex, j);
+          cellCount += cmp.sizeA * cmp.sizeB * validCmp;
+        }
+      } else {
+        auto* bucketMeta = (SWMeta*)(metaInput) + algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex;
+        bucketMeta[i] = comparisonMapping.createMeta();
+        batch.origin_comparison_index[algoconfig.maxComparisonsPerVertex * bucketMapping.bucketIndex + i] = packOriginIndex(cmp.originalComparisonIndex, 0);
+        cellCount += cmp.sizeA * cmp.sizeB;
+      }
+
+      comparisonCount++;
+    }
+  }
+  return std::move(batch);
 }
 
 template<typename C>

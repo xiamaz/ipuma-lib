@@ -3,6 +3,7 @@
 #include <vector>
 #include "ipu_base.h"
 #include "types.h"
+#include "partition.h"
 
 namespace ipu {
 
@@ -26,6 +27,7 @@ struct Batch {
   Batch();
   Batch(IPUAlgoConfig config);
 
+  void clear();
   void initialize(IPUAlgoConfig config);
 
   size_t maxComparisons;
@@ -45,6 +47,8 @@ struct Batch {
   int8_t* getSequenceBuffer();
   int8_t* getMetaBuffer();
 };
+
+Batch create_batch(const partition::BatchMapping& mapping, const RawSequences& seqs, const IPUAlgoConfig& algoconfig, const SWConfig& config);
 
 template<typename C>
 std::vector<Batch> create_batches(const RawSequences& seqs, std::vector<C>& cmps, const IPUAlgoConfig& algoconfig, const SWConfig& config);

@@ -1,4 +1,5 @@
 add_executable(cpusw main.cpp)
+add_executable(dsdumper dumper.cpp)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -59,3 +60,8 @@ target_include_directories(cpusw PRIVATE
 )
 target_link_libraries (cpusw PRIVATE SSW_LIBRARY IPUMA_LIBRARY genometools libgaba ksw2)
 set_target_properties(cpusw PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+target_link_libraries (dsdumper PRIVATE SSW_LIBRARY IPUMA_LIBRARY)
+target_include_directories(dsdumper PRIVATE
+    ${IPUMA_BIN_INCLUDES}
+)
+set_target_properties(dsdumper PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")

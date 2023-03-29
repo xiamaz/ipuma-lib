@@ -28,22 +28,60 @@ size_t getNumComparisons(const std::vector<MultiComparison>& cmps) {
 }
 
 template<typename C>
-json getDatasetStats(const ipu::RawSequences& seqs, const std::vector<C>& cmps) {
+double getGcells(const C& comparison, int seedLen, bool useSeed);
+
+template<>
+double getGcells(const Comparison& comparison, int seedLen, bool useSeed) {
+  double gcells = 0;
+  for (const auto& seed : comparison.seeds) {
+    if (seed.seedAStartPos >= 0 && seed.seedBStartPos >= 0) {
+      if (useSeed) {
+        gcells += (seed.seedAStartPos * seed.seedBStartPos + (
+          std::max(comparison.sizeA - (seed.seedAStartPos + seedLen), 0) * std::max(comparison.sizeB - (seed.seedBStartPos + seedLen), 0)
+        )) / 1e9;
+
+      } else {
+        gcells += comparison.sizeA * comparison.sizeB / 1e9;
+      }
+    }
+  }
+  return gcells;
+}
+
+template<>
+double getGcells(const MultiComparison& comparison, int seedLen, bool useSeed) {
+  double gcells = 0;
+  for (const auto& c : comparison.comparisons) {
+    gcells += getGcells<Comparison>(c, seedLen, useSeed);
+  }
+  return gcells;
+}
+
+template<typename C>
+json getDatasetStats(const ipu::RawSequences& seqs, const std::vector<C>& cmps, int seedLen) {
   auto numComparisons = getNumComparisons<C>(cmps);
   size_t maxSequenceLength = 0;
+  double gcells = 0;
+  double gcells_noseed = 0;
   for (const auto& s : seqs) {
     maxSequenceLength = std::max(maxSequenceLength, s.size());
+  }
+  for (const auto& c : cmps) {
+    gcells += getGcells(c, seedLen, true);
+    gcells_noseed += getGcells(c, seedLen, false);
   }
 
   json stats = {
     {"numComparisons", numComparisons},
     {"maxSequenceLength", maxSequenceLength},
+    {"gCells", gcells},
+    {"gCellsNoSeed", gcells_noseed},
   };
   return stats;
 }
 
-template json getDatasetStats<Comparison>(const ipu::RawSequences& seqs, const std::vector<Comparison>& cmps);
-template json getDatasetStats<MultiComparison>(const ipu::RawSequences& seqs, const std::vector<MultiComparison>& cmps);
+template json getDatasetStats<Comparison>(const ipu::RawSequences& seqs, const std::vector<Comparison>& cmps, int seedLen);
+template json getDatasetStats<MultiComparison>(const ipu::RawSequences& seqs, const std::vector<MultiComparison>& cmps, int seedLen);
 
 std::unique_ptr<std::ifstream> openFile(std::string path) {
   std::unique_ptr<std::ifstream> file(new std::ifstream(path));

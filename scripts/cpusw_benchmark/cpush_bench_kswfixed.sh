@@ -45,7 +45,7 @@ KSW_VALUES="--matchValue 2 \
 		 --gapInit -4 \
 		 --gapExtend -2"
 
-OUTDIR="$PROJECT_DIR/output/cpusw_benchmark_kswfixed/$(hostname)"
+OUTDIR="$PROJECT_DIR/output/cpusw_benchmark_kswfixed_allflags/$(hostname)"
 mkdir -p "$OUTDIR"
 
 run() {
@@ -72,7 +72,7 @@ run() {
 	fi
 }
 
-NUMACTL=y
+NUMACTL=n
 DSNAME=ecoli
 DSARGS=$ECOLI_ARGS
 
@@ -87,15 +87,15 @@ DSARGS=$ECOLI_ARGS
 # run
 
 ALGO=ksw2
-XDROP=400
+XDROP=5
 run
 XDROP=20
+run
+XDROP=400
 run
 XDROP=15
 run
 XDROP=10
-run
-XDROP=5
 run
 exit
 
