@@ -74,24 +74,26 @@ def plot_multicomparison_histogram(all_df):
     fig.savefig(outdir / "IPU_histogram_multicomparison.png", dpi=300)
 
 
+def plot_gcups_per_batch(all_df):
+    all_dfs = []
+    for ipucount, logs in zip(all_df["Number IPU"], all_df["entries"]):
+        df = pd.DataFrame.from_records([l["data"] for l in logs if l["type"] == "JOBLOG"])
+        df["Number IPU"] = ipucount
+        df["Number IPU Label"] = f"{ipucount}"
+        all_dfs.append(df)
+
+
+    joblog_df = pd.concat(all_dfs)
+    plot_df = joblog_df.pivot(columns="Number IPU Label", values="gcups_outer")
+    plot_df = plot_df[map(str, sorted([int(c) for c in plot_df.columns.tolist()]))]
+    fig = pplt.figure()
+    ax = fig.add_subplot()
+
+    ax.boxplot(plot_df)
+    ax.format(xlabel="Number of IPUs", ylabel="Host measured GCUPS per batch")
+    fig.savefig(outdir / "IPU_gcups_outer_num_ipu.png", dpi=300)
+
+
 plot_per_ipu_scaling(all_df)
 plot_multicomparison_histogram(all_df)
-
-
-all_dfs = []
-for ipucount, logs in zip(all_df["Number IPU"], all_df["entries"]):
-    df = pd.DataFrame.from_records([l["data"] for l in logs if l["type"] == "JOBLOG"])
-    df["Number IPU"] = ipucount
-    df["Number IPU Label"] = f"{ipucount}"
-    all_dfs.append(df)
-
-
-joblog_df = pd.concat(all_dfs)
-plot_df = joblog_df.pivot(columns="Number IPU Label", values="gcups_outer")
-plot_df = plot_df[map(str, sorted([int(c) for c in plot_df.columns.tolist()]))]
-fig = pplt.figure()
-ax = fig.add_subplot()
-
-ax.boxplot(plot_df)
-ax.format(xlabel="Number of IPUs", ylabel="Host measured GCUPS per batch")
-fig.savefig(outdir / "IPU_gcups_outer_num_ipu.png", dpi=300)
+plot_gcups_per_batch(all_df)
