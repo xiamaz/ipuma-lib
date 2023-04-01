@@ -15,3 +15,4 @@ contrib/collect_comm_stats
 /output
 xdrop/data/inputs_ab/*
 logs/
+*.out
