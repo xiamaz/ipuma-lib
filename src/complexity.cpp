@@ -13,6 +13,16 @@ namespace ipu {
 		return complexity;
 	}
 
+	size_t xDropComplexity2(const Comparison& cmp) {
+  size_t complexity = 0;
+      for (const auto &pair : cmp.seeds) {
+       int minL = std::min(pair.seedAStartPos, pair.seedBStartPos);
+   int minR = std::min(cmp.sizeA - pair.seedAStartPos, cmp.sizeB - pair.seedBStartPos);
+       complexity += (pair.seedAStartPos != -1 ? 1 : 0) * (minL*minL + minR * minR);
+      }
+  return complexity;
+ }
+
 	size_t calculateComplexity(const MultiComparison& cmp, Complexity algo) {
 		size_t cellCount = 0;
 		size_t totalComplexity = 0;

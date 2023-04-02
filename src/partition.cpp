@@ -37,6 +37,7 @@ namespace partition {
   Bucket::Bucket(int bucketIndex, size_t sequenceCapacity, size_t comparisonCapacity) : bucketIndex(bucketIndex), sequenceCapacity(sequenceCapacity), comparisonCapacity(comparisonCapacity) {
     longestLength = 0;
     totalSequenceLength = 0;
+    totalComplexity = 0;
   }
 
   std::string Bucket::toString() const {
@@ -68,10 +69,11 @@ namespace partition {
           .offsetB = offsets[cmp.indexB],
           .comparison = cmp,
         });
-        totalCells += cmp.sizeA * cmp.sizeB * NSEEDS;
       }
+      totalComplexity += md.complexity;
       return true;
     }
+    // PLOGF << this->bucketIndex << ": " << newTotalCmps << " | " << newTotalLength;
     return false;
   }
 
@@ -103,7 +105,9 @@ namespace partition {
 
       totalSequenceLength = newTotalLength;
       longestLength = std::max({longestLength, (size_t) d.sizeA, (size_t) d.sizeB});
-      totalCells += d.sizeA * d.sizeB * NSEEDS;
+      for (const auto& s :d.seeds) {
+        if (s.seedAStartPos >= 0 && s.seedBStartPos >= 0) totalComplexity += d.complexity;
+      }
       return true;
     }
     return false;
@@ -240,10 +244,10 @@ namespace partition {
   class BucketCompare {
   public:
     bool operator() (const Bucket& a, const Bucket& b) {
-      // auto a_remaining = a.sequenceCapacity - a.totalSequenceLength;
-      // auto b_remaining = b.sequenceCapacity - b.totalSequenceLength;
-      // return a_remaining <= b_remaining;
-      return a.totalCells > b.totalCells;
+      auto a_remaining = a.sequenceCapacity - a.totalSequenceLength;
+      auto b_remaining = b.sequenceCapacity - b.totalSequenceLength;
+      return a_remaining <= b_remaining;
+      // return a.totalComplexity > b.totalComplexity;
     }
   };
 

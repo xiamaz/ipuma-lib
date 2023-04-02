@@ -136,9 +136,16 @@ SequenceDatabase<C> loadSequences(JsonSequenceConfig& config) {
   PLOGI << "Loading json from " << config.sequences << " " << config.comparisons;
   SequenceDatabase<C> db;
   std::ifstream cmpF(config.comparisons);
-  db.cmps = json::parse(cmpF);
   std::ifstream strF(config.sequences);
-  db.strings = json::parse(strF).get<std::vector<std::string>>();
+
+  #pragma omp parallel sections shared(db)
+  {
+    #pragma omp section
+    db.cmps = json::parse(cmpF);
+
+    #pragma omp section
+    db.strings = json::parse(strF).get<std::vector<std::string>>();
+  }
   db.seqs = convertStrings(db.strings);
   return std::move(db);
 }
