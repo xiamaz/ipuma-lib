@@ -1,5 +1,6 @@
 #!/bin/bash
-DATASET_DIR="/global/D1/projects/ipumer/inputs_ab"
+# DATASET_DIR="/global/D1/projects/ipumer/inputs_ab"
+DATASET_DIR="/home/zhaom/alextit/datasets"
 set -uo pipefail
 PROJECT_DIR=$(git rev-parse --show-toplevel)
 BUILD_DIR="$PROJECT_DIR/build_$(hostname)"
@@ -9,7 +10,9 @@ pushd "$BUILD_DIR"
 cmake -DCMAKE_BUILD_TYPE=Release ..
 cmake --build . --target ipusw
 popd
-BIN="$PROJECT_DIR/build_$(hostname)/bin/ipusw"
+
+BIN="$BUILD_DIR/bin/ipusw"
+OUTDIR="$PROJECT_DIR/output/ipusw_benchmark_gc/$(hostname)"
 
 if [[ ! -f $BIN ]]; then
 	echo "Binary not found build failed."
@@ -47,10 +50,8 @@ dsmap[ecoli]="$ECOLI_ARGS"
 # dsmap[simulated1]="$GENERATOR1_ARGS"
 # dsmap[simulated0]="$GENERATOR0_ARGS"
 dsmap[simulated85]="$SIMULATED85_ARGS"
-dsmap[ecoli100]="$ECOLI100_ARGS"
-dsmap[elegans]="$ELEGANS_ARGS"
-
-OUTDIR="$PROJECT_DIR/output/ipusw_benchmark_final/$(hostname)"
+# dsmap[elegans]="$ELEGANS_ARGS"
+# dsmap[ecoli100]="$ECOLI100_ARGS"
 mkdir -p "$OUTDIR"
 
 run() {
@@ -96,12 +97,20 @@ run() {
 NUMACTL=y
 ALGO=ipuma
 for DSNAME in "${!dsmap[@]}"; do
-for DECOMPOSE in n y; do
-for XDROP in 5 10 15 20 50; do
-for DEVICES in 1 2 4 8 16 32; do
   DSARGS="${dsmap[$DSNAME]}"
+  DECOMPOSE=n
+  XDROP=5
+  DEVICES=1
   run
 done
-done
-done
-done
+
+# for DSNAME in "${!dsmap[@]}"; do
+# for DECOMPOSE in n y; do
+# for XDROP in 5 10 15 20 50; do
+# for DEVICES in 1 2 4 8 16 32; do
+#   DSARGS="${dsmap[$DSNAME]}"
+#   run
+# done
+# done
+# done
+# done

@@ -170,11 +170,9 @@ SequenceDatabase<C> loadSequences(SequenceConfig& config, SWConfig& swconfig) {
     }
     if (!anyFailH && !anyFailV) {
       db.strings.push_back(lH);
-      db.seqs.push_back(db.strings.back());
       db.strings.push_back(lV);
-      db.seqs.push_back(db.strings.back());
-      const int sizeA = (int) db.seqs[(int) (2 * i)].size();
-      const int sizeB = (int) db.seqs[(int) (2 * i + 1)].size();
+      const int sizeA = (int) db.strings[(int) (2 * i)].size();
+      const int sizeB = (int) db.strings[(int) (2 * i + 1)].size();
       Comparison cmp = {
         i,
         (int) (2 * i),
@@ -196,6 +194,7 @@ SequenceDatabase<C> loadSequences(SequenceConfig& config, SWConfig& swconfig) {
       exit(1);
     }
   }
+  db.seqs = convertStrings(db.strings);
   return std::move(db);
 }
 
