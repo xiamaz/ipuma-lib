@@ -1,6 +1,6 @@
 #!/bin/bash
 # DATASET_DIR="/global/D1/projects/ipumer/inputs_ab"
-DATASET_DIR="/home/zhaom/alextit/datasets"
+DATASET_DIR="/home/zhaom/graphcore_collab/datasets"
 set -uo pipefail
 PROJECT_DIR=$(git rev-parse --show-toplevel)
 BUILD_DIR="$PROJECT_DIR/build_$(hostname)"
@@ -46,12 +46,12 @@ SIMULATED85_ARGS="--comparisons ${DATASET_DIR}/cmps_simulated85_multi.json \
 
  declare -A dsmap
 # dsmap[logan]="$LOGAN_ARGS"
-dsmap[ecoli]="$ECOLI_ARGS"
+# dsmap[ecoli]="$ECOLI_ARGS"
 # dsmap[simulated1]="$GENERATOR1_ARGS"
 # dsmap[simulated0]="$GENERATOR0_ARGS"
 dsmap[simulated85]="$SIMULATED85_ARGS"
-# dsmap[elegans]="$ELEGANS_ARGS"
-# dsmap[ecoli100]="$ECOLI100_ARGS"
+dsmap[celegans]="$ELEGANS_ARGS"
+dsmap[ecoli100]="$ECOLI100_ARGS"
 mkdir -p "$OUTDIR"
 
 run() {
