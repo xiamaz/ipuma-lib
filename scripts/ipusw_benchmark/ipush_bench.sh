@@ -46,7 +46,7 @@ SIMULATED85_ARGS="--comparisons ${DATASET_DIR}/cmps_simulated85_multi.json \
 
  declare -A dsmap
 # dsmap[logan]="$LOGAN_ARGS"
-# dsmap[ecoli]="$ECOLI_ARGS"
+dsmap[ecoli]="$ECOLI_ARGS"
 # dsmap[simulated1]="$GENERATOR1_ARGS"
 # dsmap[simulated0]="$GENERATOR0_ARGS"
 dsmap[simulated85]="$SIMULATED85_ARGS"
@@ -72,7 +72,7 @@ run() {
   fi
 	if [[ $NUMACTL = "y" ]]; then
    numactl -N 1 -m 1 "$BIN" \
-     --numVertices 1472  --fillAlgo greedy --seedLength 17 \
+     --numVertices 1472  --fillAlgo fillfirst --seedLength 17 \
      --maxComparisonsPerVertex 400 \
      --bandPercentageXDrop 0.45 \
      --maxSequenceLength 20000 \
@@ -83,34 +83,35 @@ run() {
    	$DSARGS $EXTRAARGS |& tee "$OUTDIR/${RUNNAME}.log"
 	else
    "$BIN" \
-     --numVertices 1472  --fillAlgo greedy --seedLength 17 \
+     --numVertices 1472  --fillAlgo fillfirst --seedLength 17 \
      --maxComparisonsPerVertex 400 \
      --bandPercentageXDrop 0.45 \
      --maxSequenceLength 20000 \
+     --numDevices "$DEVICES" \
      --xDrop "$XDROP" \
      --vtype xdroprestrictedseedextend \
-   	 --output "$OUTDIR/${RUNNAME}_scores.json" \
+   	 --output "$scorefile" \
    	 $DSARGS $EXTRAARGS |& tee "$OUTDIR/${RUNNAME}.log"
 	fi
 }
 
 NUMACTL=y
 ALGO=ipuma
-for DSNAME in "${!dsmap[@]}"; do
-  DSARGS="${dsmap[$DSNAME]}"
-  DECOMPOSE=n
-  XDROP=5
-  DEVICES=1
-  run
-done
-
 # for DSNAME in "${!dsmap[@]}"; do
-# for DECOMPOSE in n y; do
-# for XDROP in 5 10 15 20 50; do
-# for DEVICES in 1 2 4 8 16 32; do
 #   DSARGS="${dsmap[$DSNAME]}"
+#   DECOMPOSE=n
+#   XDROP=15
+#   DEVICES=16
 #   run
 # done
-# done
-# done
-# done
+
+for DSNAME in "${!dsmap[@]}"; do
+for DECOMPOSE in n y; do
+for XDROP in 5 10 15 20 50; do
+for DEVICES in 1 2 4 8 16 32; do
+  DSARGS="${dsmap[$DSNAME]}"
+  run
+done
+done
+done
+done
