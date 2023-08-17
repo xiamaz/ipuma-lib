@@ -60,7 +60,7 @@ Unzip all files in the folder:
 pigz -d *.json.gz
 ```
 
-A fully automated download script can also be found in `scripts/ipusw_benchmark/download_datasets.sh`.
+A fully automated download script can also be found in `scripts/ipusw_benchmark/download_datasets.sh`. [Full OneDrive directory](https://charitede-my.sharepoint.com/:f:/g/personal/max_zhao_charite_de/EqOvEeXlyXRJkFol48ePSbMBBMNAEXEKJ515qnHRoB49iA?e=KW7kUU) containing data sets and logs.
 
 ## Generate benchmark results on datasets
 
