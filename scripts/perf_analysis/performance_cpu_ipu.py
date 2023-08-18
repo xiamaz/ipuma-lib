@@ -179,6 +179,7 @@ innert = ipu_data.set_index(["host", "xdrop", "dataset", "devices", "multicompar
 ipu_data["dataset"].unique()
 ipu_data_ds = ipu_data.loc[ipu_data["dataset"].isin(("ecoli100", "celegans"))]
 
+
 # Multidevice scaling results
 scaling_df = ipu_data_ds.copy()
 scaling_df = scaling_df.set_index(["devicename", "xdrop", "dataset", "devices", "multicomparison"]).sort_index()
@@ -189,6 +190,10 @@ for dev in (2, 4, 8, 16, 32):
     r = dev1 / us.xs(dev, level="devices")
     print(f"{dev=}")
     print(r)
+
+dev1
+(dev1.xs("Graphcore IPU Bow") / dev1.xs("Graphcore IPU Mk2")).mean()
+( dev1.xs("Graphcore IPU Mk2") / dev1.xs("Graphcore IPU Bow")).mean()
 # -----
 
 ipu_data_mk2 = ipu_data_ds.loc[ipu_data_ds["devicename"] == "Graphcore IPU Mk2"]
